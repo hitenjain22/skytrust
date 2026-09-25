@@ -8,6 +8,15 @@
 ## Headline results
 
 <!-- RESULTS:START -->
+
+| Night-before forecast (lead 1), test year | Brier Skill Score ↑ | False-clear rate ↓ | AUC ↑ |
+|---|---|---|---|
+| Equal-weight average (B5) | 0.596 [0.540, 0.645] | 13.2% [10.4%, 16.3%] | 0.937 |
+| ICON calibrated (B4) | 0.510 [0.444, 0.571] | 15.7% [12.0%, 20.0%] | 0.910 |
+| Climatology (B1) | 0.000 [0.000, 0.000] | 36.6% [30.0%, 43.6%] | 0.634 |
+
+_Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` (commit `95f3aec`). 95% CIs from a week-block bootstrap. Full results: [docs/RESULTS.md](docs/RESULTS.md)._
+
 <!-- RESULTS:END -->
 
 ## Run it locally
