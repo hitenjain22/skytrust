@@ -61,5 +61,5 @@ def test_cli_validate_sites_reports_and_exit_code(monkeypatch, capsys):
 
 
 def test_cli_later_phase_commands_are_explicit(capsys):
-    assert cli.main(["train"]) == 2
-    assert "Phase 4" in capsys.readouterr().out
+    assert cli.main(["tonight"]) == 2
+    assert "Phase 5" in capsys.readouterr().out

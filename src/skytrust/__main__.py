@@ -11,7 +11,6 @@ from skytrust.config import load_settings, load_sites
 from skytrust.data.http import HttpClient
 
 LATER_PHASE = {
-    "train": 4,
     "tonight": 5,
 }
 
@@ -85,9 +84,27 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     from skytrust import dataset, evaluate
 
     settings = load_settings()
-    metrics = evaluate.run_evaluation(dataset.load_dataset(), settings)
+    from skytrust.blend import ARTIFACTS
+
+    metrics = evaluate.run_evaluation(dataset.load_dataset(), settings, artifacts_dir=ARTIFACTS)
     path = evaluate.save_metrics(metrics)
     print(f"Wrote {path} ({len(metrics['records'])} metric records)")
+    return 0
+
+
+def cmd_train(args: argparse.Namespace) -> int:
+    from skytrust import blend, dataset
+
+    settings = load_settings()
+    paths = blend.train_all(dataset.load_dataset(), settings)
+    for path in paths:
+        a = blend.load_artifact(path)
+        cal = a["calibration"]
+        print(
+            f"{a['label']:>7} lead {a['lead']}: C={a['logistic']['C']:g}  "
+            f"CV log loss {a['training']['cv_log_loss']:.4f}  OOF ECE {cal['oof_ece']:.3f} "
+            f"(calibration {'applied' if cal['applied'] else 'not needed'})  -> {path.name}"
+        )
     return 0
 
 
@@ -128,6 +145,8 @@ def build_parser() -> argparse.ArgumentParser:
     bd.set_defaults(func=cmd_build_dataset)
     ev = sub.add_parser("evaluate", help="Score every method on the test set -> metrics.json")
     ev.set_defaults(func=cmd_evaluate)
+    tr = sub.add_parser("train", help="Fit the blend per label x lead (train years only) -> JSON")
+    tr.set_defaults(func=cmd_train)
     rp = sub.add_parser("report", help="metrics.json -> docs/RESULTS.md + figures")
     rp.set_defaults(func=cmd_report)
     for name in LATER_PHASE:
