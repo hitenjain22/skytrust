@@ -72,11 +72,12 @@ def fetch_source(
                     first_night,
                     era5_end(settings, last_night, today),
                     refresh,
+                    today=today,
                 )
             else:
                 for model in settings.models:
                     openmeteo.fetch_prevruns(
-                        client, settings, site, model, first_night, next_day, refresh
+                        client, settings, site, model, first_night, next_day, refresh, today=today
                     )
             log.info("%s %s done", source, site.id)
         except (SourceUnavailableError, BadResponseError) as exc:

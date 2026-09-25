@@ -67,3 +67,21 @@ Format: date · decision · alternatives considered · why. Newest at the bottom
   as `asos_hour_aggregation: max` for a sensitivity check in RESULTS.
 - **Trade-off:** (B) can miss a brief cloud SPECI 20–30 min off the hour. Accepted: ERA5 in the
   primary label is the backstop, and consistency across sites matters more for a backtest.
+
+### 2026-09-25 · Commit a 2023–2030 excerpt of DE421 (880 KB) instead of downloading at runtime
+- **Alternatives:** let Skyfield download the full 17 MB `de421.bsp` on first use; commit the full file.
+- **Why:** Tests must be offline (SPEC 12) and the deployed app must not depend on JPL's server.
+  `python -m jplephem excerpt 2023/1/1 2031/1/1` keeps only the date range we need. Covers the
+  whole backtest and the live app until 2030. The timescale uses Skyfield's builtin tables for
+  the same reason.
+
+### 2026-09-25 · Open-Meteo cached in calendar-month chunks; incomplete chunks are not cached
+- **Alternatives:** one request for the full history (works, see DATA_NOTES); yearly chunks.
+- **Why:** Monthly files are ~2 weighted API calls each, and a daily update only re-downloads the
+  current month. A chunk is cached only if its last day has data, so an ERA5 month fetched
+  before it's fully published is never frozen into the cache with holes. The ERA5 fetch end is capped at
+  today − 8 days (measured lag ~6) so normal runs always produce complete, cacheable chunks.
+
+### 2026-09-25 · `fetch --end` is a *night* date; sources are fetched through end + 1 day
+- **Why:** A night's dark hours run past midnight into the next UTC day, so labelling night N
+  needs data from day N+1. Default last night = today − 2 days, so every hour is in the past.

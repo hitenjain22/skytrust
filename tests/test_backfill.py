@@ -28,7 +28,7 @@ def test_default_last_night_and_era5_cap(settings):
 def test_one_site_failing_does_not_stop_others(settings, monkeypatch):
     calls = []
 
-    def fake_era5(client, s, site, start, end, refresh):
+    def fake_era5(client, s, site, start, end, refresh, today=None):
         calls.append(site.id)
         if site.id == "SAC":
             raise SourceUnavailableError("down")
@@ -46,7 +46,9 @@ def test_one_site_failing_does_not_stop_others(settings, monkeypatch):
 def test_prevruns_fetches_every_model_through_next_morning(settings, monkeypatch):
     seen = []
     monkeypatch.setattr(
-        openmeteo, "fetch_prevruns", lambda c, s, site, m, a, b, r: seen.append((m.id, b))
+        openmeteo,
+        "fetch_prevruns",
+        lambda c, s, site, m, a, b, r, today=None: seen.append((m.id, b)),
     )
     backfill.fetch_source(
         MagicMock(n_requests=0), settings, SITES[:1], "prevruns",

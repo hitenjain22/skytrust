@@ -44,6 +44,7 @@ sources:
   iem_report_types: [3, 4]       # routine + SPECI only; excludes 5-minute MADIS HFMETAR rows
   history_start: 2024-01-01
   era5_lag_days: 8               # measured ~6 days (DATA_NOTES); 8 leaves margin so fetched chunks are complete
+  settled_after_days: 30         # chunks older than this are cached even with nulls (nulls are permanent)
   complete_lag_days: 2           # last night considered complete = today (UTC) - this
 
 http:

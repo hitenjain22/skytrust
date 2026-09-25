@@ -107,7 +107,9 @@ def test_complete_cache_makes_zero_network_calls(tmp_cache, era5):
     path = cache.raw_path("era5", "SAC", None, "20250308", "20250310", "json", root=tmp_cache)
     cache.write_cached(path, json.dumps(era5))
     client = MagicMock()
-    settings = MagicMock(sources={"era5_url": "https://x.test", "era5_model": "era5"})
+    settings = MagicMock(
+        sources={"era5_url": "https://x.test", "era5_model": "era5", "settled_after_days": 30}
+    )
     openmeteo.fetch_era5(client, settings, SAC, dt.date(2025, 3, 8), dt.date(2025, 3, 10))
     client.get_json.assert_not_called()
 
@@ -115,7 +117,9 @@ def test_complete_cache_makes_zero_network_calls(tmp_cache, era5):
 def test_fetch_writes_cache_when_complete(tmp_cache, era5):
     client = MagicMock()
     client.get_json.return_value = era5
-    settings = MagicMock(sources={"era5_url": "https://x.test", "era5_model": "era5"})
+    settings = MagicMock(
+        sources={"era5_url": "https://x.test", "era5_model": "era5", "settled_after_days": 30}
+    )
     openmeteo.fetch_era5(client, settings, SAC, dt.date(2025, 3, 8), dt.date(2025, 3, 10))
     params = client.get_json.call_args.args[1]
     assert params["models"] == "era5" and params["elevation"] == 8.0
@@ -130,15 +134,20 @@ def test_fetch_does_not_cache_unpublished_trailing_day(tmp_cache, era5):
 
     client = MagicMock()
     client.get_json.return_value = _mutate(era5, blank_last_day)
-    settings = MagicMock(sources={"era5_url": "https://x.test", "era5_model": "era5"})
-    openmeteo.fetch_era5(client, settings, SAC, dt.date(2025, 3, 8), dt.date(2025, 3, 10))
+    settings = MagicMock(
+        sources={"era5_url": "https://x.test", "era5_model": "era5", "settled_after_days": 30}
+    )
+    recent = dt.date(2025, 3, 12)  # chunk ended 2 days ago -> may still be filling in
+    openmeteo.fetch_era5(
+        client, settings, SAC, dt.date(2025, 3, 8), dt.date(2025, 3, 10), today=recent
+    )
     assert list(tmp_cache.rglob("*.json")) == []
 
 
 def test_fetch_prevruns_requests_only_the_models_leads(tmp_cache, prevruns):
     client = MagicMock()
     client.get_json.return_value = prevruns
-    settings = MagicMock(sources={"prevruns_url": "https://x.test"})
+    settings = MagicMock(sources={"prevruns_url": "https://x.test", "settled_after_days": 30})
     n = openmeteo.fetch_prevruns(
         client, settings, SAC, HRRR, dt.date(2025, 3, 8), dt.date(2025, 3, 10)
     )
@@ -180,3 +189,22 @@ def test_no_naive_timestamps_anywhere(era5):
     df = openmeteo.parse_hourly(era5, ["cloud_cover"])
     assert isinstance(df.index.dtype, pd.DatetimeTZDtype)
     assert str(df.index.tz) == "UTC"
+
+
+def test_old_chunk_with_permanent_nulls_is_still_cached(tmp_cache, era5):
+    """Regression: ECMWF's archive starts 2024-02-04, so its January 2024 chunk is empty
+    forever. It must be cached anyway, or every run re-downloads it."""
+
+    def blank_everything(p):
+        for k in openmeteo.ERA5_VARS:
+            p["hourly"][k] = [None] * len(p["hourly"]["time"])
+
+    client = MagicMock()
+    client.get_json.return_value = _mutate(era5, blank_everything)
+    settings = MagicMock(sources={"era5_url": "https://x.test", "era5_model": "era5",
+                                  "settled_after_days": 30})  # fmt: skip
+    today = dt.date(2025, 6, 1)  # chunk is ~3 months old -> settled
+    openmeteo.fetch_era5(
+        client, settings, SAC, dt.date(2025, 3, 8), dt.date(2025, 3, 10), today=today
+    )
+    assert len(list(tmp_cache.rglob("*.json"))) == 1

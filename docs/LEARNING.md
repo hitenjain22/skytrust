@@ -116,3 +116,73 @@ nights, and if gaps cluster in bad weather (outages during storms) they'd bias t
 close to "the forecast you'd check the day before", but not identical to looking at one forecast at
 5 pm. Also: 3-hourly models (ECMWF 0.25°) are interpolated to hourly by Open-Meteo, so their
 "consecutive clear hours" are partly an interpolation artifact.
+
+---
+
+## `skytrust/astro.py`: dusk, dawn, dark hours, the Moon
+
+**What:** For each site and night, finds astronomical dusk and dawn (Sun centre 18° below the
+horizon), lists the whole UTC hours in between ("dark hours"), and computes Moon illumination,
+Moon altitude, and moonrise/moonset.
+
+**Why it's built that way:**
+- **Search by event, not by formula:** Skyfield's `find_discrete` samples "is the Sun below −18°?"
+  hourly over the whole date range and then narrows each change down to the exact moment. One call
+  gives every dusk and dawn for a year (~5 s per site-year).
+- **Night key:** a dusk is assigned to the *local* date it happens on, so "night of Jan 10" =
+  dusk on the evening of Jan 10 local, even though that's already Jan 11 in UTC.
+- **Dark hours built in UTC:** UTC has no daylight saving, so every hour exists exactly once.
+  On spring-forward night the local clock jumps from 01:00 to 03:00; in UTC the hours are still
+  consecutive, so there are no duplicates or gaps (tested for 4 DST nights).
+- **Offline ephemeris:** a committed 880 KB excerpt of JPL DE421 covering 2023–2030.
+- **Verified independently:** dusk/dawn match the `astral` library (different algorithm) within
+  2 minutes on both solstices.
+
+**Key concept:** *Astronomical twilight.* Until the Sun is 18° below the horizon, scattered sunlight
+still brightens the sky enough to wash out faint galaxies and nebulae. That's why the "dark window"
+is shorter than sunset→sunrise: at SAC it's 5 hours in June and 11 in December.
+
+**Interview questions:**
+1. Why is a night keyed by the local evening date, and how do you handle it crossing midnight UTC?
+2. How do you guarantee no duplicated/missing hours on daylight-saving nights?
+3. How did you verify your dusk times are right? Why is a *different* library a better check?
+4. What happens at a latitude with no astronomical darkness?
+
+---
+
+## `skytrust/data/openmeteo.py`: forecasts and ERA5
+
+**What:** Downloads Previous Runs forecasts (per site × model, only the leads that model has) and
+ERA5 reanalysis, month by month, through the shared HTTP client and disk cache. `parse_hourly`
+turns any Open-Meteo response into a UTC-indexed DataFrame of cloud *fractions* (0–1).
+
+**Why it's built that way:**
+- **Convert percent → fraction in exactly one place,** so no other module has to remember which
+  scale a number is on.
+- **Handle both key styles:** multi-model responses name columns `cloud_cover_gfs_global`;
+  single-model ones just `cloud_cover`. The parser accepts both.
+- **Nulls are "missing", never 0 %.** A forecast that doesn't exist must not look like a clear sky.
+  (A test caught a bug here: pandas 3 keeps NaN when stacking, which broke the range check on
+  HRRR's all-null long leads.)
+- **Don't cache what isn't finished:** if a chunk's last day has no data (ERA5's ~6-day lag), it's
+  used but not cached, so a later run fetches the completed version.
+
+**Interview questions:**
+1. Why do you treat a null forecast differently from 0 % cloud?
+2. How do you avoid caching a month that the provider hasn't finished publishing?
+3. Why pass the station elevation to Open-Meteo?
+
+---
+
+## `skytrust/data/backfill.py` + `python -m skytrust fetch`
+
+**What:** Works out which dates each source needs for a range of nights and runs the fetchers for
+every site. It prints how many real network requests were made.
+
+**Why:** *Idempotent* commands: running `fetch` twice gives the same result, and the second run
+makes **0** requests (verified). If one site fails (outage/rate limit), the others continue and a
+re-run resumes from the cache instead of starting over.
+
+**Interview questions:**
+1. What does "idempotent" mean and why does it matter for data pipelines?
+2. How do you *prove* the second run didn't touch the network?

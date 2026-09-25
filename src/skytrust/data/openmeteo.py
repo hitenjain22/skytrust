@@ -108,6 +108,8 @@ def _fetch_chunk(
     end: dt.date,
     completeness_key: str,
     refresh: bool,
+    settled_after_days: int,
+    today: dt.date | None,
 ) -> dict[str, Any]:
     path = raw_path(source, site.id, model, f"{start:%Y%m%d}", f"{end:%Y%m%d}", "json")
     if not refresh and (cached := read_cached(path)) is not None:
@@ -117,7 +119,11 @@ def _fetch_chunk(
     )
     if "hourly" not in payload:
         raise BadResponseError(f"{source} {site.id} {model}: no hourly block")
-    if _last_day_populated(payload, completeness_key):
+    # Cache if the last day has data, or if the chunk is old enough that any nulls are
+    # permanent (e.g. months before a model's archive began), so they never re-download.
+    today = today or dt.datetime.now(dt.UTC).date()
+    settled = (today - end).days > settled_after_days
+    if _last_day_populated(payload, completeness_key) or settled:
         write_cached(path, json.dumps(payload))
     else:
         log.warning("%s %s %s %s..%s: last day not published yet; not cached",
@@ -143,6 +149,7 @@ def fetch_prevruns(
     start: dt.date,
     end: dt.date,
     refresh: bool = False,
+    today: dt.date | None = None,
 ) -> int:
     """Download (or read from cache) Previous Runs forecasts for one site x model, month by
     month. Only the leads the model actually has are requested. Returns chunks processed."""
@@ -156,6 +163,7 @@ def fetch_prevruns(
         _fetch_chunk(
             client, settings.sources["prevruns_url"], params, "prevruns", site, model.id,
             lo, hi, prevruns_var(model.leads[0]), refresh,
+            settings.sources["settled_after_days"], today,
         )  # fmt: skip
     return len(chunks)
 
@@ -167,6 +175,7 @@ def fetch_era5(
     start: dt.date,
     end: dt.date,
     refresh: bool = False,
+    today: dt.date | None = None,
 ) -> int:
     params = {
         **_location(site),
@@ -178,6 +187,7 @@ def fetch_era5(
         _fetch_chunk(
             client, settings.sources["era5_url"], params, "era5", site, None,
             lo, hi, "cloud_cover", refresh,
+            settings.sources["settled_after_days"], today,
         )  # fmt: skip
     return len(chunks)
 
