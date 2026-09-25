@@ -12,7 +12,7 @@ import json
 import pytest
 
 from skytrust.config import load_settings, load_sites
-from skytrust.sites import year_chunks
+from skytrust.data.iem import year_chunks
 
 
 def test_settings_load_with_spec_defaults(settings):

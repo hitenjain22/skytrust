@@ -43,6 +43,8 @@ class HttpClient:
         # Injected so tests don't actually wait during backoff.
         self._sleep = sleep
         self._last_call = 0.0
+        # Every real network attempt is counted, so a run can prove it was served from cache.
+        self.n_requests = 0
 
     def _backoff(self, attempt: int) -> float:
         """Exponential backoff with full jitter: spreads retries out so we don't hammer
@@ -59,6 +61,7 @@ class HttpClient:
         last_problem = ""
         for attempt in range(self.settings.max_attempts):
             self._polite_wait()
+            self.n_requests += 1
             try:
                 resp = self.session.get(url, params=params, timeout=self.settings.timeout_s)
             except (requests.ConnectionError, requests.Timeout) as exc:

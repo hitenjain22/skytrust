@@ -7,11 +7,10 @@ import datetime as dt
 import logging
 import sys
 
-from skytrust.config import load_settings
+from skytrust.config import load_settings, load_sites
 from skytrust.data.http import HttpClient
 
 LATER_PHASE = {
-    "fetch": 1,
     "build-dataset": 2,
     "train": 4,
     "evaluate": 3,
@@ -46,6 +45,34 @@ def cmd_validate_sites(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch(args: argparse.Namespace) -> int:
+    from skytrust.data.backfill import default_last_night, fetch_source
+
+    settings = load_settings()
+    sites = load_sites()
+    if args.site:
+        sites = tuple(s for s in sites if s.id == args.site.upper())
+        if not sites:
+            print(f"Unknown site {args.site!r}; see config/sites.yaml")
+            return 2
+    today = dt.datetime.now(dt.UTC).date()
+    first = args.start or settings.history_start
+    last = args.end or default_last_night(settings, today)
+    client = HttpClient(settings.http)
+    summary = fetch_source(client, settings, sites, args.source, first, last, today, args.refresh)
+    print(
+        f"{args.source}: nights {first}..{last}, sites {[s.id for s in sites]}, "
+        f"network requests: {summary.network_requests}"
+    )
+    for failure in summary.failures:
+        print(f"  FAILED {failure}")
+    return 1 if summary.failures else 0
+
+
+def _date(text: str) -> dt.date:
+    return dt.date.fromisoformat(text)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="skytrust", description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -53,6 +80,13 @@ def build_parser() -> argparse.ArgumentParser:
     vs = sub.add_parser("validate-sites", help="Check candidate stations in IEM (SPEC 5)")
     vs.add_argument("--refresh", action="store_true", help="bypass the disk cache")
     vs.set_defaults(func=cmd_validate_sites)
+    fe = sub.add_parser("fetch", help="Download raw data into the disk cache (idempotent)")
+    fe.add_argument("--source", required=True, choices=["asos", "era5", "prevruns"])
+    fe.add_argument("--site", help="one site ID (default: all in config/sites.yaml)")
+    fe.add_argument("--start", type=_date, help="first night, YYYY-MM-DD (default: history_start)")
+    fe.add_argument("--end", type=_date, help="last night, YYYY-MM-DD (default: today - 2 days)")
+    fe.add_argument("--refresh", action="store_true", help="bypass the disk cache")
+    fe.set_defaults(func=cmd_fetch)
     for name in LATER_PHASE:
         sub.add_parser(name, help=f"(Phase {LATER_PHASE[name]})").set_defaults(func=None)
     return parser

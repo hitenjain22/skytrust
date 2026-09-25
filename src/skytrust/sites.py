@@ -9,7 +9,6 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-import pandas as pd
 import yaml
 
 from skytrust.config import CONFIG_DIR, Settings
@@ -30,22 +29,6 @@ class SiteCheck:
     note: str = ""
 
 
-def year_chunks(start: dt.date, end: dt.date) -> list[tuple[dt.datetime, dt.datetime]]:
-    """Split [start, end] into calendar-year UTC windows (IEM etiquette: one station-year
-    per request). The end bound is exclusive, so the last chunk ends the day after `end`."""
-    chunks = []
-    for year in range(start.year, end.year + 1):
-        lo = max(dt.date(year, 1, 1), start)
-        hi = min(dt.date(year + 1, 1, 1), end + dt.timedelta(days=1))
-        chunks.append(
-            (
-                dt.datetime.combine(lo, dt.time(), tzinfo=dt.UTC),
-                dt.datetime.combine(hi, dt.time(), tzinfo=dt.UTC),
-            )
-        )
-    return chunks
-
-
 def check_site(
     client: HttpClient,
     settings: Settings,
@@ -59,15 +42,10 @@ def check_site(
     if meta is None:
         return SiteCheck(site_id, terrain_class, None, {}, 0.0, False, "not found in IEM network")
     src = settings.sources
-    frames = [
-        iem.parse_asos_csv(
-            iem.fetch_asos_csv(
-                client, src["iem_asos_url"], site_id, lo, hi, src["iem_report_types"], refresh
-            )
-        )
-        for lo, hi in year_chunks(settings.history_start, end + dt.timedelta(days=1))
-    ]
-    obs = pd.concat(frames, ignore_index=True)
+    obs = iem.fetch_asos_range(
+        client, src["iem_asos_url"], site_id, settings.history_start, end,
+        src["iem_report_types"], refresh,
+    )  # fmt: skip
     hourly = iem.hourly_cover(obs, settings.sky_cover_mapping, settings.asos_hour_aggregation)
     nights = iem.proxy_night_hours(
         settings.history_start, end, meta["timezone"], sv["proxy_night_local_hours"]

@@ -10,12 +10,13 @@ import datetime as dt
 import io
 import logging
 import math
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from skytrust.data.cache import raw_path, read_cached, write_cached
+from skytrust.data.cache import RAW_DIR, raw_path, read_cached, write_cached
 from skytrust.data.http import BadResponseError, HttpClient
 
 log = logging.getLogger(__name__)
@@ -91,6 +92,54 @@ def fetch_asos_csv(
     parse_asos_csv(text)  # validate before caching so bad payloads never enter the cache
     write_cached(path, text)
     return text
+
+
+def year_chunks(start: dt.date, end: dt.date) -> list[tuple[dt.datetime, dt.datetime]]:
+    """Split [start, end] into calendar-year UTC windows (IEM etiquette: one station-year
+    per request). The end bound is exclusive, so the last chunk ends the day after `end`."""
+    chunks = []
+    for year in range(start.year, end.year + 1):
+        lo = max(dt.date(year, 1, 1), start)
+        hi = min(dt.date(year + 1, 1, 1), end + dt.timedelta(days=1))
+        chunks.append(
+            (
+                dt.datetime.combine(lo, dt.time(), tzinfo=dt.UTC),
+                dt.datetime.combine(hi, dt.time(), tzinfo=dt.UTC),
+            )
+        )
+    return chunks
+
+
+def fetch_asos_range(
+    client: HttpClient,
+    url: str,
+    station: str,
+    first_night: dt.date,
+    last_night: dt.date,
+    report_types: list[int],
+    refresh: bool = False,
+) -> pd.DataFrame:
+    """All reports needed to label nights first_night..last_night.
+
+    The last night's dark hours run into the next UTC day, so data is fetched through
+    last_night + 1 day.
+    """
+    frames = [
+        parse_asos_csv(fetch_asos_csv(client, url, station, lo, hi, report_types, refresh))
+        for lo, hi in year_chunks(first_night, last_night + dt.timedelta(days=1))
+    ]
+    return pd.concat(frames, ignore_index=True)
+
+
+def load_asos(station: str, root: Path = RAW_DIR) -> pd.DataFrame:
+    """Every cached report for a station. Overlapping chunks (the current year re-fetched
+    with a later end date) are de-duplicated on (valid time, raw METAR)."""
+    files = sorted((root / "asos" / station / "na").glob("*.csv"))
+    if not files:
+        return parse_asos_csv(",".join(["station", "valid", *SKY_COLS]) + "\n")
+    df = pd.concat([parse_asos_csv(p.read_text()) for p in files], ignore_index=True)
+    key = ["valid", "metar"] if "metar" in df.columns else ["valid"]
+    return df.drop_duplicates(subset=key).sort_values("valid").reset_index(drop=True)
 
 
 def parse_asos_csv(text: str) -> pd.DataFrame:
