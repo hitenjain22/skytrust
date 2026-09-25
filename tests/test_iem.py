@@ -80,15 +80,53 @@ def test_window_includes_h_plus_30_and_excludes_h_minus_30():
     assert hours.iloc[2] == h
 
 
-def test_multiple_obs_in_window_take_max():
+H5 = pd.Timestamp("2025-01-01 05:00", tz="UTC")
+
+
+def test_max_method_takes_max_over_window():
     df = obs(
         [
             ("2025-01-01 04:53", "CLR", "M", "M", "M"),  # routine
             ("2025-01-01 05:12", "BKN", "M", "M", "M"),  # SPECI in the same window
         ]
     )
-    hourly = iem.hourly_cover(df, DEFAULT)
-    assert hourly.loc[pd.Timestamp("2025-01-01 05:00", tz="UTC")] == 0.75
+    assert iem.hourly_cover(df, DEFAULT, method="max").loc[H5] == 0.75
+
+
+def test_nearest_method_uses_report_closest_to_top_of_hour():
+    df = obs(
+        [
+            ("2025-01-01 04:53", "CLR", "M", "M", "M"),  # 7 min from 05:00 -> chosen
+            ("2025-01-01 05:12", "BKN", "M", "M", "M"),  # 12 min away
+            ("2025-01-01 05:25", "OVC", "M", "M", "M"),
+        ]
+    )
+    assert iem.hourly_cover(df, DEFAULT).loc[H5] == 0.0
+
+
+def test_nearest_ties_go_to_the_cloudier_report():
+    df = obs(
+        [
+            ("2025-01-01 04:50", "CLR", "M", "M", "M"),
+            ("2025-01-01 05:10", "SCT", "M", "M", "M"),
+        ]
+    )
+    assert iem.hourly_cover(df, DEFAULT).loc[H5] == 0.4375
+
+
+def test_nearest_skips_reports_without_sky_data():
+    df = obs(
+        [
+            ("2025-01-01 05:00", "M", "M", "M", "M"),  # nearest, but no sky layers
+            ("2025-01-01 05:20", "BKN", "M", "M", "M"),
+        ]
+    )
+    assert iem.hourly_cover(df, DEFAULT).loc[H5] == 0.75
+
+
+def test_unknown_method_rejected():
+    with pytest.raises(ValueError):
+        iem.hourly_cover(obs([("2025-01-01 04:53", "CLR", "M", "M", "M")]), DEFAULT, "mean")
 
 
 def test_hour_with_only_missing_obs_is_nan():

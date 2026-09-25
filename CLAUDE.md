@@ -18,7 +18,7 @@
 - **Night** keyed by local date of the evening it begins.
 - **Dark window:** sun < −18° (Skyfield, DE421). **Dark hours:** top-of-hour UTC H with dusk ≤ H ≤ dawn.
 - **Clear hour:** cloud fraction ≤ 0.20. **Usable night:** ≥ 3 consecutive clear dark hours; a missing hour breaks a run.
-- **ASOS label:** routine+SPECI obs in (H−30, H+30]; okta midpoints; max over layers, then over obs. Blind above 12,000 ft.
+- **ASOS label:** routine+SPECI obs in (H−30, H+30]; okta midpoints; max over layers; hourly value = report **nearest H** (ties → cloudier; approved change 2026-09-25, `max` kept for sensitivity). Blind above 12,000 ft (except human-augmented FAT).
 - **ERA5 label:** Open-Meteo archive, `models=era5`, cloud_cover/100. Reanalysis, ECMWF-related, ~6-day lag.
 - **Primary label:** per hour `max(asos, era5)`; > 25 % missing in either source → exclude night (log reason).
 - **Features:** Previous Runs `cloud_cover_previous_day{d}`; > 25 % missing → NaN.

@@ -137,14 +137,39 @@ def assign_hour(valid: pd.Series) -> pd.Series:
     return (valid - pd.Timedelta(minutes=30)).dt.ceil("h")
 
 
-def hourly_cover(df: pd.DataFrame, mapping: dict[str, float]) -> pd.Series:
-    """Hourly cloud fraction = max over all observations in each hour's window.
+HOUR_AGGREGATIONS = ("nearest", "max")
 
-    Deliberately conservative: if any report in the hour (routine or SPECI) saw cloud,
-    the hour counts as cloudy. Hours with no valid observation are simply absent/NaN.
+
+def hourly_cover(df: pd.DataFrame, mapping: dict[str, float], method: str = "nearest") -> pd.Series:
+    """Hourly cloud fraction from all observations in each hour's window (H-30, H+30].
+
+    - "nearest" (default, DECISIONS 2026-09-25): the valid report closest in time to H;
+      ties go to the cloudier report. One reading per hour at every station, so labels are
+      comparable across stations whose reporting frequency differs (AUN reports 3x/hour,
+      SAC 1x) and stable if a station changes its schedule over time.
+    - "max" (SPEC's original rule, kept for sensitivity analysis): max over all reports.
+      More reports per hour make this stricter, which is why it is not the default.
+
+    Hours whose reports all lack a parseable sky layer are NaN.
     """
-    obs = pd.DataFrame({"hour": assign_hour(df["valid"]), "cover": observation_cover(df, mapping)})
-    return obs.groupby("hour")["cover"].max().rename("asos_cover")
+    if method not in HOUR_AGGREGATIONS:
+        raise ValueError(f"method must be one of {HOUR_AGGREGATIONS}, got {method!r}")
+    hour = assign_hour(df["valid"])
+    obs = pd.DataFrame(
+        {
+            "hour": hour,
+            "cover": observation_cover(df, mapping),
+            "dist": (df["valid"] - hour).abs(),
+        }
+    )
+    all_hours = pd.Index(obs["hour"].unique()).sort_values()
+    valid = obs.dropna(subset=["cover"])
+    if method == "nearest":
+        closest = valid.groupby("hour")["dist"].transform("min")
+        valid = valid[valid["dist"] == closest]
+    result = valid.groupby("hour")["cover"].max().reindex(all_hours)
+    result.index.name = "hour"
+    return result.rename("asos_cover")
 
 
 def proxy_night_hours(

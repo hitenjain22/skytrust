@@ -54,6 +54,7 @@ class Settings:
     min_run_hours: int
     max_missing_frac: float
     sky_cover_mapping: dict[str, float]
+    asos_hour_aggregation: str
     models: tuple[ModelSpec, ...]
     http: HttpSettings
     history_start: dt.date
@@ -79,6 +80,7 @@ def load_settings(path: Path | None = None) -> Settings:
         min_run_hours=int(defs["min_run_hours"]),
         max_missing_frac=float(defs["max_missing_frac"]),
         sky_cover_mapping={k: float(v) for k, v in defs["sky_cover_mapping"][mode].items()},
+        asos_hour_aggregation=defs["asos_hour_aggregation"],
         models=tuple(
             ModelSpec(m["short"], m["id"], m["name"], tuple(m["leads"])) for m in raw["models"]
         ),

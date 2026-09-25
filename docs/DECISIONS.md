@@ -51,3 +51,19 @@ Format: date · decision · alternatives considered · why. Newest at the bottom
 - **Why:** `validate-sites` needs to download a full ASOS history per station anyway; writing it
   through the real client + cache means that data is already cached for Phase 1 and the
   window-assignment logic is tested once, not duplicated in a throwaway script.
+
+### 2026-09-25 · Phase 0 checkpoint approvals
+- **Models approved:** gfs_global, ncep_hrrr_conus, ecmwf_ifs025, gem_seamless, icon_seamless.
+  NAM and ECMWF 9 km dropped (no usable training-period data).
+- **Sites approved:** SAC, FAT, AUN, TRK, BIH (all pass; no substitutions).
+
+### 2026-09-25 · ASOS hourly value = report nearest the top of the hour (changes SPEC 4.6a; approved by Hiten)
+- **Alternatives:** (A) SPEC's original max over all reports in (H−30, H+30]; (B) nearest report.
+- **Evidence:** reports per hour window differ by station (AUN 3, TRK 2, SAC/FAT/BIH 1), and TRK's
+  schedule changed during the archive. Under (A) a station looks cloudier just because it reports
+  more often, so labels aren't comparable across sites or stable over time.
+- **Decision:** (B). Nearest valid report to H; ties go to the cloudier report (keeps a conservative
+  lean); reports with no parseable sky layer are skipped. Window is unchanged. (A) stays implemented
+  as `asos_hour_aggregation: max` for a sensitivity check in RESULTS.
+- **Trade-off:** (B) can miss a brief cloud SPECI 20–30 min off the hour. Accepted: ERA5 in the
+  primary label is the backstop, and consistency across sites matters more for a backtest.

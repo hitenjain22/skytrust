@@ -68,7 +68,7 @@ def check_site(
         for lo, hi in year_chunks(settings.history_start, end + dt.timedelta(days=1))
     ]
     obs = pd.concat(frames, ignore_index=True)
-    hourly = iem.hourly_cover(obs, settings.sky_cover_mapping)
+    hourly = iem.hourly_cover(obs, settings.sky_cover_mapping, settings.asos_hour_aggregation)
     nights = iem.proxy_night_hours(
         settings.history_start, end, meta["timezone"], sv["proxy_night_local_hours"]
     )

@@ -107,7 +107,7 @@ forecasts. Test period (2026) fill is ≥ 0.976 for every model/lead in the prop
 | TRK | **2** | :15/:35/:55 + :47–:50 | yes: 7 % of reports | 72 % AUTO; mixed report schedule |
 | BIH | 1 | :56 | never | fully automated |
 
-Implications, raised at the Phase 0 checkpoint:
+Implications, raised at the Phase 0 checkpoint (resolved 2026-09-25: hourly value now = report nearest H; see DECISIONS):
 1. The "max over all obs in the window" rule is **more conservative at AUN (3 obs) and TRK (2 obs)**
    than at SAC/FAT/BIH (1 obs), so ASOS-label base rates aren't strictly comparable across sites.
 2. The 12,000 ft blind spot applies fully at SAC, AUN, BIH, and at TRK when AUTO, but **not at FAT**.

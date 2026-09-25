@@ -72,8 +72,10 @@ hour's window (H−30 min, H+30 min].
 
 **Why it's built that way:**
 - **Max over layers:** METAR amounts are cumulative, so the top layer's amount *is* total coverage.
-- **Max over reports in the hour:** deliberately conservative. If any report saw cloud, the hour
-  isn't clean for imaging.
+- **Nearest report to the hour (not max):** the spec originally took the max over all reports in
+  the window. But AUN reports 3×/hour and SAC 1×, so "max" made AUN look cloudier purely because it
+  reports more. Using the report nearest H gives every station one reading per hour, which keeps the
+  labels comparable. Ties go to the cloudier report. `max` is kept as a sensitivity option.
 - **`report_type=3,4`:** IEM by default includes 5-minute readings; a max over 12 readings per
   hour would be much stricter than intended, and stricter at some stations than others.
 - **The window trick:** "t is in (H−30, H+30]" rearranges to "H = ceil_to_hour(t − 30 min)". That
@@ -85,7 +87,7 @@ We also found FAT is human-augmented and *does* report high clouds, and AUN (an 
 per hour, so the ASOS label isn't equally strict everywhere.
 
 **Interview questions:**
-1. Why take the max rather than the mean of the observations in an hour?
+1. Why use the report nearest the top of the hour instead of the max over the hour? What's the trade-off?
 2. What can't ASOS see, and how does your design compensate?
 3. An obs at exactly H−30 min: which hour does it belong to, and why?
 4. Why did you pass `report_type=3,4` to IEM?
