@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.DS_Store
+
+# Raw API responses are large and re-downloadable; processed data and artifacts ARE committed.
+data/raw/
+data/live_cache/
+# Skyfield ephemeris download
+*.bsp
