@@ -11,5 +11,6 @@ htmlcov/
 # Raw API responses are large and re-downloadable; processed data and artifacts ARE committed.
 data/raw/
 data/live_cache/
-# Skyfield ephemeris download
+# Skyfield ephemeris downloads; the small committed excerpt is the exception
 *.bsp
+!data/ephemeris/de421_2023_2030.bsp

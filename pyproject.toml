@@ -44,6 +44,10 @@ select = ["E", "F", "I", "B", "UP", "DTZ"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-m 'not network' --strict-markers"
+filterwarnings = [
+    # Emitted inside skyfield's own search code under NumPy 2.5; not our code, harmless.
+    "ignore:Setting the dtype on a NumPy array:DeprecationWarning:skyfield",
+]
 markers = [
     "network: hits live APIs; run manually with `pytest -m network`",
     "slow: longer-running checks",
