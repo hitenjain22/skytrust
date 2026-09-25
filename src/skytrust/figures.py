@@ -95,7 +95,7 @@ def reliability(
     for i, r in enumerate(sorted(rows, key=lambda r: methods.index(r["method"]))):
         bins = pd.DataFrame(r["bins"])
         filled = bins[bins["n"] > 0]
-        color = EMPHASIS.get(r["method"])
+        color = color_for(r["method"])
         ax.plot(
             filled["mean_p"],
             filled["observed"],

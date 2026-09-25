@@ -220,3 +220,25 @@ def test_readme_block_replaces_only_between_markers(metrics, tmp_path):
     no_markers = tmp_path / "plain.md"
     no_markers.write_text("# nothing\n")
     assert not report.update_readme(metrics, no_markers)
+
+
+def test_every_method_in_a_figure_gets_a_distinct_colour(metrics, monkeypatch, tmp_path):
+    """Regression: the best single model was once drawn in the same blue as equal-weight."""
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import to_hex
+
+    from skytrust import figures
+
+    captured = []
+    monkeypatch.setattr(plt, "close", lambda fig: captured.append(fig))
+    methods = ["climatology", "icon_lr", "equal_weight"]
+    figures.reliability(metrics["reliability"], methods, "primary", 1, tmp_path / "r.png")
+    lines = [
+        ln for ln in captured[0].axes[0].get_lines() if ln.get_label() != "Perfectly calibrated"
+    ]
+    colours = [to_hex(ln.get_color()) for ln in lines]  # normalise tuple vs '#hex'
+    assert len(lines) == 3 and len(set(colours)) == 3
+    rec = pd.DataFrame(metrics["records"])
+    figures.site_skill(rec, ["icon_lr", "equal_weight"], "primary", 1, tmp_path / "s.png")
+    bars = {to_hex(p.get_facecolor()) for p in captured[1].axes[0].patches}
+    assert len(bars) == 2
