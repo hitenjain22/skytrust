@@ -227,6 +227,7 @@ class _Context:
     median: pd.Series
     night_hours: pd.DataFrame
     nights_astro: pd.DataFrame
+    moon_events: pd.DataFrame
 
 
 def _forecast_night(
@@ -244,7 +245,11 @@ def _forecast_night(
     window = best_window(hours, ctx.median.reindex(hours).to_numpy(), ctx.settings.clear_threshold)
     spread = float(row["spread_frac_clear"].iloc[0])
     record = track_record(ctx.metrics, ctx.site.id, lead)
-    events = astro.moon_events(ctx.site, dusk - pd.Timedelta(hours=6), dawn + pd.Timedelta(hours=6))
+    ev = ctx.moon_events
+    near = (ev["time_utc"] >= dusk - pd.Timedelta(hours=6)) & (
+        ev["time_utc"] <= dawn + pd.Timedelta(hours=6)
+    )
+    events = ev[near]
     return NightForecast(
         night_date=night,
         lead=lead,
@@ -290,6 +295,13 @@ def build_forecast(
         windows.index.max(),
         settings.raw["definitions"]["sun_altitude_deg"],
         settings.raw["astro"]["moon_up_altitude_deg"],
+        windows=windows[["dusk_utc", "dawn_utc"]],
+    )
+    # One moonrise/moonset search for the whole week (much faster than one per night).
+    moon_events = astro.moon_events(
+        site,
+        windows["dusk_utc"].min() - pd.Timedelta(hours=6),
+        windows["dawn_utc"].max() + pd.Timedelta(hours=6),
     )
     # Per-model night summaries with exactly the training rules.
     summaries = {
@@ -298,7 +310,7 @@ def build_forecast(
     }
     median = hourly.pivot_table(index="time", columns="model", values="cloud_cover").median(axis=1)
     ctx = _Context(site, settings, now_utc, artifacts_dir, metrics, summaries, median,
-                   night_hours, nights_astro.loc[windows.index])  # fmt: skip
+                   night_hours, nights_astro.loc[windows.index], moon_events)  # fmt: skip
     nights = [_forecast_night(ctx, n, w["dusk_utc"], w["dawn_utc"]) for n, w in windows.iterrows()]
     return LiveForecast(site, fetched_at, source, warning, nights, hourly)
 

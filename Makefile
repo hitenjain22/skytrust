@@ -1,4 +1,4 @@
-.PHONY: setup lint format test test-network validate-sites data dataset train report app all
+.PHONY: setup lint format test test-fast test-network tonight validate-sites data dataset train report app all
 
 # All commands run inside the uv-managed virtual environment.
 RUN = uv run
@@ -14,8 +14,11 @@ format:
 	$(RUN) ruff format .
 	$(RUN) ruff check --fix .
 
-test:
-	$(RUN) pytest --cov --cov-report=term-missing
+test:  ## everything offline, incl. slow app smoke tests (what CI runs)
+	$(RUN) pytest -m "not network" --cov --cov-report=term-missing
+
+test-fast:  ## quick loop: skips slow app smoke tests
+	$(RUN) pytest
 
 test-network:
 	$(RUN) pytest -m network
@@ -41,5 +44,8 @@ report:
 
 app:
 	$(RUN) streamlit run app/streamlit_app.py
+
+tonight:
+	$(RUN) python -m skytrust tonight --site $(or $(SITE),SAC)
 
 all: data dataset train report

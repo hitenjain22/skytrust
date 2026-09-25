@@ -886,3 +886,37 @@ def update_readme(metrics: dict, path: Path = REPO_ROOT / "README.md") -> bool:
     _, after = rest.split(README_END, 1)
     path.write_text(before + readme_block(metrics) + after)
     return True
+
+
+# ---------- plain-English takeaways (app Track Record page) ----------
+
+LABEL_NAMES = {"primary": "primary (ASOS + ERA5)", "asos": "ASOS-only", "era5": "ERA5-only"}
+
+
+def takeaways(v: MetricsView, label: str, lead: int) -> list[str]:
+    """Template sentences filled from metrics.json for any label and lead (never hand-typed)."""
+    main = "blend" if v.rec(label, lead, "blend") is not None else "equal_weight"
+    r, clim = v.rec(label, lead, main), v.rec(label, lead, "climatology")
+    if r is None or clim is None:
+        return ["No metrics for this label and lead."]
+    best = v.best_single(label, lead)
+    name = v.name(main)
+    lines = [
+        f"Judged against the {LABEL_NAMES[label]} label, {lead} day(s) ahead, the {name.lower()} "
+        f'says "go" on nights that turn out cloudy {with_ci(r, "false_clear_rate", "pct")} of the '
+        f"time, versus {with_ci(clim, 'false_clear_rate', 'pct')} for the seasonal base rate.",
+        f"Its Brier Skill Score is {with_ci(r, 'bss')} "
+        "(0 = no better than the base rate, 1 = perfect).",
+    ]
+    if main == "blend":
+        vs_best = _diff_phrase(v.diff(label, lead, "blend", best))
+        vs_equal = _diff_phrase(v.diff(label, lead, "blend", "equal_weight"))
+        lines.append(f"Versus the best single model ({v.name(best)}): {vs_best}.")
+        lines.append(f"Versus the simple equal-weight average: {vs_equal}.")
+    leads = [ld for ld in v.lead_list(label) if v.rec(label, ld, main) is not None]
+    first, last = v.rec(label, leads[0], main), v.rec(label, leads[-1], main)
+    lines.append(
+        f"Skill fades with lead time: from {_fmt(first['bss'], 'num')} at {leads[0]} day(s) ahead "
+        f"to {_fmt(last['bss'], 'num')} at {leads[-1]} days."
+    )
+    return lines

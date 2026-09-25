@@ -159,13 +159,16 @@ def night_table(
     end: dt.date,
     sun_altitude_deg: float = -18.0,
     moon_up_altitude_deg: float = 0.0,
+    windows: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Per-night astronomy plus the long (night_date, hour) table it was built from.
 
     Per night: dusk, dawn, number of dark hours, mean Moon illumination over the dark hours,
     and how many dark hours have the Moon below `moon_up_altitude_deg` (moon-free hours).
+    Pass `windows` (from dark_windows) to skip recomputing them.
     """
-    windows = dark_windows(site, start, end, sun_altitude_deg)
+    if windows is None:
+        windows = dark_windows(site, start, end, sun_altitude_deg)
     hours = night_hours(windows)
     if len(hours):
         idx = pd.DatetimeIndex(hours["hour"])

@@ -41,16 +41,20 @@ src = ["src", "tests"]
 # E/F: pycodestyle + pyflakes, I: import order, B: bugbear, UP: modern syntax, DTZ: naive datetimes
 select = ["E", "F", "I", "B", "UP", "DTZ"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["skytrust", "views", "synthetic", "conftest"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not network' --strict-markers"
+# Quick loop: `pytest` skips network and slow tests. Everything offline: `make test` (and CI).
+addopts = "-m 'not network and not slow' --strict-markers"
 filterwarnings = [
     # Emitted inside skyfield's own search code under NumPy 2.5; not our code, harmless.
     "ignore:Setting the dtype on a NumPy array:DeprecationWarning:skyfield",
 ]
 markers = [
     "network: hits live APIs; run manually with `pytest -m network`",
-    "slow: longer-running checks",
+    "slow: longer-running offline checks (Streamlit AppTest); run by `make test` and CI",
 ]
 
 [tool.coverage.run]

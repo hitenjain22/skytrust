@@ -1,0 +1,107 @@
+"""App smoke tests (SPEC 12.3): render every page with Streamlit's AppTest, offline, including
+with the live API down (with and without a saved last-good copy)."""
+
+from __future__ import annotations
+
+import json
+
+import pandas as pd
+import pytest
+import streamlit as st
+from streamlit.testing.v1 import AppTest
+
+from conftest import FIXTURES
+from skytrust import live
+from skytrust.config import REPO_ROOT
+from skytrust.data import openmeteo
+from skytrust.data.http import SourceUnavailableError
+
+# Each AppTest spins up the whole app, so these run in `make test` / CI, not in quick `pytest`.
+pytestmark = pytest.mark.slow
+
+APP = str(REPO_ROOT / "app" / "streamlit_app.py")
+PAGES = ["Tonight", "7-Night Outlook", "Track Record", "Methodology"]
+NOW = pd.Timestamp("2026-09-25 01:00", tz="UTC")
+
+
+@pytest.fixture
+def offline(monkeypatch, tmp_path):
+    """Freeze time, isolate the last-good cache, and start with empty Streamlit caches."""
+    monkeypatch.setattr(live, "utcnow", lambda: NOW)
+    monkeypatch.setenv("SKYTRUST_LIVE_CACHE", str(tmp_path))
+    st.cache_data.clear()
+    yield tmp_path
+    st.cache_data.clear()
+
+
+def api_up(monkeypatch):
+    payload = json.loads((FIXTURES / "openmeteo_forecast_SAC_live.json").read_text())
+    monkeypatch.setattr(openmeteo, "fetch_live", lambda c, s, site: payload)
+
+
+def api_down(monkeypatch):
+    def down(*a, **k):
+        raise SourceUnavailableError("HTTP 503")
+
+    monkeypatch.setattr(openmeteo, "fetch_live", down)
+
+
+def visit(page: str) -> AppTest:
+    """Open the app directly on `page` (one script run instead of two)."""
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.session_state["page"] = page
+    return at.run()
+
+
+@pytest.mark.parametrize("page", PAGES)
+def test_every_page_renders(page, offline, monkeypatch):
+    api_up(monkeypatch)
+    at = visit(page)
+    assert not at.exception, at.exception
+    assert not at.error, [e.value for e in at.error]
+
+
+def test_tonight_shows_probability_and_verdict(offline, monkeypatch):
+    api_up(monkeypatch)
+    at = visit("Tonight")
+    html = " ".join(m.value for m in at.markdown)
+    assert "chance of a usable night" in html
+    assert any(v in html for v in ["GO", "MAYBE", "SKIP"])
+    assert "Open-Meteo" in " ".join(c.value for c in at.caption)
+
+
+@pytest.mark.parametrize("page", PAGES)
+def test_api_down_without_saved_copy_never_crashes(page, offline, monkeypatch):
+    api_down(monkeypatch)
+    at = visit(page)
+    assert not at.exception
+    if page in ("Tonight", "7-Night Outlook"):
+        assert any("unavailable" in w.value for w in at.warning)
+
+
+def test_api_down_with_saved_copy_shows_as_of_banner(offline, monkeypatch):
+    api_up(monkeypatch)
+    visit("Tonight")  # populates the last-good copy on disk
+    st.cache_data.clear()
+    api_down(monkeypatch)
+    at = visit("Tonight")
+    assert not at.exception
+    banners = [w.value for w in at.warning]
+    assert any("showing the saved forecast from" in b for b in banners), banners
+
+
+def test_track_record_label_toggle(offline, monkeypatch):
+    api_up(monkeypatch)
+    at = visit("Track Record")
+    at.radio(key="label").set_value("asos").run()
+    assert not at.exception
+    assert any("ASOS-only" in m.value for m in at.markdown)
+
+
+def test_night_vision_and_site_switch(offline, monkeypatch):
+    api_up(monkeypatch)
+    at = visit("Tonight")
+    at.sidebar.toggle(key="night_vision").set_value(True).run()
+    at.sidebar.selectbox(key="site").set_value("BIH").run()
+    assert not at.exception
+    assert any("Tonight at BIH" in h.value for h in at.header)
