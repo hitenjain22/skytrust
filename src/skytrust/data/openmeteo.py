@@ -26,6 +26,9 @@ log = logging.getLogger(__name__)
 ERA5_VARS = ["cloud_cover", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high"]
 LIVE_CLOUD_VARS = ERA5_VARS
 LIVE_EXTRA_VARS = ["temperature_2m", "dew_point_2m", "wind_speed_10m", "wind_gusts_10m"]
+# Real GFS data contains exactly -1 and 101 (0.008 % of values; see DATA_NOTES). Values that
+# far out are clipped; anything further is treated as a corrupt payload.
+ROUNDING_TOLERANCE_PCT = 1
 
 
 def prevruns_var(lead: int) -> str:
@@ -80,9 +83,13 @@ def parse_hourly(
     if cloud_cols := [c for c in df.columns if c.startswith("cloud_cover")]:
         values = df[cloud_cols].to_numpy()
         values = values[~np.isnan(values)]  # nulls are "missing", not out of range
-        if ((values < 0) | (values > 100)).any():
-            raise BadResponseError("cloud cover outside 0-100 %")
-        df[cloud_cols] = df[cloud_cols] / 100.0
+        lo, hi = -ROUNDING_TOLERANCE_PCT, 100 + ROUNDING_TOLERANCE_PCT
+        if ((values < lo) | (values > hi)).any():
+            raise BadResponseError(f"cloud cover outside {lo}-{hi} %")
+        n_clipped = int(((values < 0) | (values > 100)).sum())
+        if n_clipped:
+            log.debug("clipped %d rounding artifacts (-1/101 %%) to 0-100", n_clipped)
+        df[cloud_cols] = df[cloud_cols].clip(0, 100) / 100.0
     return df
 
 
@@ -117,8 +124,8 @@ def _fetch_chunk(
     payload = client.get_json(
         url, {**params, "start_date": f"{start:%Y-%m-%d}", "end_date": f"{end:%Y-%m-%d}"}
     )
-    if "hourly" not in payload:
-        raise BadResponseError(f"{source} {site.id} {model}: no hourly block")
+    # Validate before caching so a bad payload never enters the cache.
+    parse_hourly(payload, [k for k in payload.get("hourly", {}) if k != "time"])
     # Cache if the last day has data, or if the chunk is old enough that any nulls are
     # permanent (e.g. months before a model's archive began), so they never re-download.
     today = today or dt.datetime.now(dt.UTC).date()

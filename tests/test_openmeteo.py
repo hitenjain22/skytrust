@@ -208,3 +208,33 @@ def test_old_chunk_with_permanent_nulls_is_still_cached(tmp_cache, era5):
         client, settings, SAC, dt.date(2025, 3, 8), dt.date(2025, 3, 10), today=today
     )
     assert len(list(tmp_cache.rglob("*.json"))) == 1
+
+
+def test_gfs_rounding_artifacts_are_clipped(era5):
+    """Regression: real GFS data contains exactly -1 and 101 (0.008% of values, GRIB rounding).
+    Those are clipped to 0/100; anything further out is still a bad payload."""
+
+    def add_artifacts(p):
+        p["hourly"]["cloud_cover"][0] = -1
+        p["hourly"]["cloud_cover"][1] = 101
+
+    df = openmeteo.parse_hourly(_mutate(era5, add_artifacts), ["cloud_cover"])
+    assert df["cloud_cover"].iloc[0] == 0.0
+    assert df["cloud_cover"].iloc[1] == 1.0
+    with pytest.raises(BadResponseError):
+        openmeteo.parse_hourly(
+            _mutate(era5, lambda p: p["hourly"]["cloud_cover"].__setitem__(0, 103)), ["cloud_cover"]
+        )
+
+
+def test_invalid_payload_is_not_cached(tmp_cache, era5):
+    client = MagicMock()
+    client.get_json.return_value = _mutate(
+        era5, lambda p: p["hourly"]["cloud_cover"].__setitem__(0, 150)
+    )
+    settings = MagicMock(
+        sources={"era5_url": "https://x.test", "era5_model": "era5", "settled_after_days": 30}
+    )
+    with pytest.raises(BadResponseError):
+        openmeteo.fetch_era5(client, settings, SAC, dt.date(2025, 3, 8), dt.date(2025, 3, 10))
+    assert list(tmp_cache.rglob("*.json")) == []

@@ -148,3 +148,22 @@ today so the last night is fully in the past.) All five pass the 85 % bar; no su
   station-years. We request one station × one year.
 - **Attribution text** (README + app footer): "Weather data by Open-Meteo.com (CC BY 4.0). ASOS
   observations courtesy of the Iowa Environmental Mesonet, Iowa State University."
+
+---
+
+## 7. Phase 1 backfill (2026-09-24/25)
+
+- Nights 2024-01-01 → 2026-09-23, 5 sites. Requests: ERA5 165, ASOS 14 (most years already cached
+  by `validate-sites`), Previous Runs 827 + 5. **Second/third runs: 0 network requests.**
+  Raw cache: 1,010 files, 57 MB (gitignored).
+- Transient issues, all recovered by retries: IEM HTTP 429 (×9), one Open-Meteo read timeout, one
+  dropped connection.
+- **⚠ ECMWF January 2024 chunk is permanently empty** (archive starts 2024-02-04). Chunks older than
+  `settled_after_days` (30) are now cached even with nulls so they never re-download.
+- **⚠ GFS out-of-range values:** exactly **−1** (132×) and **101** (157×) appear in `gfs_global`
+  Previous Runs data, only 0.008 % of 3.7 M cached values, concentrated at GFS output hours
+  (00/06/12/18 UTC). Looks like a rounding/packing artifact. Values within 1 point of [0, 100] are
+  clipped; anything further out is rejected as a corrupt payload. Payloads are now fully parsed
+  before being cached.
+- Loaded coverage (from 2024-02-10) matches the §1 lead table at all 5 sites; ERA5 has 0 nulls
+  through 2026-09-17 23:00 UTC.

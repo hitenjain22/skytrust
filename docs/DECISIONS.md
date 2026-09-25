@@ -85,3 +85,9 @@ Format: date · decision · alternatives considered · why. Newest at the bottom
 ### 2026-09-25 · `fetch --end` is a *night* date; sources are fetched through end + 1 day
 - **Why:** A night's dark hours run past midnight into the next UTC day, so labelling night N
   needs data from day N+1. Default last night = today − 2 days, so every hour is in the past.
+
+### 2026-09-25 · Clip GFS −1 / 101 % values to 0 / 100
+- **Alternatives:** treat as missing (NaN); reject the whole chunk; leave as is.
+- **Why:** They're off by exactly one point, rare (289 of 3.7 M values), and physically mean
+  "clear" / "overcast". NaN would punch artificial holes in consecutive-hour runs; leaving them
+  would break the 0–1 validation. The tolerance is 1 point so real corruption still fails loudly.
