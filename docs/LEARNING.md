@@ -372,3 +372,42 @@ uncommitted). Figures are byte-reproducible (no timestamps embedded).
 1. How do you guarantee the numbers in your README match your code?
 2. What does the reliability diagram tell you that the Brier score doesn't?
 3. Under the ASOS-only label the forecasts look bad. Is that a problem with the models or the label?
+
+---
+
+## `skytrust/blend.py`: the learned blend
+
+**What:** For each lead (1–7 days), a logistic regression that takes every available model's
+forecast (clear fraction, longest clear run, mean cover), how much the models disagree (spread),
+and context (site, month, dark hours), and outputs P(usable night).
+
+**Why it's built that way:**
+- **Logistic regression, not a fancier model:** ~3,500 training rows, and we need calibrated
+  probabilities plus coefficients we can explain. It was already well calibrated (out-of-fold
+  calibration error ≤ 0.048), so the isotonic step was never triggered.
+- **One model per lead:** skill and the best mix of models change with lead time (the blend leans
+  much harder on ECMWF at 7 days than at 1 day), and HRRR/ICON don't exist at long leads.
+- **Missing values:** median imputation + a "was missing" indicator, so the model can learn
+  whether missingness itself means something, rather than silently pretending.
+- **Exported to JSON, run with numpy:** the file stores feature order, medians, scaler means and
+  scales, coefficients, the calibration decision, the training period, library versions, and the
+  git commit. A test shows the numpy version matches scikit-learn to within 1e-9. The app
+  therefore runs *exactly* the model that was evaluated, and there's no pickle (pickles can run
+  arbitrary code and break across library versions).
+- **Fair comparison:** B4 (single model) gets the same context features, so blend vs best single
+  measures only the value of combining models.
+
+**What we found (numbers in RESULTS.md):** the blend beats the best single model at every lead.
+Against the simple average of the models it's only clearly better at 2 of 7 leads, so most of the
+benefit comes from averaging several models at all, and learning the weights adds a little on
+top (mostly at lead 1, where it also cuts the false-clear rate the most). Negative spread
+coefficient = when models disagree, the blend is less confident the night will be usable.
+
+**Interview questions:**
+1. Why logistic regression instead of gradient boosting or a neural net?
+2. How did you decide whether to calibrate? What would you have done if the check failed?
+3. Why export to JSON instead of pickling, and how do you know the export is correct?
+4. The blend barely beats a simple average at most leads. Is that a failure? (No: it's an honest
+   result. It says the ensemble effect does most of the work, and it tells a user how much to trust
+   a learned weighting. Knowing that is useful in itself.)
+5. What does a negative coefficient on model spread mean?

@@ -26,6 +26,7 @@
 
 ## Commands
 - `uv sync` · `uv run pytest` · `uv run ruff check . && uv run ruff format --check .`
-- `uv run python -m skytrust validate-sites` · `fetch --source {asos,era5,prevruns}` · `build-dataset` · `evaluate` · `report` (or `make report`)
+- `uv run python -m skytrust validate-sites` · `fetch --source {asos,era5,prevruns}` · `build-dataset` · `train` · `evaluate` · `report` (`make train report`; `make all` rebuilds everything)
 - Core rules live in `src/skytrust/nightly.py` (clear / run / usable / missing). Reuse it; don't reimplement.
 - Offline tests use the `fast_settings` fixture (light C grid/folds/resamples). Keep the suite < 30 s.
+- The shipped models are `artifacts/model_lead{d}.json`; load them only via `blend.load_artifact` + `blend.predict_proba` (numpy). Never pickle.

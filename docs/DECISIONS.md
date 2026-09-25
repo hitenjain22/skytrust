@@ -165,3 +165,39 @@ Format: date · decision · alternatives considered · why. Newest at the bottom
 ### 2026-09-25 · README headline block is generated
 - `skytrust report` rewrites only the text between `<!-- RESULTS:START -->` and
   `<!-- RESULTS:END -->`, from metrics.json, with the commit hash (`-dirty` if uncommitted).
+
+### 2026-09-25 · Phase 3 checkpoint: resolve the open items the simplest, most consistent way (Hiten)
+Hiten asked for the path that is easiest to understand and gives the most consistent results.
+1. **Tiny subsets get no CI.** A bootstrap over a handful of weekly blocks is unreliable, so any
+   subset spanning fewer than `min_weeks_for_ci` = 8 weeks reports a point estimate only
+   ("too few weeks for a CI"). Applied in `evaluate.py`, so the app and reports behave the same.
+2. **B4 (single model) now gets the blend's context features** (site one-hot, month sin/cos,
+   dark hours). The blend and the best single model then differ *only* in how many weather
+   models they see, so "blend − best single" isolates the value of combining models. This
+   replaces the planned ablation. (A small, deliberate extension of SPEC 8.2's B4.) Effect on B4
+   itself was tiny (e.g. ECMWF lead-1 BSS 0.514 → 0.515), i.e. context adds little on its own.
+3. **2026 being cloudier** is a property of the data, not a defect. Climatology stays computed
+   from the training years (standard practice); the generated caveat states the shift.
+
+### 2026-09-25 · Blend design (SPEC 8.3)
+- One model per lead, per label (primary = shipped; ASOS/ERA5 = sensitivity only, saved under
+  `artifacts/sensitivity/`). Inputs: every model that forecasts that lead × 3 features, model
+  spread (if ≥ 2 models), site one-hot, month sin/cos, dark hours. Median imputation + missing
+  indicators (needed for ECMWF's first two weeks of 2024), standardize, L2 logistic regression,
+  C by date-based CV. Training rows need ≥ 1 model available.
+- **Evaluated through the exported JSON**, via the numpy loader: the test set scores exactly the
+  file the app will use. `evaluate` refuses an artifact trained on/after the test start.
+- **Calibration rule:** compute out-of-fold predictions on the training folds; apply an isotonic
+  map (fitted on those OOF predictions) only if their 10-bin expected calibration error > 0.05.
+  This mirrors sklearn's `CalibratedClassifierCV(ensemble=False)`, which can't be used directly
+  because TimeSeriesSplit folds aren't a partition of the rows.
+- **Decision + evidence:** OOF calibration error ranged 0.013–0.048 across all 21 blends (every
+  label × lead), all under 0.05, so **no calibration was applied**. Logistic regression was
+  already well calibrated. (Per-lead values are in RESULTS §8 and in each artifact.)
+- Optional HistGradientBoosting comparison: not done. SPEC makes it optional "only after
+  everything else is done"; logistic regression is the shipped model.
+
+### 2026-09-25 · Phase 4 result (one final test evaluation of the blend)
+- The blend beats the best single model at 7/7 leads and the equal-weight average at 2/7 leads
+  (95% paired week-block CIs). RESULTS states the 5 leads where it does *not* beat the equal-weight
+  average plainly. No thresholds, subsets, or features were changed after seeing test results.
