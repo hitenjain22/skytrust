@@ -120,3 +120,48 @@ Format: date · decision · alternatives considered · why. Newest at the bottom
 ### 2026-09-25 · Site coverage re-checked on true dark windows (closes the Phase 0 proxy decision)
 - ASOS is missing 0.0–1.3 % of astronomical-dark hours per site; 0–18 nights per site exceed 25 %.
   The Phase 0 proxy (≥ 98.6 %) was consistent with this.
+
+### 2026-09-25 · One common evaluation set per (label, lead)
+- **Alternatives:** score each method on whatever rows it can predict.
+- **Why:** Comparisons (and the paired bootstrap) are only fair on identical rows. Test rows are
+  kept if the label is known, *every* model that forecasts that lead has features, and the
+  persistence outcome is known (≈ 1,200–1,280 site-nights per lead; RESULTS shows exact n).
+
+### 2026-09-25 · "Best single model" is chosen by training CV log loss, never by test results
+- **Why:** Picking the model that happened to score best on test and then comparing the blend
+  against it would be selection on the test set, which makes the comparison look harder or easier
+  than it really is. The choice is made inside training data, exactly like the blend's tuning.
+
+### 2026-09-25 · CV folds split on unique night dates (expanding window, 4 folds)
+- **Why:** With 5 sites per night, a row-based TimeSeriesSplit could put SAC's Jan 3 in
+  training and FAT's Jan 3 in validation. Same-night weather is strongly correlated across sites,
+  so that leaks. Folds are built on dates, then mapped to rows (tested).
+
+### 2026-09-25 · C chosen with a 1e-4 log-loss tie tolerance, preferring stronger regularization
+- **Evidence:** CV curves for the 3-feature single-model regressions are flat above C ≈ 1 to the
+  5th decimal; without a tolerance, noise pushed choices to the grid edge (C = 1000) with a warning.
+- **Decision:** Among C values within 1e-4 of the best CV loss, take the smallest (simplest model).
+  Grid widened to 10^-3 … 10^3. A grid-edge warning still fires if the true optimum is at an edge.
+
+### 2026-09-25 · Metric conventions
+- Log loss uses probabilities clipped to [0.001, 0.999] (a 0/1 forecast would otherwise be
+  infinite). Hard yes/no predictors (persistence, rules) get no log loss or AUC; per SPEC, the
+  B3 rules get confusion-matrix metrics only. Persistence keeps Brier/BSS as the classic reference.
+- False-clear / miss rates at P ≥ 0.5 (config `decision_threshold`).
+- Bootstrap = 1,000 resamples of ISO calendar weeks (all sites move together), implemented as
+  replicate weights so every method uses identical resamples (paired). Subset CIs (site/season)
+  reuse the same replicates; RESULTS shows the number of weeks behind each subset.
+
+### 2026-09-25 · B4 uses only that model's own features (as SPEC 8.2 states)
+- **Note for Phase 4:** the blend also gets site / month / dark-hours features. To show how much of
+  any gain comes from *combining models* vs from those context features, Phase 4 will add an
+  ablation (blend without context features). No change to B4 itself.
+
+### 2026-09-25 · Test-time tuning knobs live in config; tests use a lighter copy
+- The C grid and tie tolerance are in `settings.yaml` (`modeling`). The offline tests use a
+  `fast_settings` fixture (2 C values, 2 folds, 100 resamples, leads 1/2/7) so the suite stays
+  under 30 s. Production numbers always use the full settings.
+
+### 2026-09-25 · README headline block is generated
+- `skytrust report` rewrites only the text between `<!-- RESULTS:START -->` and
+  `<!-- RESULTS:END -->`, from metrics.json, with the commit hash (`-dirty` if uncommitted).

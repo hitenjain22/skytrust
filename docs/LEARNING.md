@@ -279,3 +279,96 @@ nullable booleans. It refuses to save if any fail. `DATA_QUALITY.md` is generate
 2. How would you prove your dataset build is reproducible?
 3. What's the base rate of usable nights, and how does it vary by season and site? What does
    that mean for a "climatology" baseline?
+
+---
+
+## `skytrust/modeling.py`: leakage-safe training
+
+**What:** The train/test split with an overlap check, cross-validation folds that respect time,
+and the tuned logistic-regression pipeline (standardize → L2 logistic regression, optionally with
+median imputation + missing-value indicators for the blend).
+
+**Why it's built that way:**
+- **Time-based split, enforced:** train = 2024–25, test = 2026. `split_train_test` raises if any
+  training night is on/after the first test night. A test spies on every `fit()` call and proves
+  no test row is ever passed in.
+- **CV on dates, not rows:** folds are built from unique night dates, so one night's 5 sites
+  never straddle a train/validation boundary.
+- **Choosing C:** we try 13 values and pick the one with the best average validation log loss.
+  When several are equally good (within 0.0001), we prefer the simplest (most regularized) model.
+
+**Key concept:** *Leakage.* Any path by which information from the evaluation period influences
+training makes results look better than reality. Random splits leak (tomorrow's weather resembles
+today's); row-based folds leak (sites share weather); picking the "best" model on test leaks.
+
+**Interview questions:**
+1. Why not a random train/test split?
+2. How do you *prove* no test data reached training?
+3. What does C control in logistic regression, and how did you choose it?
+
+---
+
+## `skytrust/baselines.py`: what the blend has to beat
+
+**What:** Five reference forecasts, all scored on the same test nights:
+B1 climatology (training base rate for that site and month), B2 persistence (what happened d
+nights ago), B3 each model's own forecast as a yes/no, B4 each model recalibrated by logistic
+regression, B5 the plain average of all models' forecast clear fraction.
+
+**Why:** A number like "Brier 0.10" means nothing alone. Baselines answer: better than just
+knowing the season? Better than the best single model? Better than naive averaging?
+The "best single model" is picked using *training* data only.
+
+**What we found (see RESULTS.md for numbers):** Persistence is worse than climatology (cloudy
+spells don't last a predictable number of days). Every forecast model beats climatology by a wide
+margin. And the naive equal-weight average beats every individually calibrated model at most
+leads. That's the classic ensemble effect: different models make partly independent errors, and
+averaging cancels some of them. That also sets a high bar for the learned blend.
+
+**Interview questions:**
+1. Why is climatology the reference for the skill score?
+2. Why did persistence do so badly here?
+3. Why can an *uncalibrated* average beat *calibrated* single models?
+
+---
+
+## `skytrust/evaluate.py`: metrics and honest uncertainty
+
+**What:** For each method, label, lead, and subset (overall / site / season): Brier score, Brier
+Skill Score, log loss, AUC, false-clear rate, miss rate, accuracy, each with a 95% CI; paired
+differences between key methods; reliability tables.
+
+**Key concepts:**
+- **Brier score** = mean of (forecast probability − outcome)². Lower is better; always saying 50%
+  scores 0.25. **BSS** = 1 − Brier/Brier(climatology): the share of climatology's error removed.
+- **False-clear rate** = of the nights we said "go", how many weren't usable. The #1 complaint.
+- **Block bootstrap:** resample whole calendar weeks (not single nights) because neighbouring
+  nights share weather; resampling nights would make intervals look falsely narrow.
+- **Paired comparison:** both methods are scored on the *same* resampled weeks, so the CI of the
+  difference removes the week-to-week noise they share. That's why a small Brier difference can
+  still be clearly significant.
+- **Implementation trick:** each bootstrap replicate is a weight per row (how many times its week
+  was drawn), so all 1,000 replicates are computed at once with a matrix product. The weighted AUC
+  is vectorized too and tested against scikit-learn with sample weights.
+
+**Interview questions:**
+1. Why is Brier score a better headline than accuracy for probability forecasts?
+2. What's a block bootstrap and why do you need it here?
+3. Your CI for the difference is narrower than the CIs of each method. Why?
+
+---
+
+## `skytrust/report.py` (RESULTS.md) + `figures.py`
+
+**What:** `skytrust report` turns metrics.json into RESULTS.md, three figures, and the README
+headline block. Summary sentences are templates filled with numbers from metrics.json; the
+ECMWF/ERA5 warning appears automatically when ECMWF comes out best under an ERA5-based label.
+
+**Why:** The honesty rule: no number is ever typed by hand, so the write-up can't drift from the
+code. The metrics carry the git commit that produced them (marked `-dirty` if the code was
+uncommitted). Figures are byte-reproducible (no timestamps embedded).
+
+**Interview questions:**
+1. How do you guarantee the numbers in your README match your code?
+2. What does the reliability diagram tell you that the Brier score doesn't?
+3. Under the ASOS-only label the forecasts look bad. Is that a problem with the models or the label?
