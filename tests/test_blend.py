@@ -17,6 +17,15 @@ from skytrust.baselines import LABELS
 
 
 @pytest.fixture(scope="module")
+def trained(synthetic_built, fast_settings, tmp_path_factory):
+    """Train every blend once on the synthetic dataset and evaluate once; shared by tests."""
+    root = tmp_path_factory.mktemp("artifacts")
+    paths = blend.train_all(synthetic_built[0], fast_settings, root=root)
+    metrics = evaluate.run_evaluation(synthetic_built[0], fast_settings, artifacts_dir=root)
+    return root, paths, metrics
+
+
+@pytest.fixture(scope="module")
 def train_rows(synthetic_built):
     train, _ = modeling.split_train_test(synthetic_built[0])
     return train
@@ -77,7 +86,9 @@ def test_no_test_rows_reach_blend_fit(synthetic_built, fast_settings, monkeypatc
         return real_fit(self, X, y, **kw)
 
     monkeypatch.setattr(Pipeline, "fit", spy)
-    blend.train_all(df, fast_settings, root=tmp_path)
+    raw = copy.deepcopy(fast_settings.raw)
+    raw["leads"] = [1]  # one lead is enough to exercise tuning, OOF calibration, and refit
+    blend.train_all(df, dataclasses.replace(fast_settings, raw=raw), root=tmp_path)
     assert seen
     assert all(not (set(idx) & test_index) for idx in seen)
 
@@ -135,16 +146,13 @@ def test_bad_schema_version_rejected(tmp_path):
         blend.load_artifact(path)
 
 
-def test_end_to_end_offline_pipeline(synthetic_built, fast_settings, tmp_path):
+def test_end_to_end_offline_pipeline(trained, synthetic_built, fast_settings, tmp_path):
     """SPEC 12.2: dataset (built from the fake raw cache) -> train -> evaluate -> report."""
-    df, _ = synthetic_built
-    artifacts = tmp_path / "artifacts"
-    paths = blend.train_all(df, fast_settings, root=artifacts)
+    artifacts, paths, metrics = trained
     assert len(paths) == len(LABELS) * len(fast_settings.raw["leads"])
     assert (artifacts / "model_lead1.json").exists()
     assert (artifacts / "sensitivity" / "model_asos_lead1.json").exists()
 
-    metrics = evaluate.run_evaluation(df, fast_settings, artifacts_dir=artifacts)
     rec = pd.DataFrame(metrics["records"])
     blend_rows = rec[(rec["method"] == "blend") & (rec["subset_type"] == "overall")]
     assert set(blend_rows["label"]) == set(LABELS)
@@ -163,3 +171,11 @@ def test_end_to_end_offline_pipeline(synthetic_built, fast_settings, tmp_path):
     assert "## 8. The blend: what it learned" in md
     assert "The learned blend" in md and "Phase 4 (not yet run)" not in md
     assert "of 3 leads" in md
+
+
+def test_report_blend_details(trained):
+    v = report.MetricsView(trained[2])
+    assert "Blend" not in set(report.model_info_table(v, "primary")["model"])
+    site = report.breakdown_table(v, "primary", 1, "site")
+    assert "BSS blend" in site.columns and "false-clear blend" in site.columns
+    assert "model-spread coefficient" in report.spread_sentence(v)

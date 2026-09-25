@@ -438,15 +438,21 @@ def breakdown_table(v: MetricsView, label: str, lead: int, subset_type: str) -> 
         ew = v.rec(label, lead, "equal_weight", subset_type, s)
         bs = v.rec(label, lead, best, subset_type, s) if best else None
         cl = v.rec(label, lead, "climatology", subset_type, s)
-        rows[s] = {
+        bl = v.rec(label, lead, "blend", subset_type, s)
+        row = {
             "n": int(ew["n"]),
             "weeks": int(ew["n_weeks"]) if pd.notna(ew.get("n_weeks")) else "–",
             "base rate": _fmt(ew["base_rate"], "pct"),
-            "BSS equal-weight": with_ci(ew, "bss"),
-            f"BSS {v.name(best) if best else 'best single'}": with_ci(bs, "bss"),
-            "false-clear equal-weight": _fmt(ew["false_clear_rate"], "pct"),
-            "false-clear climatology": _fmt(cl["false_clear_rate"], "pct"),
         }
+        if bl is not None:
+            row["BSS blend"] = with_ci(bl, "bss")
+        row["BSS equal-weight"] = with_ci(ew, "bss")
+        row[f"BSS {v.name(best) if best else 'best single'}"] = with_ci(bs, "bss")
+        if bl is not None:
+            row["false-clear blend"] = _fmt(bl["false_clear_rate"], "pct")
+        row["false-clear equal-weight"] = _fmt(ew["false_clear_rate"], "pct")
+        row["false-clear climatology"] = _fmt(cl["false_clear_rate"], "pct")
+        rows[s] = row
     out = pd.DataFrame(rows).T
     out.index.name = subset_type
     return out
@@ -469,6 +475,8 @@ def model_info_table(v: MetricsView, label: str) -> pd.DataFrame:
     rows = []
     for _, lead_row in v.leads[v.leads["label"] == label].iterrows():
         for method, info in (lead_row["model_info"] or {}).items():
+            if method == "blend":
+                continue  # the blend has its own section
             rows.append(
                 {
                     "lead": int(lead_row["lead"]),
@@ -595,6 +603,19 @@ def coefficient_table(v: MetricsView, label: str, lead: int, top: int = 12) -> p
     return out
 
 
+def spread_sentence(v: MetricsView) -> str:
+    """Plain-English reading of the model-spread coefficient, from the lead-1 blend."""
+    lr = v.leads[(v.leads["label"] == "primary") & (v.leads["lead"] == RESULTS_LEAD)].iloc[0]
+    coef = lr["model_info"]["blend"]["coef_standardized"].get("spread_frac_clear")
+    if coef is None:
+        return ""
+    direction = "lowers" if coef < 0 else "raises"
+    return (
+        f"The model-spread coefficient at lead {RESULTS_LEAD} is {coef:+.3f}: when the models "
+        f"disagree, the blend {direction} its probability of a usable night."
+    )
+
+
 def blend_section(v: MetricsView) -> list[str]:
     if v.rec("primary", RESULTS_LEAD, "blend") is None:
         return []
@@ -624,7 +645,7 @@ def blend_section(v: MetricsView) -> list[str]:
         md_table(weight_share_table(v)),
         "",
         f"At lead {first} the blend leans most on {shares[first][0]} ({shares[first][1]:.0%}); at "
-        f"lead {last}, on {shares[last][0]} ({shares[last][1]:.0%}).",
+        f"lead {last}, on {shares[last][0]} ({shares[last][1]:.0%}). " + spread_sentence(v),
         "",
         f"**Largest standardized coefficients at lead {RESULTS_LEAD}** "
         "(positive = more likely usable):",
@@ -677,7 +698,14 @@ def summary_lines(v: MetricsView) -> list[str]:
             f"- Under the **ASOS-only label** the picture changes: equal-weight BSS at lead {lead} "
             f"is {with_ci(asos, 'bss')}. The models forecast *total* cloud (including cirrus), "
             "while ASOS only reports cloud below 12,000 ft, so they're scored against a truth that "
-            "ignores part of what they predict. See the label sensitivity section."
+            "ignores part of what they predict."
+            + (
+                f" A blend trained on that label learns the relationship directly and scores "
+                f"{with_ci(v.rec('asos', lead, 'blend'), 'bss')}."
+                if v.rec("asos", lead, "blend") is not None
+                else ""
+            )
+            + " See the label sensitivity section."
         )
     if v.rec(lab, lead, "blend") is None:
         lines.append("- The learned blend is trained and evaluated in Phase 4 (not yet run).")
