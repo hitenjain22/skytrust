@@ -137,32 +137,51 @@ def moon_events(site: Site, start_utc: pd.Timestamp, end_utc: pd.Timestamp) -> p
     )
 
 
+def night_hours(windows: pd.DataFrame) -> pd.DataFrame:
+    """Long table with one row per (night_date, dark hour), from `dark_windows` output.
+
+    This is the backbone that labels and features are computed on: every hourly source is
+    looked up at exactly these timestamps, so all of them describe the same dark window.
+    Nights without darkness contribute no rows.
+    """
+    parts = [
+        pd.DataFrame({"night_date": night, "hour": dark_hours(row.dusk_utc, row.dawn_utc)})
+        for night, row in windows.iterrows()
+    ]
+    if not parts:
+        return pd.DataFrame({"night_date": [], "hour": pd.DatetimeIndex([], tz="UTC")})
+    return pd.concat(parts, ignore_index=True)
+
+
 def night_table(
     site: Site,
     start: dt.date,
     end: dt.date,
     sun_altitude_deg: float = -18.0,
     moon_up_altitude_deg: float = 0.0,
-) -> pd.DataFrame:
-    """Per night: dusk, dawn, number of dark hours, mean moon illumination over the dark
-    hours, and how many dark hours have the Moon below `moon_up_altitude_deg`."""
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Per-night astronomy plus the long (night_date, hour) table it was built from.
+
+    Per night: dusk, dawn, number of dark hours, mean Moon illumination over the dark hours,
+    and how many dark hours have the Moon below `moon_up_altitude_deg` (moon-free hours).
+    """
     windows = dark_windows(site, start, end, sun_altitude_deg)
-    hours_per_night = {n: dark_hours(r.dusk_utc, r.dawn_utc) for n, r in windows.iterrows()}
-    all_hours = [h for hrs in hours_per_night.values() for h in hrs]
-    if all_hours:
-        idx = pd.DatetimeIndex(all_hours)
-        illum = pd.Series(moon_illumination(idx), index=idx)
-        moon_down = pd.Series(moon_altitude(site, idx) < moon_up_altitude_deg, index=idx)
-    rows = []
-    for night, hrs in hours_per_night.items():
-        rows.append(
-            {
-                "night_date": night,
-                "dark_hours": len(hrs),
-                "moon_illum_mean": float(illum[hrs].mean()) if len(hrs) else np.nan,
-                "moon_free_dark_hours": int(moon_down[hrs].sum()) if len(hrs) else 0,
-            }
+    hours = night_hours(windows)
+    if len(hours):
+        idx = pd.DatetimeIndex(hours["hour"])
+        hours = hours.assign(
+            moon_illum=moon_illumination(idx),
+            moon_down=moon_altitude(site, idx) < moon_up_altitude_deg,
         )
-    out = windows.join(pd.DataFrame(rows).set_index("night_date"))
+    else:
+        hours = hours.assign(moon_illum=[], moon_down=[])
+    per_night = hours.groupby("night_date").agg(
+        dark_hours=("hour", "size"),
+        moon_illum_mean=("moon_illum", "mean"),
+        moon_free_dark_hours=("moon_down", "sum"),
+    )
+    out = windows.join(per_night)
+    out["dark_hours"] = out["dark_hours"].fillna(0).astype(int)
+    out["moon_free_dark_hours"] = out["moon_free_dark_hours"].fillna(0).astype(int)
     out.insert(0, "site", site.id)
-    return out
+    return out, hours[["night_date", "hour"]]

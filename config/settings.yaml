@@ -23,7 +23,7 @@ split:
   cv_folds: 4
 
 # Forecast models, verified by probing the Previous Runs API (see docs/DATA_NOTES.md).
-# PROPOSED list, pending Hiten's confirmation at the Phase 0 checkpoint.
+# Approved by Hiten at the Phase 0 checkpoint (2026-09-25).
 models:
   - {short: gfs, id: gfs_global, name: NCEP GFS (0.11-0.25 deg), leads: [1, 2, 3, 4, 5, 6, 7]}
   - {short: hrrr, id: ncep_hrrr_conus, name: NCEP HRRR CONUS (3 km), leads: [1]}
@@ -32,6 +32,9 @@ models:
   - {short: icon, id: icon_seamless, name: DWD ICON, leads: [1, 2, 3, 4, 5, 6]}
 
 leads: [1, 2, 3, 4, 5, 6, 7]
+
+astro:
+  moon_up_altitude_deg: 0.0      # Moon counts as "up" when its centre is above the horizon
 
 sources:
   prevruns_url: https://previous-runs-api.open-meteo.com/v1/forecast

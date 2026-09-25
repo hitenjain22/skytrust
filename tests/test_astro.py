@@ -102,7 +102,7 @@ def test_naive_times_rejected():
 
 
 def test_night_table_shape_and_ranges():
-    tab = astro.night_table(SAC, dt.date(2025, 1, 1), dt.date(2025, 1, 14))
+    tab, hours = astro.night_table(SAC, dt.date(2025, 1, 1), dt.date(2025, 1, 14))
     assert len(tab) == 14
     assert tab["dark_hours"].between(4, 13).all()  # plausible for California latitudes
     assert (tab["moon_free_dark_hours"] <= tab["dark_hours"]).all()
@@ -111,6 +111,8 @@ def test_night_table_shape_and_ranges():
     # Around the Jan 13 full moon the Moon is up nearly all night; around new moon it isn't.
     assert tab.loc[dt.date(2025, 1, 13), "moon_free_dark_hours"] <= 2
     assert tab.loc[dt.date(2025, 1, 13), "moon_illum_mean"] > 0.95
+    # The long hour table agrees with the per-night counts.
+    assert hours.groupby("night_date").size().to_dict() == tab["dark_hours"].to_dict()
 
 
 def test_moon_events_alternate_rise_and_set():
