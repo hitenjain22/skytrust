@@ -167,3 +167,19 @@ today so the last night is fully in the past.) All five pass the 85 % bar; no su
   before being cached.
 - Loaded coverage (from 2024-02-10) matches the §1 lead table at all 5 sites; ERA5 has 0 nulls
   through 2026-09-17 23:00 UTC.
+
+---
+
+## 8. Phase 2 findings (from `docs/DATA_QUALITY.md`)
+
+- **ASOS outages** are real, not a parsing issue: SAC has an 8-night gap 2025-03-26 → 04-02, and
+  several dates are missing at multiple stations at once (2025-03-04, 2026-01-20, 2026-04-02,
+  2026-04-23), which points to IEM/feed gaps. Those nights are excluded with reason `asos_missing`.
+- **FAT's disagreement goes the other way.** At SAC/AUN/TRK/BIH, 20–24 % of nights are "ASOS usable,
+  ERA5 not" (the cirrus blind spot). At FAT only 7 %, while 12 % are "ERA5 usable, ASOS not". On those
+  FAT nights ASOS mean cover is 62 % but ERA5's is 18 % (high cloud 9 %): FAT's human observers
+  report thin cirrus (e.g. `SCT200 BKN250`) that ERA5 barely registers. So at FAT ASOS sees
+  cirrus ERA5 misses, and the primary label (max of both) catches it either way. It does make
+  FAT's primary label a little stricter than other sites'.
+- **ASOS nearest vs max rule:** base rates differ by ≤ 3.1 points (largest at TRK and AUN, the
+  multi-report stations; identical at FAT and BIH), consistent with the Phase 0 reasoning.

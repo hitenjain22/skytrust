@@ -186,3 +186,96 @@ re-run resumes from the cache instead of starting over.
 **Interview questions:**
 1. What does "idempotent" mean and why does it matter for data pipelines?
 2. How do you *prove* the second run didn't touch the network?
+
+---
+
+## `skytrust/nightly.py`: the night rules, written once
+
+**What:** Turns an hourly cloud series into per-night numbers over each night's dark hours:
+missing share, share of clear hours, longest run of consecutive clear hours, mean cover, and the
+usable-night verdict. Labels (observed cloud), features (forecast cloud), and the live forecast
+all call this same code.
+
+**Why it's built that way:**
+- **One definition, used everywhere.** If "usable" meant something slightly different for
+  forecasts than for observations, every accuracy number would be quietly wrong.
+- **"Don't know" ≠ "cloudy".** If > 25 % of a night's hours are missing, the result is NaN, not
+  False. A missing hour inside a night still breaks a clear run (conservative).
+- **Two implementations, cross-checked.** A plain loop (`is_usable`) you can read in 10 seconds,
+  and a vectorised version for 35k rows. A property test runs both on 200 random nights with gaps
+  and asserts they agree on every night.
+- **The run-length trick:** mark each hour clear/not clear. Every non-clear hour starts a new
+  "block" (a running count of non-clear hours). All clear hours sharing a block number are
+  consecutive, so the biggest block size is the longest clear run.
+
+**Interview questions:**
+1. Why is a night with too much missing data NaN instead of "not usable"?
+2. Explain how you find the longest consecutive clear run without a Python loop.
+3. How do you know the fast version is correct? (Property test against the simple version.)
+
+---
+
+## `skytrust/labels.py`: three versions of the truth
+
+**What:** For each night: `usable_asos` (airport ceilometer), `usable_era5` (reanalysis), and
+`usable_primary` (per hour, the *cloudier* of the two). Plus exclusion reasons, how many hours
+were filled from only one source, and ERA5 low/mid/high cloud means for analysis.
+
+**Why:** Each source has a blind spot. ASOS can't see above 12,000 ft (cirrus); ERA5 is a
+coarse model. Taking the per-hour max means an hour only counts as clear if *both* say so. The
+data shows it matters: at 4 of 5 sites ~20 % of nights are "usable" to ASOS but not to ERA5, and
+on those nights ERA5's cloud is mostly high cloud. That's the blind spot, measured, not assumed.
+FAT is the interesting exception: its human observers *do* report cirrus, so there ASOS sometimes
+catches cloud ERA5 misses.
+
+**Key concept:** *Label noise and sensitivity analysis.* When ground truth is imperfect, you
+don't pretend it's perfect. You pick a principled primary label and report every result under
+the alternatives too, so a reader can see whether conclusions depend on the choice.
+
+**Interview questions:**
+1. Why not just use ASOS observations as the truth? Why not just ERA5?
+2. What does taking the max of the two do to the base rate, and why is that the conservative choice?
+3. What did you find at Fresno, and why?
+
+---
+
+## `skytrust/features.py`: what the forecasts said
+
+**What:** For each night, lead (1–7 days), and model: forecast clear fraction, longest forecast
+clear run (hours and as a share of the night), mean forecast cover, whether the forecast itself
+meets the usable rule, and missing share. Across models: `spread_frac_clear` (how much they
+disagree) and `n_models_available`.
+
+**Why:** These are the inputs the blend will learn from. The model spread is there because
+forecast *disagreement* is itself information: when models disagree, confidence should drop.
+Models that don't forecast that far (HRRR beyond day 1, ICON at day 7) get NaN, never 0.
+
+**Interview questions:**
+1. Why include model spread as a feature?
+2. Why is a missing forecast NaN rather than 0 % cloud?
+3. How do you avoid look-ahead bias in these features? (Previous Runs lead-d values, not the
+   freshest forecast.)
+
+---
+
+## `skytrust/dataset.py` + `report.py` (DATA_QUALITY.md)
+
+**What:** Joins astronomy + labels + features into one row per (site, night, lead) → 34,895
+rows, saved as `data/processed/dataset.parquet` (committed, ~1 MB). Before saving, it checks the
+invariants: unique keys, fractions in [0, 1], dark hours 4–13, no naive timestamps, labels are
+nullable booleans. It refuses to save if any fail. `DATA_QUALITY.md` is generated from the dataset.
+
+**Why:**
+- **Validation at the boundary:** a bug that produces, say, 1.2 as a cloud fraction is caught
+  before it can poison the model.
+- **Deterministic:** rebuilding from the same cache gives a byte-identical file (checked with MD5).
+- **Keep problem rows, flag them:** nights with no forecasts or no ERA5 stay in the dataset with a
+  reason, so gaps are visible instead of silently dropped.
+- **The time split is a column:** `split` is set from config (train 2024–25, test 2026+), so
+  every later step uses the same split.
+
+**Interview questions:**
+1. What checks run before the dataset is saved, and why there?
+2. How would you prove your dataset build is reproducible?
+3. What's the base rate of usable nights, and how does it vary by season and site? What does
+   that mean for a "climatology" baseline?

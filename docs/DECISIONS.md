@@ -91,3 +91,32 @@ Format: date · decision · alternatives considered · why. Newest at the bottom
 - **Why:** They're off by exactly one point, rare (289 of 3.7 M values), and physically mean
   "clear" / "overcast". NaN would punch artificial holes in consecutive-hour runs; leaving them
   would break the 0–1 validation. The tolerance is 1 point so real corruption still fails loudly.
+
+### 2026-09-25 · Night rules implemented once (`nightly.py`), shared by labels, features, and live
+- **Alternatives:** separate implementations in labels.py and features.py.
+- **Why:** "clear", "consecutive", "usable", and the 25 % missing rule must mean exactly the same
+  thing for observations and forecasts, or the comparison is unfair. A simple loop version
+  (`is_usable`) and a vectorised version (`summarize_nights`) are cross-checked by a property test
+  on 200 random nights with gaps.
+- Small interpretation choices (SPEC doesn't pin these down; none changes a §4 definition):
+  - `frac_clear` = clear hours / *available* dark hours (missing hours aren't counted as cloudy).
+    `longest_clear_run_frac` = run / *all* dark hours, as SPEC 4.7 writes it.
+  - A 1e-9 tolerance on the threshold so 20 % / 100 counts as clear despite float rounding.
+  - The 25 % missing rule is also applied to the ASOS-only and ERA5-only labels, each on its own
+    source, so all three labels use the same exclusion logic.
+  - `spread_frac_clear` = population std (ddof = 0) across available models; NaN if < 2 models.
+
+### 2026-09-25 · Dataset keeps pre-archive and ERA5-lag nights (flagged), rather than dropping them
+- **Why:** Dropping rows silently hides coverage problems. Nights before 2024-01-19 have
+  `n_models_available = 0`; the last ~7 nights have `exclusion_primary = era5_missing`. Modeling
+  code filters them explicitly; DATA_QUALITY.md reports them. The dataset's last night is set by
+  ASOS + forecasts (not ERA5), so ASOS-only labels still cover the most recent nights.
+
+### 2026-09-25 · Store ERA5 low/mid/high means per night (analysis only, not model features)
+- **Why:** SPEC 4.6b asks for them; they test the cirrus hypothesis directly. Result (DATA_QUALITY
+  §7): on nights ASOS calls usable but ERA5 doesn't, ERA5's cloud is mostly high cloud (52–67 %)
+  with little low cloud (6–22 %). This is the ASOS 12,000 ft blind spot, measured.
+
+### 2026-09-25 · Site coverage re-checked on true dark windows (closes the Phase 0 proxy decision)
+- ASOS is missing 0.0–1.3 % of astronomical-dark hours per site; 0–18 nights per site exceed 25 %.
+  The Phase 0 proxy (≥ 98.6 %) was consistent with this.
