@@ -2,8 +2,13 @@
 
 *An astronomy cloud forecast that tells you how often it's been wrong.*
 
-> Work in progress. Phase 0 (setup + API probing) is done. See [SPEC.md](SPEC.md) for the plan
+> Work in progress (backtest baselines done; blend, live forecast, and app in progress). See [SPEC.md](SPEC.md) for the plan
 > and [docs/DATA_NOTES.md](docs/DATA_NOTES.md) for what the data sources actually provide.
+
+## Headline results
+
+<!-- RESULTS:START -->
+<!-- RESULTS:END -->
 
 ## Run it locally
 

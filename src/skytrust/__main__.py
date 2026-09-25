@@ -12,8 +12,6 @@ from skytrust.data.http import HttpClient
 
 LATER_PHASE = {
     "train": 4,
-    "evaluate": 3,
-    "report": 3,
     "tonight": 5,
 }
 
@@ -83,6 +81,27 @@ def cmd_build_dataset(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_evaluate(args: argparse.Namespace) -> int:
+    from skytrust import dataset, evaluate
+
+    settings = load_settings()
+    metrics = evaluate.run_evaluation(dataset.load_dataset(), settings)
+    path = evaluate.save_metrics(metrics)
+    print(f"Wrote {path} ({len(metrics['records'])} metric records)")
+    return 0
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    from skytrust import evaluate, report
+
+    metrics = evaluate.load_metrics()
+    path = report.write_results(metrics)
+    print(f"Wrote {path} and figures in {path.parent / 'figures'}")
+    if report.update_readme(metrics):
+        print("Updated the README results block")
+    return 0
+
+
 def _date(text: str) -> dt.date:
     return dt.date.fromisoformat(text)
 
@@ -107,6 +126,10 @@ def build_parser() -> argparse.ArgumentParser:
     bd.add_argument("--start", type=_date, help="first night (default: history_start)")
     bd.add_argument("--end", type=_date, help="last night (default: last fully cached night)")
     bd.set_defaults(func=cmd_build_dataset)
+    ev = sub.add_parser("evaluate", help="Score every method on the test set -> metrics.json")
+    ev.set_defaults(func=cmd_evaluate)
+    rp = sub.add_parser("report", help="metrics.json -> docs/RESULTS.md + figures")
+    rp.set_defaults(func=cmd_report)
     for name in LATER_PHASE:
         sub.add_parser(name, help=f"(Phase {LATER_PHASE[name]})").set_defaults(func=None)
     return parser

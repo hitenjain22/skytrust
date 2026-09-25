@@ -1,7 +1,7 @@
 """Generated documents. Every number here is computed from the dataset/metrics in code;
 nothing in these files is typed by hand (SPEC 0, rule 3).
 
-Phase 2: docs/DATA_QUALITY.md. (RESULTS.md and figures are added in Phase 3.)
+docs/DATA_QUALITY.md (from the dataset) and docs/RESULTS.md + docs/figures (from metrics.json).
 """
 
 from __future__ import annotations
@@ -259,3 +259,446 @@ def write_data_quality(df: pd.DataFrame, settings: Settings, path: Path | None =
     path = path or DOCS / "DATA_QUALITY.md"
     path.write_text(data_quality_markdown(df, settings, dt.datetime.now(dt.UTC)))
     return path
+
+
+# =====================================================================================
+# RESULTS.md (Phase 3+): generated only from artifacts/metrics.json
+# =====================================================================================
+
+RESULTS_LEAD = 1  # the "night before" headline lead
+CAVEATS = [
+    '**ASOS can\'t see above 12,000 ft.** "CLR" at an automated station means no cloud *below* '
+    "12,000 ft; cirrus is invisible to it. The primary label adds ERA5 to catch it (FAT's human "
+    "observers are the exception and do report high cloud).",
+    "**ERA5 is a reanalysis, not an observation,** on a ~28 km grid, and it is produced by ECMWF. "
+    "Where ECMWF looks best under an ERA5-based label, part of that may be shared model physics.",
+    "**Point vs grid.** Forecasts and ERA5 are grid-cell values (3–28 km); ASOS is a single point. "
+    "Mountain and valley sites (TRK, BIH, AUN) are where these differ most.",
+    '**Lead 1 vs the live "tonight" forecast.** Lead-1 values were issued ~24 h before each '
+    "hour; the live app shows fresher forecasts, so its tonight probability is slightly "
+    "conservative relative to what the backtest measured.",
+    "**Interpolated hours.** ECMWF 0.25° (and GFS beyond ~5 days) are 3-hourly upstream; "
+    'Open-Meteo interpolates to hourly, which affects "consecutive clear hours" for those models.',
+    "**Uncalibrated equal-weight average.** B5 uses the mean forecast clear fraction directly as "
+    "a probability. It's a deliberately naive reference, yet it is hard to beat (see Summary).",
+]
+
+
+def data_caveats(v: MetricsView) -> list[str]:
+    """Caveats whose numbers come from metrics.json."""
+    meta = v.m["meta"]
+    weeks = int(v.leads.loc[v.leads["label"] == "primary", "n_weeks"].max())
+    line = (
+        f"**One test year.** The test period is {meta['test_period'][0][:4]} only ({weeks} weeks "
+        "of labeled nights), so intervals are wide-ish and a different year could rank close "
+        "methods differently."
+    )
+    rates = meta.get("primary_base_rate_by_split") or {}
+    both = {s: r for s, r in rates.items() if "train" in r and "test" in r}
+    if both:
+        lower = sorted(s for s, r in both.items() if r["test"] < r["train"])
+        line += (
+            f" The test-period base rate of usable nights is lower than in training at "
+            f"{len(lower)} of {len(both)} sites" + (f" ({', '.join(lower)})." if lower else ".")
+        )
+    return [line]
+
+
+def _fmt(value, kind: str) -> str:
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return "–"
+    return f"{value:.1%}" if kind == "pct" else f"{value:.3f}"
+
+
+def with_ci(rec: pd.Series | None, metric: str, kind: str = "num") -> str:
+    if rec is None or pd.isna(rec.get(metric)):
+        return "–"
+    return (
+        f"{_fmt(rec[metric], kind)} [{_fmt(rec.get(f'{metric}_lo'), kind)}, "
+        f"{_fmt(rec.get(f'{metric}_hi'), kind)}]"
+    )
+
+
+class MetricsView:
+    """Convenience lookups over metrics.json."""
+
+    def __init__(self, metrics: dict):
+        from skytrust.figures import display_name
+
+        self.m = metrics
+        self.records = pd.DataFrame(metrics["records"])
+        self.diffs = pd.DataFrame(metrics["differences"])
+        self.leads = pd.DataFrame(metrics["leads"])
+        self.name = display_name
+
+    def rec(self, label, lead, method, subset_type="overall", subset="all") -> pd.Series | None:
+        r = self.records
+        hit = r[(r["label"] == label) & (r["lead"] == lead) & (r["method"] == method)
+                & (r["subset_type"] == subset_type) & (r["subset"] == subset)]  # fmt: skip
+        return None if hit.empty else hit.iloc[0]
+
+    def best_single(self, label, lead) -> str | None:
+        hit = self.leads[(self.leads["label"] == label) & (self.leads["lead"] == lead)]
+        return None if hit.empty else hit.iloc[0]["best_single"]
+
+    def lead_list(self, label="primary") -> list[int]:
+        return sorted(self.records.loc[self.records["label"] == label, "lead"].unique())
+
+    def methods(self, label, lead, kind=None) -> list[str]:
+        r = self.records
+        sub = r[(r["label"] == label) & (r["lead"] == lead) & (r["subset_type"] == "overall")]
+        if kind:
+            sub = sub[sub["kind"] == kind]
+        return list(dict.fromkeys(sub["method"]))
+
+    def diff(self, label, lead, a, b) -> pd.Series | None:
+        d = self.diffs
+        if d.empty:
+            return None
+        hit = d[(d["label"] == label) & (d["lead"] == lead) & (d["a"] == a) & (d["b"] == b)]
+        return None if hit.empty else hit.iloc[0]
+
+
+def headline_table(v: MetricsView, label: str, lead: int) -> pd.DataFrame:
+    rows = {}
+    for method in v.methods(label, lead):
+        r = v.rec(label, lead, method)
+        if r["family"] == "rule":
+            continue  # shown in its own table (confusion metrics only)
+        rows[v.name(method)] = {
+            "Brier ↓": with_ci(r, "brier"),
+            "BSS ↑": with_ci(r, "bss"),
+            "log loss ↓": _fmt(r.get("log_loss"), "num"),
+            "AUC ↑": _fmt(r.get("auc"), "num"),
+            "false-clear ↓": with_ci(r, "false_clear_rate", "pct"),
+            "miss rate ↓": _fmt(r.get("miss_rate"), "pct"),
+        }
+    out = pd.DataFrame(rows).T
+    out.index.name = "method"
+    return out
+
+
+def rule_table(v: MetricsView, label: str, lead: int) -> pd.DataFrame:
+    rows = {}
+    for method in v.methods(label, lead, kind="hard"):
+        r = v.rec(label, lead, method)
+        rows[v.name(method)] = {
+            "false-clear ↓": with_ci(r, "false_clear_rate", "pct"),
+            "miss rate ↓": with_ci(r, "miss_rate", "pct"),
+            "accuracy ↑": with_ci(r, "accuracy", "pct"),
+        }
+    out = pd.DataFrame(rows).T
+    out.index.name = "method (hard yes/no)"
+    return out
+
+
+def lead_table(v: MetricsView, label: str, metric: str, kind: str = "num") -> pd.DataFrame:
+    leads = v.lead_list(label)
+    methods = list(dict.fromkeys(m for lead in leads for m in v.methods(label, lead, "prob")))
+    rows = {}
+    for method in methods:
+        rows[v.name(method)] = {
+            f"L{lead}": (lambda r: _fmt(r[metric], kind) if r is not None else "–")(
+                v.rec(label, lead, method)
+            )
+            for lead in leads
+        }
+    out = pd.DataFrame(rows).T
+    out.index.name = "method"
+    return out
+
+
+def differences_table(v: MetricsView, label: str) -> pd.DataFrame:
+    d = v.diffs[v.diffs["label"] == label] if not v.diffs.empty else v.diffs
+    rows = []
+    for _, r in d.iterrows():
+        rows.append(
+            {
+                "lead": int(r["lead"]),
+                "A − B": f"{v.name(r['a'])} − {v.name(r['b'])}",
+                "Brier difference [95% CI]": (
+                    f"{r['brier_diff']:+.4f} [{r['lo']:+.4f}, {r['hi']:+.4f}]"
+                ),
+                "A better in": f"{r['share_a_better']:.0%} of resamples",
+                "significant": "yes" if r["significant"] else "no",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def breakdown_table(v: MetricsView, label: str, lead: int, subset_type: str) -> pd.DataFrame:
+    best = v.best_single(label, lead)
+    r = v.records
+    subsets = r[(r["label"] == label) & (r["lead"] == lead) & (r["subset_type"] == subset_type)]
+    order = SEASON_ORDER if subset_type == "season" else sorted(subsets["subset"].unique())
+    rows = {}
+    for s in [x for x in order if x in set(subsets["subset"])]:
+        ew = v.rec(label, lead, "equal_weight", subset_type, s)
+        bs = v.rec(label, lead, best, subset_type, s) if best else None
+        cl = v.rec(label, lead, "climatology", subset_type, s)
+        rows[s] = {
+            "n": int(ew["n"]),
+            "weeks": int(ew["n_weeks"]) if pd.notna(ew.get("n_weeks")) else "–",
+            "base rate": _fmt(ew["base_rate"], "pct"),
+            "BSS equal-weight": with_ci(ew, "bss"),
+            f"BSS {v.name(best) if best else 'best single'}": with_ci(bs, "bss"),
+            "false-clear equal-weight": _fmt(ew["false_clear_rate"], "pct"),
+            "false-clear climatology": _fmt(cl["false_clear_rate"], "pct"),
+        }
+    out = pd.DataFrame(rows).T
+    out.index.name = subset_type
+    return out
+
+
+def label_sensitivity_table(v: MetricsView, lead: int) -> pd.DataFrame:
+    labels = ["primary", "asos", "era5"]
+    methods = list(dict.fromkeys(m for lab in labels for m in v.methods(lab, lead, "prob")))
+    rows = {}
+    for method in methods:
+        rows[v.name(method)] = {lab: with_ci(v.rec(lab, lead, method), "bss") for lab in labels}
+    out = pd.DataFrame(rows).T
+    base = {lab: _fmt(v.rec(lab, lead, "climatology")["base_rate"], "pct") for lab in labels}
+    out.loc["(test base rate)"] = base
+    out.index.name = f"BSS at lead {lead}"
+    return out
+
+
+def model_info_table(v: MetricsView, label: str) -> pd.DataFrame:
+    rows = []
+    for _, lead_row in v.leads[v.leads["label"] == label].iterrows():
+        for method, info in (lead_row["model_info"] or {}).items():
+            rows.append(
+                {
+                    "lead": int(lead_row["lead"]),
+                    "model": v.name(method),
+                    "C": f"{info['C']:.3g}",
+                    "CV log loss (train only)": f"{info['cv_log_loss']:.4f}",
+                    "train rows": info["n_train"],
+                    "chosen as best single": "✓" if method == lead_row["best_single"] else "",
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def summary_lines(v: MetricsView) -> list[str]:
+    lab, lead = "primary", RESULTS_LEAD
+    leads = v.lead_list(lab)
+    best = v.best_single(lab, lead)
+    ew, clim = v.rec(lab, lead, "equal_weight"), v.rec(lab, lead, "climatology")
+    bs = v.rec(lab, lead, best)
+    n_models = sum(1 for m in v.m["meta"]["models"] if lead in m["leads"])
+    lines = [
+        f"- At lead {lead} (the night-before forecast), the **equal-weight average of {n_models} "
+        f"models** has a Brier Skill Score of **{with_ci(ew, 'bss')}** relative to climatology. "
+        f"The best single calibrated model ({v.name(best)}, chosen by *training* cross-validation, "
+        f"never by test results) scores {with_ci(bs, 'bss')}.",
+    ]
+    wins, ties = [], []
+    for ld in leads:
+        d = v.diff(lab, ld, "equal_weight", v.best_single(lab, ld))
+        if d is not None:
+            (wins if d["significant"] and d["brier_diff"] < 0 else ties).append(ld)
+    lines.append(
+        f"- The equal-weight average beats the best single model with a 95% CI excluding zero at "
+        f"**{len(wins)} of {len(leads)} leads**"
+        + (f" (not significant at lead {', '.join(map(str, ties))})." if ties else ".")
+    )
+    lines.append(
+        f'- False-clear rate at lead {lead} (of nights called "go" at P ≥ '
+        f"{v.m['meta']['decision_threshold']}, the share that were not usable): "
+        f"**{with_ci(ew, 'false_clear_rate', 'pct')}** for the equal-weight average vs "
+        f"{with_ci(clim, 'false_clear_rate', 'pct')} for climatology."
+    )
+    first, last = v.rec(lab, leads[0], "equal_weight"), v.rec(lab, leads[-1], "equal_weight")
+    lines.append(
+        f"- Skill decays with lead time: equal-weight BSS falls from {_fmt(first['bss'], 'num')} "
+        f"at lead {leads[0]} to {_fmt(last['bss'], 'num')} at lead {leads[-1]}, and its "
+        f"false-clear rate rises from {_fmt(first['false_clear_rate'], 'pct')} to "
+        f"{_fmt(last['false_clear_rate'], 'pct')}."
+    )
+    asos = v.rec("asos", lead, "equal_weight")
+    if asos is not None and asos["bss"] < 0:
+        lines.append(
+            f"- Under the **ASOS-only label** the picture changes: equal-weight BSS at lead {lead} "
+            f"is {with_ci(asos, 'bss')}. The models forecast *total* cloud (including cirrus), "
+            "while ASOS only reports cloud below 12,000 ft, so they're scored against a truth that "
+            "ignores part of what they predict. See the label sensitivity section."
+        )
+    if v.rec(lab, lead, "blend") is None:
+        lines.append("- The learned blend is trained and evaluated in Phase 4 (not yet run).")
+    return lines
+
+
+def ecmwf_flags(v: MetricsView) -> list[str]:
+    flags = []
+    for lab in ["era5", "primary"]:
+        hit = v.leads[(v.leads["label"] == lab) & (v.leads["best_single"] == "ecmwf_lr")]
+        if len(hit):
+            leads = ", ".join(str(int(x)) for x in hit["lead"])
+            flags.append(
+                f"- ⚠ ECMWF is the best single model (by training CV) under the **{lab}** label at "
+                f"lead(s) {leads}. ERA5 is produced by ECMWF, so part of this may be shared model "
+                "physics rather than real-world skill."
+            )
+    return flags
+
+
+def results_markdown(metrics: dict, figure_paths: dict[str, str]) -> str:
+    v = MetricsView(metrics)
+    meta = metrics["meta"]
+    lead = RESULTS_LEAD
+    n_eval = v.leads[(v.leads["label"] == "primary") & (v.leads["lead"] == lead)].iloc[0]
+    parts = [
+        "# Results",
+        "",
+        f"_Generated by `python -m skytrust report` from `artifacts/metrics.json` "
+        f"(evaluation run {meta['created_utc']}, commit `{meta['git_commit']}`). "
+        "Do not edit by hand._",
+        "",
+        f"**Setup.** Train on nights {meta['train_period'][0]} → {meta['train_period'][1]}; "
+        f"test on {meta['test_period'][0]} → {meta['test_period'][1]} "
+        "(never used for fitting or tuning). "
+        f"Each method is scored on the same test nights per lead (at lead {lead}: "
+        f"{int(n_eval['n_eval'])} site-nights over {int(n_eval['n_weeks'])} weeks). 95% CIs from a "
+        f"block bootstrap that resamples whole {meta['bootstrap_block']}s "
+        f"({meta['bootstrap_resamples']} resamples, seed {meta['seed']}).",
+        "",
+        "## Summary",
+        "",
+        *summary_lines(v),
+        *ecmwf_flags(v),
+        "",
+        f"## 1. Headline: primary label, lead {lead}",
+        "",
+        md_table(headline_table(v, "primary", lead)),
+        "",
+        "BSS = 1 − Brier / Brier(climatology). Persistence is a hard yes/no, so it has no log loss "
+        "or AUC.",
+        "",
+        f"### Hard yes/no forecasts: persistence (B2) and each model's own rule (B3), lead {lead}",
+        "",
+        md_table(rule_table(v, "primary", lead)),
+        "",
+        "## 2. Skill vs lead time",
+        "",
+        f"![Lead-time curves]({figure_paths['lead_curves']})",
+        "",
+        "**Brier Skill Score by lead (primary label)**",
+        "",
+        md_table(lead_table(v, "primary", "bss")),
+        "",
+        "**False-clear rate by lead (primary label)**",
+        "",
+        md_table(lead_table(v, "primary", "false_clear_rate", "pct")),
+        "",
+        "## 3. Calibration",
+        "",
+        "When a method says 70%, does it happen ~70% of the time? Points on the diagonal are "
+        "well calibrated; bars show how many nights fall in each bin.",
+        "",
+        f"![Reliability diagram]({figure_paths['reliability']})",
+        "",
+        "## 4. Paired comparisons (Brier difference, negative = A better)",
+        "",
+        md_table(differences_table(v, "primary"), index=False),
+        "",
+        f"## 5. By site and season (primary label, lead {lead})",
+        "",
+        f"![Skill by site]({figure_paths['site_skill']})",
+        "",
+        md_table(breakdown_table(v, "primary", lead, "site")),
+        "",
+        md_table(breakdown_table(v, "primary", lead, "season")),
+        "",
+        "Test seasons are partial (the test year starts in January and ends at the latest labeled "
+        "night). Subsets spanning only a few weeks have unstable bootstrap intervals; read their "
+        "CIs with care.",
+        "",
+        "## 6. Sensitivity to the truth label",
+        "",
+        md_table(label_sensitivity_table(v, lead)),
+        "",
+        "## 7. Single-model tuning (training data only)",
+        "",
+        md_table(model_info_table(v, "primary"), index=False),
+        "",
+        "## Caveats",
+        "",
+        *[f"- {c}" for c in data_caveats(v) + CAVEATS],
+        "",
+    ]
+    return "\n".join(parts)
+
+
+def write_results(metrics: dict, docs: Path = DOCS) -> Path:
+    from skytrust import figures
+
+    fig_dir = docs / "figures"
+    records = pd.DataFrame(metrics["records"])
+    best = MetricsView(metrics).best_single("primary", RESULTS_LEAD)
+    shown = ["climatology", best, "equal_weight"] + (
+        ["blend"] if "blend" in set(records["method"]) else []
+    )
+    paths = {
+        "lead_curves": figures.lead_curves(records, "primary", fig_dir / "lead_curves_primary.png"),
+        "reliability": figures.reliability(
+            metrics["reliability"],
+            [m for m in shown if m],
+            "primary",
+            RESULTS_LEAD,
+            fig_dir / "reliability_primary_lead1.png",
+        ),  # fmt: skip
+        "site_skill": figures.site_skill(
+            records,
+            [m for m in shown if m and m != "climatology"],
+            "primary",
+            RESULTS_LEAD,
+            fig_dir / "site_skill_primary_lead1.png",
+        ),  # fmt: skip
+    }
+    rel = {k: str(p.relative_to(docs)) for k, p in paths.items()}
+    path = docs / "RESULTS.md"
+    path.write_text(results_markdown(metrics, rel))
+    return path
+
+
+# ---------- README headline block ----------
+
+README_START, README_END = "<!-- RESULTS:START -->", "<!-- RESULTS:END -->"
+
+
+def readme_block(metrics: dict) -> str:
+    """Short headline table for the README (primary label, lead 1), from metrics.json."""
+    v = MetricsView(metrics)
+    lead = RESULTS_LEAD
+    best = v.best_single("primary", lead)
+    methods = [m for m in ["blend", "equal_weight", best, "climatology"] if m]
+    rows = {}
+    for method in methods:
+        r = v.rec("primary", lead, method)
+        if r is None:
+            continue
+        rows[v.name(method)] = {
+            "Brier Skill Score ↑": with_ci(r, "bss"),
+            "False-clear rate ↓": with_ci(r, "false_clear_rate", "pct"),
+            "AUC ↑": _fmt(r.get("auc"), "num"),
+        }
+    table = pd.DataFrame(rows).T
+    table.index.name = f"Night-before forecast (lead {lead}), test year"
+    note = (
+        f"_Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` "
+        f"(commit `{metrics['meta']['git_commit']}`). 95% CIs from a week-block bootstrap. "
+        "Full results: [docs/RESULTS.md](docs/RESULTS.md)._"
+    )
+    return "\n".join([README_START, "", md_table(table), "", note, "", README_END])
+
+
+def update_readme(metrics: dict, path: Path = REPO_ROOT / "README.md") -> bool:
+    """Replace the text between the RESULTS markers. Returns False if the markers are absent."""
+    text = path.read_text()
+    if README_START not in text or README_END not in text:
+        return False
+    before, rest = text.split(README_START, 1)
+    _, after = rest.split(README_END, 1)
+    path.write_text(before + readme_block(metrics) + after)
+    return True
