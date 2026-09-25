@@ -58,8 +58,3 @@ def test_cli_validate_sites_reports_and_exit_code(monkeypatch, capsys):
     assert cli.main(["validate-sites"]) == 1
     out = capsys.readouterr().out
     assert "SAC  PASS" in out and "TRK  FAIL" in out and "ask before substituting" in out
-
-
-def test_cli_later_phase_commands_are_explicit(capsys):
-    assert cli.main(["tonight"]) == 2
-    assert "Phase 5" in capsys.readouterr().out

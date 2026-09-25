@@ -170,6 +170,14 @@ def fit_blend(train: pd.DataFrame, label: str, lead: int, settings: Settings) ->
             "base_rate": float(y.mean()),
             "cv_log_loss": tuned.cv_log_loss,
             "cv_scores": {f"{c:g}": v for c, v in tuned.cv_scores.items()},
+            # Threshold for the live "models agree / split" badge (SPEC 9), from training rows.
+            "spread_threshold": (
+                float(
+                    rows["spread_frac_clear"].quantile(settings.raw["live"]["agreement_quantile"])
+                )
+                if "spread_frac_clear" in feature_cols
+                else None
+            ),
         },
         "versions": {
             "python": platform.python_version(),
@@ -270,6 +278,7 @@ def summary(artifact: dict) -> dict:
         "cv_log_loss": artifact["training"]["cv_log_loss"],
         "n_train": artifact["training"]["n_rows"],
         "training_period": artifact["training"]["period"],
+        "spread_threshold": artifact["training"].get("spread_threshold"),
         "calibration": {
             k: v for k, v in artifact["calibration"].items() if not k.startswith("isotonic")
         },

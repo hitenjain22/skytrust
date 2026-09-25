@@ -10,10 +10,6 @@ import sys
 from skytrust.config import load_settings, load_sites
 from skytrust.data.http import HttpClient
 
-LATER_PHASE = {
-    "tonight": 5,
-}
-
 
 def cmd_validate_sites(args: argparse.Namespace) -> int:
     from skytrust.sites import validate_sites, write_sites_yaml
@@ -108,6 +104,28 @@ def cmd_train(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_tonight(args: argparse.Namespace) -> int:
+    from skytrust import evaluate, live
+
+    settings = load_settings()
+    sites = {s.id: s for s in load_sites()}
+    site = sites.get(args.site.upper())
+    if site is None:
+        print(f"Unknown site {args.site!r}. Choose from: {', '.join(sites)}")
+        return 2
+    try:
+        metrics = evaluate.load_metrics()
+    except FileNotFoundError:
+        metrics = None  # still forecast; just no track record
+    try:
+        forecast = live.get_forecast(site, settings, metrics)
+    except live.LiveUnavailableError as exc:
+        print(f"Can't forecast right now: {exc}")
+        return 1
+    print(live.format_text(forecast))
+    return 0
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     from skytrust import evaluate, report
 
@@ -147,10 +165,11 @@ def build_parser() -> argparse.ArgumentParser:
     ev.set_defaults(func=cmd_evaluate)
     tr = sub.add_parser("train", help="Fit the blend per label x lead (train years only) -> JSON")
     tr.set_defaults(func=cmd_train)
+    tn = sub.add_parser("tonight", help="Tonight + 7-night outlook for one site (live)")
+    tn.add_argument("--site", default="SAC", help="site ID (default SAC)")
+    tn.set_defaults(func=cmd_tonight)
     rp = sub.add_parser("report", help="metrics.json -> docs/RESULTS.md + figures")
     rp.set_defaults(func=cmd_report)
-    for name in LATER_PHASE:
-        sub.add_parser(name, help=f"(Phase {LATER_PHASE[name]})").set_defaults(func=None)
     return parser
 
 
@@ -160,9 +179,6 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    if args.func is None:
-        print(f"`{args.command}` is not implemented yet (Phase {LATER_PHASE[args.command]}).")
-        return 2
     return args.func(args)
 
 

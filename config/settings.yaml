@@ -74,6 +74,14 @@ site_validation:
 verdict:
   go: 0.70
   maybe: 0.40
+
+live:
+  # "Models split" if tonight's spread exceeds this quantile of the training-period spread.
+  agreement_quantile: 0.75
+  # Trust level shown in the 7-night outlook, from the blend's test BSS at that lead.
+  trust_bss: {high: 0.5, medium: 0.3}
+  forecast_days: 8
+  cache_ttl_minutes: 60
 decision_threshold: 0.5
 
 modeling:
