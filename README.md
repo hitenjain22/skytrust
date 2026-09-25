@@ -11,11 +11,12 @@
 
 | Night-before forecast (lead 1), test year | Brier Skill Score ↑ | False-clear rate ↓ | AUC ↑ |
 |---|---|---|---|
+| Blend | 0.627 [0.569, 0.676] | 9.4% [7.0%, 12.2%] | 0.948 |
 | Equal-weight average (B5) | 0.596 [0.540, 0.645] | 13.2% [10.4%, 16.3%] | 0.937 |
-| ICON calibrated (B4) | 0.510 [0.444, 0.571] | 15.7% [12.0%, 20.0%] | 0.910 |
+| ECMWF calibrated (B4) | 0.515 [0.444, 0.581] | 12.5% [9.5%, 15.7%] | 0.920 |
 | Climatology (B1) | 0.000 [0.000, 0.000] | 36.6% [30.0%, 43.6%] | 0.634 |
 
-_Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` (commit `95f3aec`). 95% CIs from a week-block bootstrap. Full results: [docs/RESULTS.md](docs/RESULTS.md)._
+_Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` (commit `4448f01`). 95% CIs from a week-block bootstrap. Full results: [docs/RESULTS.md](docs/RESULTS.md)._
 
 <!-- RESULTS:END -->
 
