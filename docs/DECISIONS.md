@@ -201,3 +201,40 @@ Hiten asked for the path that is easiest to understand and gives the most consis
 - The blend beats the best single model at 7/7 leads and the equal-weight average at 2/7 leads
   (95% paired week-block CIs). RESULTS states the 5 leads where it does *not* beat the equal-weight
   average plainly. No thresholds, subsets, or features were changed after seeing test results.
+
+### 2026-09-25 · Live forecast design (SPEC 9)
+- `live.build_forecast` is a pure function (payload + time → 7 nights), so every case (lead
+  assignment, missing model, no data) is tested offline on a recorded payload; `get_forecast`
+  adds the network and a last-good copy on disk (`data/live_cache/{site}.json`, gitignored).
+- Lead = `max(1, ceil((dusk − now)/24 h))`, capped at 7, exactly as SPEC 9.3. Consequence worth
+  knowing: late in the evening, *tomorrow* night's dusk is < 24 h away, so it is also lead 1. That
+  matches how lead 1 was defined in training (values issued ~24 h before each hour).
+- "Models agree / split": split if tonight's spread > the 75th percentile of the training-period
+  spread at that lead (stored in each artifact as `training.spread_threshold`).
+- Outlook trust level from the blend's test BSS at that lead: High ≥ 0.5, Medium ≥ 0.3, else Low
+  (config `live.trust_bss`). Best window = longest run of dark hours whose cross-model median
+  cover is clear.
+- If a model is missing live, the blend still runs (median imputation, as in training) and the UI
+  names the missing model. If every model is missing, the night shows "No data", never a guess.
+
+### 2026-09-25 · App structure
+- Single entry file with a sidebar page selector (not a multipage folder): simplest to read,
+  and each page is a small `render(ctx)` function that's easy to smoke-test with AppTest.
+- Every page render is wrapped: an error shows a message and the other pages keep working.
+  Live forecasts are cached 60 min (`st.cache_data`); failures aren't cached, so the next load
+  retries. API down → last good copy with an "as of" banner; no copy → friendly message, and
+  Track Record / Methodology still work (both tested).
+- Night vision = CSS + a red palette for charts (red light preserves dark adaptation).
+
+### 2026-09-25 · Inference split from training (performance)
+- **Evidence:** the Tonight page's cold render was 10.4 s; 3.2 s of it was importing scikit-learn
+  through `blend.py`, which the app never needs (it runs the JSON model with numpy).
+- **Decision:** `inference.py` (load + predict, numpy only) and `design.py` (feature matrix,
+  pandas only) hold everything the app/CLI use; `blend.py` keeps training and re-exports the
+  inference names. A test asserts the live import path never loads sklearn/matplotlib/scipy.
+  Cold render → 5.2 s including ~2.5 s of Open-Meteo network time; cached loads 0.4 s.
+
+### 2026-09-25 · Test tiers
+- `pytest` (quick loop) skips `@pytest.mark.slow` Streamlit AppTest smoke tests; `make test` and
+  CI run everything offline (`-m "not network"`). The spec's < 30 s target applies to the quick
+  loop; measured times on this laptop vary ~1.7× with background load (Spotlight indexing).

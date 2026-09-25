@@ -2,7 +2,7 @@
 
 *An astronomy cloud forecast that tells you how often it's been wrong.*
 
-> Work in progress (backtest baselines done; blend, live forecast, and app in progress). See [SPEC.md](SPEC.md) for the plan
+> Work in progress: backtest, blend, live forecast, and app are built; deployment is next. See [SPEC.md](SPEC.md) for the plan
 > and [docs/DATA_NOTES.md](docs/DATA_NOTES.md) for what the data sources actually provide.
 
 ## Headline results
@@ -24,9 +24,16 @@ _Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` (co
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh   # installs uv (Python + venv manager)
-uv sync                                           # installs Python 3.12 deps into .venv
-uv run pytest                                     # offline test suite
-uv run python -m skytrust validate-sites          # checks the ASOS stations (hits the network)
+uv sync                                           # Python 3.12 + pinned dependencies into .venv
+make app                                          # the Streamlit app -> http://localhost:8501
+make tonight SITE=BIH                             # the same forecast as text in the terminal
+make test                                         # all offline tests (incl. app smoke tests)
+```
+
+Rebuild everything from the raw data (downloads ~1,000 files on first run, then cached):
+
+```bash
+make all      # fetch -> build-dataset -> train -> evaluate -> report
 ```
 
 ## Data attribution

@@ -411,3 +411,49 @@ coefficient = when models disagree, the blend is less confident the night will b
    result. It says the ensemble effect does most of the work, and it tells a user how much to trust
    a learned weighting. Knowing that is useful in itself.)
 5. What does a negative coefficient on model spread mean?
+
+---
+
+## `skytrust/live.py`: tonight and the next 7 nights
+
+**What:** Fetches the live forecast for all five models, finds the next 7 nights, gives each a
+lead time, computes *exactly* the training features over each night's dark hours, and runs the
+lead-matched blend. Adds a verdict (Go / Maybe / Skip), the best clear window, whether the models
+agree, the backtest track record at that site and lead, a trust level, and the Moon.
+
+**Why it's built that way:**
+- **Same code as training:** features come from `nightly.summarize_nights` and the model from the
+  JSON artifact. If live features were computed differently, the probability would be meaningless.
+- **Pure core, thin shell:** `build_forecast` takes a payload and a time and returns a forecast,
+  so tests can freeze time and replay a recorded API response.
+- **Graceful failure:** a live failure falls back to the last good copy with an "as of" banner;
+  a missing model is named rather than hidden.
+- **Honest trust:** the outlook's trust level is the model's *measured* skill at that lead in the
+  test year. Day 7 really is much less reliable than tonight, and the app says so.
+
+**Interview questions:**
+1. How do you decide which trained model (lead) to use for a given night?
+2. What happens if Open-Meteo is down? If one model is missing?
+3. Why is tonight's probability "slightly conservative"?
+
+---
+
+## `app/` (Streamlit) and `skytrust/inference.py`
+
+**What:** Four pages: Tonight, 7-Night Outlook, Track Record (all numbers from metrics.json,
+with a label toggle), Methodology (definitions pulled from config). Plotly charts, dark theme, a
+red night-vision mode.
+
+**Why:**
+- **The app only reads.** Precomputed JSON models + metrics + the live forecast. It never trains,
+  so it's fast and can't drift from the evaluated results.
+- **Start-up time matters.** Profiling showed 3 of 10 seconds went to importing scikit-learn, which
+  the app doesn't need. Splitting numpy-only inference into its own module halved cold start;
+  a test keeps it that way.
+- **Never crash:** each page is wrapped; API failure paths are covered by Streamlit AppTest tests.
+
+**Interview questions:**
+1. How did you find and fix the slow start-up? (Measure first: time each stage, then remove the
+   biggest avoidable cost.)
+2. How do you test a Streamlit app automatically?
+3. Why does the app not use pickle or scikit-learn at run time?
