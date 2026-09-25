@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from skytrust.config import REPO_ROOT  # noqa: E402
+from skytrust.report import display_name  # noqa: E402
 
 FIG_DIR = REPO_ROOT / "docs" / "figures"
 # PNGs carry no timestamp/version metadata, so re-running `report` doesn't churn git diffs.
@@ -26,19 +27,6 @@ def color_for(method: str) -> str:
     if method in EMPHASIS:
         return EMPHASIS[method]
     return MODEL_COLORS.get(method.rsplit("_", 1)[0], "#bcbd22")
-
-
-def display_name(method: str) -> str:
-    fixed = {
-        "climatology": "Climatology (B1)",
-        "persistence": "Persistence (B2)",
-        "equal_weight": "Equal-weight average (B5)",
-        "blend": "Blend",
-    }
-    if method in fixed:
-        return fixed[method]
-    model, kind = method.rsplit("_", 1)
-    return f"{model.upper()} {'rule (B3)' if kind == 'rule' else 'calibrated (B4)'}"
 
 
 def _save(fig, path: Path) -> Path:

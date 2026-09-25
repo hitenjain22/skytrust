@@ -22,6 +22,19 @@ MIN_TEST_NIGHTS_LEAD1 = 300  # SPEC 17: flag if fewer labeled test nights at lea
 # ---------- small formatting helpers ----------
 
 
+def display_name(method: str) -> str:
+    fixed = {
+        "climatology": "Climatology (B1)",
+        "persistence": "Persistence (B2)",
+        "equal_weight": "Equal-weight average (B5)",
+        "blend": "Blend",
+    }
+    if method in fixed:
+        return fixed[method]
+    model, kind = method.rsplit("_", 1)
+    return f"{model.upper()} {'rule (B3)' if kind == 'rule' else 'calibrated (B4)'}"
+
+
 def pct(x: float) -> str:
     return "–" if pd.isna(x) else f"{x:.1%}"
 
@@ -325,8 +338,6 @@ class MetricsView:
     """Convenience lookups over metrics.json."""
 
     def __init__(self, metrics: dict):
-        from skytrust.figures import display_name
-
         self.m = metrics
         self.records = pd.DataFrame(metrics["records"])
         self.diffs = pd.DataFrame(metrics["differences"])

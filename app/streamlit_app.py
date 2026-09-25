@@ -11,7 +11,7 @@ import logging
 
 import streamlit as st
 
-from skytrust import evaluate, live
+from skytrust import inference, live
 from skytrust.config import load_settings, load_sites
 from views import methodology, outlook, tonight, track_record
 from views.common import Context, footer, inject_night_vision_css, palette
@@ -32,7 +32,7 @@ def load_static():
     settings = load_settings()
     sites = load_sites()
     try:
-        metrics = evaluate.load_metrics()
+        metrics = inference.load_metrics()
     except (FileNotFoundError, ValueError):
         metrics = None
     return settings, sites, metrics

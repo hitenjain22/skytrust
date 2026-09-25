@@ -25,11 +25,11 @@ import pandas as pd
 from skytrust import baselines
 from skytrust.baselines import LeadResult, MethodPrediction
 from skytrust.config import REPO_ROOT, Settings
+from skytrust.inference import METRICS_PATH, load_metrics  # noqa: F401  (re-exported)
 from skytrust.modeling import PROB_CLIP
 
 log = logging.getLogger(__name__)
 
-METRICS_PATH = REPO_ROOT / "artifacts" / "metrics.json"
 PROB_METRICS = ["brier", "bss", "log_loss", "auc", "false_clear_rate", "miss_rate", "accuracy"]
 HARD_METRICS = ["brier", "bss", "false_clear_rate", "miss_rate", "accuracy"]
 RULE_METRICS = ["false_clear_rate", "miss_rate", "accuracy"]  # SPEC: B3 confusion metrics only
@@ -354,7 +354,3 @@ def save_metrics(metrics: dict, path: Path = METRICS_PATH) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(_clean(metrics), indent=1))
     return path
-
-
-def load_metrics(path: Path = METRICS_PATH) -> dict:
-    return json.loads(path.read_text())

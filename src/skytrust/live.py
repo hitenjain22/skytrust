@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from skytrust import astro, blend
+from skytrust import astro, inference
 from skytrust.config import REPO_ROOT, Settings, Site
 from skytrust.data import openmeteo
 from skytrust.data.http import BadResponseError, HttpClient, SourceUnavailableError
@@ -234,12 +234,16 @@ def _forecast_night(
     ctx: _Context, night: dt.date, dusk: pd.Timestamp, dawn: pd.Timestamp
 ) -> NightForecast:
     lead = assign_lead(dusk, ctx.now_utc)
-    artifact = blend.load_artifact(blend.artifact_path("primary", lead, ctx.artifacts_dir))
+    artifact = inference.load_artifact(inference.artifact_path("primary", lead, ctx.artifacts_dir))
     per_model = _model_features(ctx.summaries, artifact["models"], night)
     used = [m for m, f in per_model.items() if not np.isnan(f["frac_clear"])]
     dark = int(ctx.nights_astro.loc[night, "dark_hours"])
     row = _feature_row(ctx.site, night, dark, lead, per_model)
-    p = float(blend.predict_proba(artifact, blend.raw_inputs(row, artifact))[0]) if used else None
+    p = (
+        float(inference.predict_proba(artifact, inference.raw_inputs(row, artifact))[0])
+        if used
+        else None
+    )
 
     hours = pd.DatetimeIndex(ctx.night_hours.loc[ctx.night_hours["night_date"] == night, "hour"])
     window = best_window(hours, ctx.median.reindex(hours).to_numpy(), ctx.settings.clear_threshold)
@@ -280,7 +284,7 @@ def build_forecast(
     fetched_at: pd.Timestamp,
     now_utc: pd.Timestamp,
     settings: Settings,
-    artifacts_dir: Path = blend.ARTIFACTS,
+    artifacts_dir: Path = inference.ARTIFACTS,
     metrics: dict | None = None,
     source: str = "live",
     warning: str | None = None,
@@ -360,7 +364,7 @@ def get_forecast(
     now_utc: pd.Timestamp | None = None,
     client: HttpClient | None = None,
     cache_dir: Path | None = None,
-    artifacts_dir: Path = blend.ARTIFACTS,
+    artifacts_dir: Path = inference.ARTIFACTS,
 ) -> LiveForecast:
     now_utc = now_utc or utcnow()
     client = client or HttpClient(settings.http)

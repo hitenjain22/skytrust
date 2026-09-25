@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from skytrust import astro
-from skytrust.figures import display_name
+from skytrust.report import display_name
 
 PAD = pd.Timedelta(hours=1)
 

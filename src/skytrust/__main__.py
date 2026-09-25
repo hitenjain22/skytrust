@@ -105,7 +105,7 @@ def cmd_train(args: argparse.Namespace) -> int:
 
 
 def cmd_tonight(args: argparse.Namespace) -> int:
-    from skytrust import evaluate, live
+    from skytrust import inference, live
 
     settings = load_settings()
     sites = {s.id: s for s in load_sites()}
@@ -114,7 +114,7 @@ def cmd_tonight(args: argparse.Namespace) -> int:
         print(f"Unknown site {args.site!r}. Choose from: {', '.join(sites)}")
         return 2
     try:
-        metrics = evaluate.load_metrics()
+        metrics = inference.load_metrics()
     except FileNotFoundError:
         metrics = None  # still forecast; just no track record
     try:

@@ -205,3 +205,17 @@ def test_cli_tonight_when_unavailable(monkeypatch, capsys):
     monkeypatch.setattr(live, "get_forecast", boom)
     assert cli.main(["tonight"]) == 1
     assert "Can't forecast right now" in capsys.readouterr().out
+
+
+def test_live_path_does_not_import_sklearn_or_matplotlib():
+    """The app/CLI run the JSON model with numpy; heavy training libraries must stay out of the
+    import path (they cost seconds of start-up on Streamlit Cloud)."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; import skytrust.live, skytrust.report, skytrust.inference; "
+        "print(','.join(m for m in ('sklearn', 'matplotlib', 'scipy') if m in sys.modules))"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == ""
