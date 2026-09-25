@@ -183,8 +183,10 @@ def evaluate_lead(result: LeadResult, settings: Settings, seed: int) -> dict:
                 "subset": subset, "n": int(mask.sum()),
                 "n_weeks": int(len(np.unique(codes[mask]))), "base_rate": float(yy.mean()),
             }  # fmt: skip
+            enough_weeks = rec["n_weeks"] >= settings.raw["min_weeks_for_ci"]
             for name, value in point.items():
-                lo, hi = _ci(boot[name])
+                # Too few weeks -> a bootstrap interval would be unreliable; report none.
+                lo, hi = _ci(boot[name]) if enough_weeks else (float("nan"), float("nan"))
                 rec[name] = float(value[0])
                 rec[f"{name}_lo"], rec[f"{name}_hi"] = lo, hi
             records.append(rec)
@@ -267,22 +269,40 @@ def base_rates_by_split(df: pd.DataFrame) -> dict:
     return {site: rates[site].to_dict() for site in rates.index.get_level_values(0).unique()}
 
 
-def lead_results(df: pd.DataFrame, settings: Settings, extra_methods=None) -> list[LeadResult]:
-    """Baselines for every label x lead. `extra_methods(result, df)` can add methods (the blend)."""
+def add_blend(result: LeadResult, settings: Settings, artifacts_dir: Path) -> bool:
+    """Score the exported blend for this (label, lead) on the evaluation rows, through the
+    numpy JSON loader: exactly the model file the app ships. Returns False if not trained."""
+    from skytrust import blend
+
+    path = blend.artifact_path(result.label, result.lead, artifacts_dir)
+    if not path.exists():
+        log.warning("no blend artifact at %s; run `skytrust train`", path)
+        return False
+    artifact = blend.load_artifact(path)
+    blend.assert_trained_before(artifact, settings.raw["split"]["test_start"])
+    p = blend.predict_proba(artifact, blend.raw_inputs(result.features, artifact))
+    result.methods["blend"] = MethodPrediction("blend", "prob", "blend", p, blend.summary(artifact))
+    return True
+
+
+def lead_results(
+    df: pd.DataFrame, settings: Settings, artifacts_dir: Path | None = None
+) -> list[LeadResult]:
+    """Baselines for every label x lead, plus the blend when `artifacts_dir` has it."""
     results = []
     for label in baselines.LABELS:
         for lead in settings.raw["leads"]:
             result = baselines.run_baselines(df, label, lead, settings)
-            if extra_methods is not None:
-                extra_methods(result, df)
+            if artifacts_dir is not None:
+                add_blend(result, settings, artifacts_dir)
             results.append(result)
     return results
 
 
-def run_evaluation(df: pd.DataFrame, settings: Settings, extra_methods=None) -> dict:
+def run_evaluation(df: pd.DataFrame, settings: Settings, artifacts_dir: Path | None = None) -> dict:
     base_seed = int(settings.raw["seed"])
     out = {"records": [], "reliability": [], "differences": [], "leads": []}
-    for i, result in enumerate(lead_results(df, settings, extra_methods)):
+    for i, result in enumerate(lead_results(df, settings, artifacts_dir)):
         # A fixed seed per (label, lead) keeps each result reproducible on its own.
         ev = evaluate_lead(result, settings, seed=base_seed + i)
         out["records"] += ev["records"]
@@ -338,7 +358,3 @@ def save_metrics(metrics: dict, path: Path = METRICS_PATH) -> Path:
 
 def load_metrics(path: Path = METRICS_PATH) -> dict:
     return json.loads(path.read_text())
-
-
-def add_method(result: LeadResult, method: MethodPrediction) -> None:
-    result.methods[method.method] = method

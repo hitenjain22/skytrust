@@ -20,12 +20,17 @@ import numpy as np
 import pandas as pd
 
 from skytrust.config import ModelSpec, Settings
-from skytrust.modeling import TunedModel, fit_tuned_logistic, split_train_test
+from skytrust.modeling import (
+    TunedModel,
+    design_matrix,
+    fit_tuned_logistic,
+    model_columns,
+    split_train_test,
+)
 
 log = logging.getLogger(__name__)
 
 LABELS = {"primary": "usable_primary", "asos": "usable_asos", "era5": "usable_era5"}
-SINGLE_MODEL_FEATURES = ("frac_clear", "longest_clear_run_frac", "mean_cover")
 
 
 @dataclass
@@ -44,6 +49,7 @@ class LeadResult:
     rows: pd.DataFrame  # the evaluation set: site, night_date, season, month, y
     methods: dict[str, MethodPrediction]
     best_single: str | None  # B4 model with the lowest *training CV* log loss (never test)
+    features: pd.DataFrame = field(default_factory=pd.DataFrame)  # full dataset rows, same order
 
 
 def models_at_lead(settings: Settings, lead: int) -> list[ModelSpec]:
@@ -51,7 +57,7 @@ def models_at_lead(settings: Settings, lead: int) -> list[ModelSpec]:
 
 
 def single_model_columns(model: ModelSpec) -> list[str]:
-    return [f"{model.short}_{f}" for f in SINGLE_MODEL_FEATURES]
+    return model_columns(model.short)
 
 
 # ---------- B1 climatology ----------
@@ -112,13 +118,21 @@ def evaluation_rows(
 
 
 def fit_single_model(
-    train: pd.DataFrame, model: ModelSpec, label_col: str, lead: int, settings: Settings
+    train: pd.DataFrame,
+    model: ModelSpec,
+    label_col: str,
+    lead: int,
+    settings: Settings,
+    site_ids: list[str],
 ) -> TunedModel:
+    """B4: logistic regression on one model's three features plus the same context features
+    the blend uses (site, month, dark hours)."""
     cols = single_model_columns(model)
     rows = train[(train["lead"] == lead) & train[label_col].notna()].dropna(subset=cols)
     rows = rows.sort_values("night_date")
+    X = design_matrix(rows, cols, site_ids)
     return fit_tuned_logistic(
-        rows[cols], rows[label_col].astype(bool), rows["night_date"], settings, impute=False
+        X, rows[label_col].astype(bool), rows["night_date"], settings, impute=False
     )
 
 
@@ -133,6 +147,7 @@ def run_baselines(df: pd.DataFrame, label: str, lead: int, settings: Settings) -
     eval_rows["y"] = rows[label_col].astype(bool).to_numpy()
     methods: dict[str, MethodPrediction] = {}
 
+    site_ids = sorted(train["site"].unique())
     clim = climatology_table(train, label_col)
     methods["climatology"] = MethodPrediction(
         "climatology", "prob", "climatology", predict_climatology(clim, rows)
@@ -148,13 +163,15 @@ def run_baselines(df: pd.DataFrame, label: str, lead: int, settings: Settings) -
             "rule",
             rows[f"{m.short}_pred_usable"].astype(float).to_numpy(),
         )
-        tuned = fit_single_model(train, m, label_col, lead, settings)
+        tuned = fit_single_model(train, m, label_col, lead, settings, site_ids)
         lr = tuned.pipeline.named_steps["lr"]
         methods[f"{m.short}_lr"] = MethodPrediction(
             f"{m.short}_lr",
             "prob",
             "single_lr",
-            tuned.pipeline.predict_proba(rows[tuned.features])[:, 1],
+            tuned.pipeline.predict_proba(design_matrix(rows, single_model_columns(m), site_ids))[
+                :, 1
+            ],
             {
                 "C": tuned.C,
                 "cv_log_loss": tuned.cv_log_loss,
@@ -170,4 +187,6 @@ def run_baselines(df: pd.DataFrame, label: str, lead: int, settings: Settings) -
     )
     best = min(cv_losses, key=cv_losses.get) if cv_losses else None
     log.info("%s lead %d: %d eval rows, best single (CV) = %s", label, lead, len(rows), best)
-    return LeadResult(label, lead, eval_rows.reset_index(drop=True), methods, best)
+    return LeadResult(
+        label, lead, eval_rows.reset_index(drop=True), methods, best, rows.reset_index(drop=True)
+    )

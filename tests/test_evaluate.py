@@ -185,7 +185,7 @@ def test_cli_evaluate_and_report(monkeypatch, metrics, tmp_path, capsys):
     from skytrust import dataset, report
 
     monkeypatch.setattr(dataset, "load_dataset", lambda: pd.DataFrame())
-    monkeypatch.setattr(evaluate, "run_evaluation", lambda df, s: metrics)
+    monkeypatch.setattr(evaluate, "run_evaluation", lambda df, s, **k: metrics)
     monkeypatch.setattr(evaluate, "save_metrics", lambda m: tmp_path / "m.json")
     assert cli.main(["evaluate"]) == 0
     monkeypatch.setattr(evaluate, "load_metrics", lambda: metrics)
@@ -242,3 +242,18 @@ def test_every_method_in_a_figure_gets_a_distinct_colour(metrics, monkeypatch, t
     figures.site_skill(rec, ["icon_lr", "equal_weight"], "primary", 1, tmp_path / "s.png")
     bars = {to_hex(p.get_facecolor()) for p in captured[1].axes[0].patches}
     assert len(bars) == 2
+
+
+def test_subsets_with_too_few_weeks_get_no_ci(synthetic_built, fast_settings):
+    import copy
+    import dataclasses
+
+    from skytrust import baselines
+
+    raw = copy.deepcopy(fast_settings.raw)
+    raw["min_weeks_for_ci"] = 999
+    strict = dataclasses.replace(fast_settings, raw=raw)
+    result = baselines.run_baselines(synthetic_built[0], "primary", 1, strict)
+    rec = pd.DataFrame(evaluate.evaluate_lead(result, strict, seed=1)["records"])
+    assert rec["brier"].notna().any()  # point estimates are still reported
+    assert rec["brier_lo"].isna().all() and rec["false_clear_rate_hi"].isna().all()

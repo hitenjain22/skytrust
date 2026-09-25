@@ -30,6 +30,7 @@ def fast_settings(settings) -> Settings:
     raw["modeling"]["c_grid_log10"] = [-1, 1, 2]
     raw["split"]["cv_folds"] = 2
     raw["bootstrap_resamples"] = 100
+    raw["min_weeks_for_ci"] = 2  # the synthetic test month only spans ~5 weeks
     return dataclasses.replace(settings, raw=raw)
 
 

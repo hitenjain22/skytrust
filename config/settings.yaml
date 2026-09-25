@@ -82,5 +82,12 @@ modeling:
   # CV log losses within this of the best are treated as ties; the most regularized C wins.
   cv_tie_tolerance: 1.0e-4
 
+calibration:
+  # Apply isotonic calibration to a blend only if its out-of-fold expected calibration error
+  # (10 bins, training folds only) exceeds this. Logistic regression is usually calibrated already.
+  ece_threshold: 0.05
+
 seed: 20260101
 bootstrap_resamples: 1000
+# A bootstrap CI needs enough independent blocks; subsets spanning fewer weeks get no CI.
+min_weeks_for_ci: 8

@@ -313,6 +313,8 @@ def _fmt(value, kind: str) -> str:
 def with_ci(rec: pd.Series | None, metric: str, kind: str = "num") -> str:
     if rec is None or pd.isna(rec.get(metric)):
         return "–"
+    if pd.isna(rec.get(f"{metric}_lo")):
+        return f"{_fmt(rec[metric], kind)} (too few weeks for a CI)"
     return (
         f"{_fmt(rec[metric], kind)} [{_fmt(rec.get(f'{metric}_lo'), kind)}, "
         f"{_fmt(rec.get(f'{metric}_hi'), kind)}]"
@@ -480,6 +482,158 @@ def model_info_table(v: MetricsView, label: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _diff_phrase(d: pd.Series | None) -> str:
+    if d is None:
+        return "not compared"
+    ci = f"Brier difference {d['brier_diff']:+.4f} [{d['lo']:+.4f}, {d['hi']:+.4f}]"
+    if d["significant"] and d["brier_diff"] < 0:
+        return f"better ({ci}, CI excludes zero)"
+    if d["significant"]:
+        return f"worse ({ci}, CI excludes zero)"
+    return f"not significantly different ({ci})"
+
+
+def blend_verdicts(v: MetricsView, label: str = "primary") -> dict[str, dict[str, list[int]]]:
+    """Per comparison target, which leads the blend is significantly better / not better."""
+    out: dict[str, dict[str, list[int]]] = {}
+    for target in ["best_single", "equal_weight"]:
+        better, not_better = [], []
+        for ld in v.lead_list(label):
+            if v.rec(label, ld, "blend") is None:
+                continue
+            b = v.best_single(label, ld) if target == "best_single" else "equal_weight"
+            d = v.diff(label, ld, "blend", b)
+            (
+                better if d is not None and d["significant"] and d["brier_diff"] < 0 else not_better
+            ).append(ld)
+        out[target] = {"better": better, "not_better": not_better}
+    return out
+
+
+def blend_summary_lines(v: MetricsView) -> list[str]:
+    """The honesty rule (SPEC 8.8): say plainly where the blend does and doesn't win."""
+    lab, lead = "primary", RESULTS_LEAD
+    blend = v.rec(lab, lead, "blend")
+    if blend is None:
+        return []
+    best = v.best_single(lab, lead)
+    n_leads = len([ld for ld in v.lead_list(lab) if v.rec(lab, ld, "blend") is not None])
+    verdict = blend_verdicts(v, lab)
+    lines = [
+        f"- **The learned blend** has a Brier Skill Score of **{with_ci(blend, 'bss')}** at lead "
+        f"{lead} and a false-clear rate of **{with_ci(blend, 'false_clear_rate', 'pct')}**. "
+        f"Versus the best single model ({v.name(best)}): "
+        f"{_diff_phrase(v.diff(lab, lead, 'blend', best))}. Versus the equal-weight average: "
+        f"{_diff_phrase(v.diff(lab, lead, 'blend', 'equal_weight'))}.",
+    ]
+    for target, name in [
+        ("best_single", "the best single model"),
+        ("equal_weight", "the simple equal-weight average"),
+    ]:
+        wins, others = verdict[target]["better"], verdict[target]["not_better"]
+        sentence = (
+            f"- Across leads, the blend beats {name} with a 95% CI excluding zero at "
+            f"**{len(wins)} of {n_leads} leads**."
+        )
+        if others:
+            sentence += (
+                f" **At lead{'s' if len(others) > 1 else ''} {', '.join(map(str, others))} it does "
+                f"not beat {name}.**"
+            )
+        lines.append(sentence)
+    return lines
+
+
+def blend_lead_table(v: MetricsView, label: str = "primary") -> pd.DataFrame:
+    rows = {}
+    for ld in v.lead_list(label):
+        r = v.rec(label, ld, "blend")
+        if r is None:
+            continue
+        best = v.best_single(label, ld)
+        info = v.leads[(v.leads["label"] == label) & (v.leads["lead"] == ld)].iloc[0]["model_info"][
+            "blend"
+        ]
+        cal = info["calibration"]
+        rows[f"L{ld}"] = {
+            "BSS": with_ci(r, "bss"),
+            "false-clear": with_ci(r, "false_clear_rate", "pct"),
+            "vs best single": _diff_phrase(v.diff(label, ld, "blend", best)).split(" (")[0]
+            + f" ({v.name(best).split(' ')[0]})",
+            "vs equal-weight": _diff_phrase(v.diff(label, ld, "blend", "equal_weight")).split(" (")[
+                0
+            ],
+            "models": ", ".join(m.upper() for m in info["models"]),
+            "C": f"{info['C']:.3g}",
+            "OOF calibration error": f"{cal['oof_ece']:.3f}",
+            "isotonic applied": "yes" if cal["applied"] else "no",
+        }
+    out = pd.DataFrame(rows).T
+    out.index.name = "lead"
+    return out
+
+
+def weight_share_table(v: MetricsView, label: str = "primary") -> pd.DataFrame:
+    rows = {}
+    for _, lr in v.leads[v.leads["label"] == label].iterrows():
+        info = (lr["model_info"] or {}).get("blend")
+        if info:
+            rows[f"L{int(lr['lead'])}"] = {
+                m.upper(): pct(s) for m, s in info["weight_shares"].items()
+            }
+    out = pd.DataFrame(rows).T.fillna("–")
+    out.index.name = "lead"
+    return out
+
+
+def coefficient_table(v: MetricsView, label: str, lead: int, top: int = 12) -> pd.DataFrame:
+    lr = v.leads[(v.leads["label"] == label) & (v.leads["lead"] == lead)].iloc[0]
+    coef = pd.Series(lr["model_info"]["blend"]["coef_standardized"])
+    coef = coef.reindex(coef.abs().sort_values(ascending=False).index).head(top)
+    out = pd.DataFrame({"standardized coefficient": coef.map(lambda c: f"{c:+.3f}")})
+    out.index.name = "feature (largest effects first)"
+    return out
+
+
+def blend_section(v: MetricsView) -> list[str]:
+    if v.rec("primary", RESULTS_LEAD, "blend") is None:
+        return []
+    shares = {}
+    for ld in [v.lead_list()[0], v.lead_list()[-1]]:
+        info = v.leads[(v.leads["label"] == "primary") & (v.leads["lead"] == ld)].iloc[0][
+            "model_info"
+        ]["blend"]
+        top = max(info["weight_shares"], key=info["weight_shares"].get)
+        shares[ld] = (top.upper(), info["weight_shares"][top])
+    first, last = v.lead_list()[0], v.lead_list()[-1]
+    return [
+        "## 8. The blend: what it learned",
+        "",
+        "One logistic regression per lead on every available model's features, the model spread, "
+        "site, month, and dark hours. Tuned and calibration-checked on training years only, "
+        "exported to JSON, and scored here through the numpy loader, i.e. exactly the file the app "
+        "uses. Calibration is added only if the out-of-fold calibration error on the training "
+        "folds exceeds the configured threshold.",
+        "",
+        md_table(blend_lead_table(v)),
+        "",
+        "**How much the blend leans on each model** (share of absolute standardized "
+        "coefficients on each model's three features; features are correlated, so read this "
+        "as a rough guide):",
+        "",
+        md_table(weight_share_table(v)),
+        "",
+        f"At lead {first} the blend leans most on {shares[first][0]} ({shares[first][1]:.0%}); at "
+        f"lead {last}, on {shares[last][0]} ({shares[last][1]:.0%}).",
+        "",
+        f"**Largest standardized coefficients at lead {RESULTS_LEAD}** "
+        "(positive = more likely usable):",
+        "",
+        md_table(coefficient_table(v, "primary", RESULTS_LEAD)),
+        "",
+    ]
+
+
 def summary_lines(v: MetricsView) -> list[str]:
     lab, lead = "primary", RESULTS_LEAD
     leads = v.lead_list(lab)
@@ -487,7 +641,8 @@ def summary_lines(v: MetricsView) -> list[str]:
     ew, clim = v.rec(lab, lead, "equal_weight"), v.rec(lab, lead, "climatology")
     bs = v.rec(lab, lead, best)
     n_models = sum(1 for m in v.m["meta"]["models"] if lead in m["leads"])
-    lines = [
+    lines = blend_summary_lines(v)
+    lines += [
         f"- At lead {lead} (the night-before forecast), the **equal-weight average of {n_models} "
         f"models** has a Brier Skill Score of **{with_ci(ew, 'bss')}** relative to climatology. "
         f"The best single calibrated model ({v.name(best)}, chosen by *training* cross-validation, "
@@ -611,8 +766,8 @@ def results_markdown(metrics: dict, figure_paths: dict[str, str]) -> str:
         md_table(breakdown_table(v, "primary", lead, "season")),
         "",
         "Test seasons are partial (the test year starts in January and ends at the latest labeled "
-        "night). Subsets spanning only a few weeks have unstable bootstrap intervals; read their "
-        "CIs with care.",
+        "night). Subsets spanning fewer than `min_weeks_for_ci` weeks (config) get no CI, because "
+        "a bootstrap over so few weekly blocks is unreliable.",
         "",
         "## 6. Sensitivity to the truth label",
         "",
@@ -622,6 +777,7 @@ def results_markdown(metrics: dict, figure_paths: dict[str, str]) -> str:
         "",
         md_table(model_info_table(v, "primary"), index=False),
         "",
+        *blend_section(v),
         "## Caveats",
         "",
         *[f"- {c}" for c in data_caveats(v) + CAVEATS],
