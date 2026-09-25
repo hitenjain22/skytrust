@@ -8,19 +8,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from conftest import SYNTH_FIRST as FIRST
+from conftest import SYNTH_LAST as LAST
 from skytrust import __main__ as cli
 from skytrust import dataset, report
-from synthetic import SYNTH_SITES, write_synthetic_cache
-
-FIRST, LAST = dt.date(2025, 12, 1), dt.date(2026, 1, 31)
+from synthetic import SYNTH_SITES
 
 
-@pytest.fixture(scope="module")
-def built(tmp_path_factory, settings):
-    root = tmp_path_factory.mktemp("raw")
-    write_synthetic_cache(root, settings.models, FIRST, LAST)
-    df = dataset.build_dataset(settings, SYNTH_SITES, FIRST, LAST, root=root)
-    return df, root
+@pytest.fixture
+def built(synthetic_built):
+    return synthetic_built
 
 
 def test_shape_keys_and_splits(built, settings):

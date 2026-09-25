@@ -76,5 +76,11 @@ verdict:
   maybe: 0.40
 decision_threshold: 0.5
 
+modeling:
+  # Logistic-regression C searched on log10 scale: np.logspace(start, stop, num)
+  c_grid_log10: [-3, 3, 13]
+  # CV log losses within this of the best are treated as ties; the most regularized C wins.
+  cv_tie_tolerance: 1.0e-4
+
 seed: 20260101
 bootstrap_resamples: 1000
