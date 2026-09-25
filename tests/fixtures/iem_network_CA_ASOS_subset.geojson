@@ -1,0 +1,200 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "id": "AUN",
+   "properties": {
+    "elevation": 467.0,
+    "sname": "AURBURN MUNICIPAL AIRPORT",
+    "time_domain": "(2002-Now)",
+    "archive_begin": "2002-08-19",
+    "archive_end": null,
+    "state": "CA",
+    "country": "US",
+    "climate_site": "CA0383",
+    "wfo": "STO",
+    "tzname": "America/Los_Angeles",
+    "ncdc81": "USC00040383",
+    "ncei91": "USC00040383",
+    "ugc_county": "CAC061",
+    "ugc_zone": "CAZ067",
+    "county": "El Dorado",
+    "sid": "AUN",
+    "network": "CA_ASOS",
+    "online": true,
+    "synop": 23224,
+    "attributes": {
+     "HAS_PHOUR": "1",
+     "METAR_RESET_MINUTE": "55",
+     "IS_AWOS": "1",
+     "GHCNH_ID": "USW00023224"
+    }
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -121.0817,
+     38.9548
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "BIH",
+   "properties": {
+    "elevation": 1263.0,
+    "sname": "BISHOP AIRPORT",
+    "time_domain": "(1943-Now)",
+    "archive_begin": "1943-01-16",
+    "archive_end": null,
+    "state": "CA",
+    "country": "US",
+    "climate_site": "CA0822",
+    "wfo": "VEF",
+    "tzname": "America/Los_Angeles",
+    "ncdc81": "USW00023157",
+    "ncei91": "USW00023157",
+    "ugc_county": "CAC027",
+    "ugc_zone": "CAZ026",
+    "county": "Inyo",
+    "sid": "BIH",
+    "network": "CA_ASOS",
+    "online": true,
+    "synop": 23157,
+    "attributes": {
+     "HASTAF": "1",
+     "METAR_RESET_MINUTE": "56",
+     "HAS_PHOUR": "1",
+     "GHCNH_ID": "USW00023157",
+     "HAS1MIN": "1"
+    }
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -118.3636,
+     37.3731
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "FAT",
+   "properties": {
+    "elevation": 100.0,
+    "sname": "FRESNO AIR TERMINAL",
+    "time_domain": "(1941-Now)",
+    "archive_begin": "1941-12-04",
+    "archive_end": null,
+    "state": "CA",
+    "country": "US",
+    "climate_site": "CA3257",
+    "wfo": "HNX",
+    "tzname": "America/Los_Angeles",
+    "ncdc81": "USW00093193",
+    "ncei91": "USW00093193",
+    "ugc_county": "CAC019",
+    "ugc_zone": "CAZ090",
+    "county": "Fresno",
+    "sid": "FAT",
+    "network": "CA_ASOS",
+    "online": true,
+    "synop": 93193,
+    "attributes": {
+     "HAS1MIN": "1",
+     "HASTAF": "1",
+     "HAS_PHOUR": "1",
+     "GHCNH_ID": "USW00093193",
+     "METAR_RESET_MINUTE": "53"
+    }
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -119.7194,
+     36.78
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "SAC",
+   "properties": {
+    "elevation": 8.0,
+    "sname": "SACRAMENTO/EXECUTIV",
+    "time_domain": "(1931-Now)",
+    "archive_begin": "1931-01-01",
+    "archive_end": null,
+    "state": "CA",
+    "country": "US",
+    "climate_site": "CA7630",
+    "wfo": "STO",
+    "tzname": "America/Los_Angeles",
+    "ncdc81": "USW00023232",
+    "ncei91": "USW00023232",
+    "ugc_county": "CAC067",
+    "ugc_zone": "CAZ217",
+    "county": "Sacramento",
+    "sid": "SAC",
+    "network": "CA_ASOS",
+    "online": true,
+    "synop": 23232,
+    "attributes": {
+     "METAR_RESET_MINUTE": "53",
+     "HAS_PHOUR": "1",
+     "GHCNH_ID": "USW00023232",
+     "HASTAF": "1",
+     "HAS1MIN": "1"
+    }
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -121.495,
+     38.5069
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "TRK",
+   "properties": {
+    "elevation": 1798.0,
+    "sname": "TRUCKEE-TAHOE",
+    "time_domain": "(1972-Now)",
+    "archive_begin": "1972-12-31",
+    "archive_end": null,
+    "state": "CA",
+    "country": "US",
+    "climate_site": "CA0931",
+    "wfo": "REV",
+    "tzname": "America/Los_Angeles",
+    "ncdc81": "USC00049043",
+    "ncei91": "USC00049040",
+    "ugc_county": "CAC057",
+    "ugc_zone": "CAZ272",
+    "county": "Nevada",
+    "sid": "TRK",
+    "network": "CA_ASOS",
+    "online": true,
+    "synop": 93201,
+    "attributes": {
+     "METAR_RESET_MINUTE": "45",
+     "HAS_PHOUR": "1",
+     "GHCNH_ID": "USW00093201",
+     "HASTAF": "1"
+    }
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -120.1396,
+     39.32
+    ]
+   }
+  }
+ ],
+ "generated_at": "2026-09-25T00:20:39Z",
+ "count": 161
+}
