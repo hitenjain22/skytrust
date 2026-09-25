@@ -11,7 +11,6 @@ from skytrust.config import load_settings, load_sites
 from skytrust.data.http import HttpClient
 
 LATER_PHASE = {
-    "build-dataset": 2,
     "train": 4,
     "evaluate": 3,
     "report": 3,
@@ -69,6 +68,21 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     return 1 if summary.failures else 0
 
 
+def cmd_build_dataset(args: argparse.Namespace) -> int:
+    from skytrust import dataset, report
+
+    settings = load_settings()
+    df = dataset.build_dataset(settings, load_sites(), args.start, args.end)
+    path = dataset.save_dataset(df)  # validates first; refuses to save a broken dataset
+    quality = report.write_data_quality(df, settings)
+    nights = report.one_row_per_night(df)
+    n_test, verdict = report.test_sufficiency(df)
+    print(f"Wrote {path} ({len(df):,} rows, {len(nights):,} site-nights)")
+    print(f"Wrote {quality}")
+    print(f"Test nights at lead 1: {verdict}")
+    return 0
+
+
 def _date(text: str) -> dt.date:
     return dt.date.fromisoformat(text)
 
@@ -87,6 +101,12 @@ def build_parser() -> argparse.ArgumentParser:
     fe.add_argument("--end", type=_date, help="last night, YYYY-MM-DD (default: today - 2 days)")
     fe.add_argument("--refresh", action="store_true", help="bypass the disk cache")
     fe.set_defaults(func=cmd_fetch)
+    bd = sub.add_parser(
+        "build-dataset", help="Labels + features -> dataset.parquet, DATA_QUALITY.md"
+    )
+    bd.add_argument("--start", type=_date, help="first night (default: history_start)")
+    bd.add_argument("--end", type=_date, help="last night (default: last fully cached night)")
+    bd.set_defaults(func=cmd_build_dataset)
     for name in LATER_PHASE:
         sub.add_parser(name, help=f"(Phase {LATER_PHASE[name]})").set_defaults(func=None)
     return parser
