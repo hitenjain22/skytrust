@@ -113,3 +113,27 @@ def test_ensemble_member_counts(client, settings=SETTINGS):
     )
     assert len(forward.ensemble_members(payload, "ecmwf_ifs025_ensemble")) == 51
     assert len(forward.ensemble_members(payload, "ncep_gefs025")) == 31
+
+
+def test_goes_clear_sky_mask_layout(client):
+    """DATA_NOTES §10: key layout, variable names, quality flags and projection of the GOES-18
+    Clear Sky Mask, and that every site extracts a full box of good pixels on a real scan."""
+    import io
+
+    import h5py
+
+    from skytrust.data import goes
+
+    hour = pd.Timestamp.now(tz="UTC").floor("h") - pd.Timedelta(days=3)
+    key = goes.first_scan_key(client, hour)
+    assert key and key.startswith(goes.hour_prefix(hour)) and "_G18_" in key
+    data = client.get(f"{goes.BUCKET_URL}/{key}", {}).content
+    with h5py.File(io.BytesIO(data), "r") as f:
+        assert {"BCM", "DQF", "x", "y", "goes_imager_projection"} <= set(f)
+        assert list(f["BCM"].attrs["flag_values"]) == [0, 1]
+        assert int(f["DQF"].attrs["flag_values"][0]) == 0  # 0 = good quality
+        lon0 = float(f["goes_imager_projection"].attrs["longitude_of_projection_origin"][0])
+        assert lon0 == -137.0  # GOES-West position
+    values = goes.extract_sites(data, SITES)
+    assert set(values) == {s.id for s in SITES}
+    assert all(n_good > 0 for _, n_good in values.values())
