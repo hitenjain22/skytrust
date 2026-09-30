@@ -2,6 +2,7 @@
  "schema_version": 1,
  "label": "primary",
  "lead": 6,
+ "variant": "site",
  "models": [
   "gfs",
   "ecmwf",
@@ -194,8 +195,8 @@
   "C": 0.03162277660168379
  },
  "calibration": {
-  "oof_ece": 0.02867991886512388,
-  "oof_log_loss": 0.4691298857214478,
+  "oof_ece": 0.02867991886512378,
+  "oof_log_loss": 0.46912988572144787,
   "n_oof": 2788,
   "ece_threshold": 0.05,
   "applied": false
@@ -231,6 +232,6 @@
   "pandas": "3.0.6",
   "scikit_learn": "1.9.1"
  },
- "created_utc": "2026-09-30T02:41:11Z",
- "git_commit": "6cb38de"
+ "created_utc": "2026-09-30T20:24:46Z",
+ "git_commit": "20432a5-dirty"
 }

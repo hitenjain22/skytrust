@@ -58,13 +58,13 @@ flowchart LR
 
 | Night-before forecast (lead 1), test Jan–Aug 2026 | Brier Skill Score ↑ | False-clear rate ↓ | AUC ↑ |
 |---|---|---|---|
-| Blend | 0.631 [0.574, 0.685] | 10.0% [7.4%, 12.8%] | 0.947 |
-| NOAA NBM calibrated | 0.508 [0.428, 0.583] | 16.8% [12.6%, 21.1%] | 0.907 |
-| Equal-weight average (B5) | 0.600 [0.542, 0.652] | 13.8% [11.1%, 16.7%] | 0.936 |
-| ECMWF calibrated (B4) | 0.518 [0.446, 0.586] | 13.0% [10.0%, 16.5%] | 0.920 |
-| Climatology (B1) | 0.000 [0.000, 0.000] | 37.5% [30.6%, 45.1%] | 0.630 |
+| Blend | 0.613 [0.555, 0.670] | 10.0% [7.4%, 12.8%] | 0.947 |
+| NOAA NBM calibrated | 0.484 [0.406, 0.562] | 16.8% [12.6%, 21.1%] | 0.907 |
+| Equal-weight average (B5) | 0.580 [0.526, 0.635] | 13.8% [11.1%, 16.7%] | 0.936 |
+| ECMWF calibrated (B4) | 0.494 [0.426, 0.567] | 13.0% [10.0%, 16.5%] | 0.920 |
+| Climatology (B1) | 0.000 [0.000, 0.000] | 35.0% [28.2%, 42.9%] | 0.632 |
 
-_Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` (commit `808c52b`). 95% CIs from a week-block bootstrap. Full results: [docs/RESULTS.md](docs/RESULTS.md)._
+_Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` (commit `545d11d`). 95% CIs from a week-block bootstrap. Full results: [docs/RESULTS.md](docs/RESULTS.md)._
 
 <!-- RESULTS:END -->
 

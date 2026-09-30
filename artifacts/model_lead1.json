@@ -2,6 +2,7 @@
  "schema_version": 1,
  "label": "primary",
  "lead": 1,
+ "variant": "site",
  "models": [
   "gfs",
   "hrrr",
@@ -268,6 +269,6 @@
   "pandas": "3.0.6",
   "scikit_learn": "1.9.1"
  },
- "created_utc": "2026-09-30T02:41:05Z",
- "git_commit": "6cb38de"
+ "created_utc": "2026-09-30T20:24:39Z",
+ "git_commit": "20432a5-dirty"
 }
