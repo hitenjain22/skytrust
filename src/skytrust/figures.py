@@ -8,6 +8,7 @@ import matplotlib
 
 matplotlib.use("Agg")  # no display needed (CI, servers)
 import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from skytrust.config import REPO_ROOT  # noqa: E402
@@ -127,4 +128,25 @@ def site_skill(
     ax.set_title(f"Skill by site, lead {lead} ({label} label)", fontsize=10)
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3, axis="y")
+    return _save(fig, path)
+
+
+def value_curves(curves: list[dict], methods: list[str], label: str, lead: int, path: Path) -> Path:
+    """Relative economic value vs cost/loss ratio: the share of a perfect forecast's value each
+    method delivers to users with different tolerance for wasted setups."""
+    fig, ax = plt.subplots(figsize=(7.5, 4.2))
+    for c in curves:
+        if c["label"] != label or c["lead"] != lead or c["method"] not in methods:
+            continue
+        v = np.array([np.nan if x is None else x for x in c["value"]], dtype=float)
+        emphasised = c["method"] in EMPHASIS
+        ax.plot(c["alpha"], v, lw=2.4 if emphasised else 1.2, color=color_for(c["method"]),
+                label=display_name(c["method"]))  # fmt: skip
+    ax.axhline(0, color="black", lw=0.8)
+    ax.set_ylim(-0.2, 1)
+    ax.set_xlabel("Cost/loss ratio α = setup effort ÷ value of a good night")
+    ax.set_ylabel("Relative value (1 = perfect forecast)")
+    ax.set_title(f"Decision value, lead {lead} ({label} label, test set)", fontsize=10)
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8)
     return _save(fig, path)

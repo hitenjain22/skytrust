@@ -143,6 +143,43 @@ def fit_single_model(
     )
 
 
+# ---------- B6: equal-weight average, calibrated ----------
+
+
+def equal_weight_calibrated(
+    train: pd.DataFrame,
+    rows: pd.DataFrame,
+    label_col: str,
+    lead: int,
+    settings: Settings,
+    site_ids: list[str],
+) -> MethodPrediction:
+    """B6: logistic regression on the *average* of the members' clear fraction plus the same
+    context as B4 and the blend. The blend differs from B6 only by learning a separate weight
+    for each model's features, so "blend vs B6" isolates the value of learned weights, and
+    "B6 vs B5" isolates the value of calibration."""
+    members = [f"{m.short}_frac_clear" for m in models_at_lead(settings, lead)]
+
+    def with_mean(df: pd.DataFrame) -> pd.DataFrame:
+        return df.assign(ew_frac_clear=df[members].mean(axis=1))
+
+    fit_rows = with_mean(
+        train[(train["lead"] == lead) & train[label_col].notna()].dropna(subset=members)
+    ).sort_values("night_date")
+    tuned = fit_tuned_logistic(
+        design_matrix(fit_rows, ["ew_frac_clear"], site_ids),
+        fit_rows[label_col].astype(bool),
+        fit_rows["night_date"],
+        settings,
+        impute=False,
+    )
+    X = design_matrix(with_mean(rows), ["ew_frac_clear"], site_ids)
+    return MethodPrediction(
+        "equal_weight_cal", "prob", "equal_weight_cal", tuned.pipeline.predict_proba(X)[:, 1],
+        {"C": tuned.C, "cv_log_loss": tuned.cv_log_loss, "n_train": tuned.n_train},
+    )  # fmt: skip
+
+
 # ---------- benchmarks (NOAA NBM) ----------
 
 
@@ -228,6 +265,9 @@ def run_baselines(df: pd.DataFrame, label: str, lead: int, settings: Settings) -
     frac = rows[[f"{m.short}_frac_clear" for m in models_at_lead(settings, lead)]]
     methods["equal_weight"] = MethodPrediction(
         "equal_weight", "prob", "equal_weight", frac.mean(axis=1).to_numpy()
+    )
+    methods["equal_weight_cal"] = equal_weight_calibrated(
+        train, rows, label_col, lead, settings, site_ids
     )
     best = min(cv_losses, key=cv_losses.get) if cv_losses else None
     log.info("%s lead %d: %d eval rows, best single (CV) = %s", label, lead, len(rows), best)

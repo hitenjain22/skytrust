@@ -121,6 +121,71 @@ def all_metrics(
     return {k: v for k, v in out.items() if k in wanted}
 
 
+def brier_decomposition(y: np.ndarray, p: np.ndarray, n_bins: int = N_BINS) -> dict[str, float]:
+    """Murphy (1973) decomposition over 10 equal-width bins: Brier ≈ reliability − resolution +
+    uncertainty. Reliability (lower is better) = how far each bin's forecasts sit from what
+    happened; resolution (higher is better) = how much the forecasts separate good nights from
+    bad; uncertainty = base-rate difficulty (same for every method). The residual is the part
+    lost by binning."""
+    edges = np.linspace(0, 1, n_bins + 1)
+    idx = np.clip(np.digitize(p, edges[1:-1]), 0, n_bins - 1)
+    base = y.mean()
+    rel = res = 0.0
+    for b in range(n_bins):
+        mask = idx == b
+        if mask.any():
+            n_k, f_k, o_k = mask.sum(), p[mask].mean(), y[mask].mean()
+            rel += n_k * (f_k - o_k) ** 2
+            res += n_k * (o_k - base) ** 2
+    rel, res, unc = rel / len(y), res / len(y), base * (1 - base)
+    brier = float(np.mean((p - y) ** 2))
+    return {"reliability": rel, "resolution": res, "uncertainty": unc,
+            "binning_residual": brier - (rel - res + unc)}  # fmt: skip
+
+
+ALPHAS = tuple(round(a, 2) for a in np.arange(0.05, 0.96, 0.05))
+THRESHOLDS = tuple(round(t, 2) for t in np.arange(0.05, 0.96, 0.05))
+
+
+def relative_value(y: np.ndarray, p: np.ndarray, alphas=ALPHAS) -> list[float | None]:
+    """Relative economic value (Richardson 2000) of acting on the forecast, per cost/loss ratio.
+
+    The decision: set up (costs the effort C) or stay home (lose L if the night was usable).
+    With alpha = C/L, a calibrated forecast says "go" when P >= alpha. Value is the share of the
+    gap between the best fixed policy (always go, or never go: min(alpha, base rate)) and a
+    perfect forecast (alpha * base rate) that the forecast closes. 1 = perfect, 0 = no better
+    than climatology, negative = worse.
+    """
+    s = float(y.mean())
+    out: list[float | None] = []
+    for a in alphas:
+        go = p >= a
+        expense = (a * go.sum() + (~go & (y == 1)).sum()) / len(y)
+        e_clim, e_perfect = min(a, s), a * s
+        out.append(float((e_clim - expense) / (e_clim - e_perfect)) if e_clim > e_perfect else None)
+    return out
+
+
+def threshold_curve(y: np.ndarray, p: np.ndarray, thresholds=THRESHOLDS) -> list[dict]:
+    """What a user would have experienced at each 'go' threshold: how often it said go, how
+    many go calls were cloudy (false-clear rate), and how many usable nights it skipped."""
+    rows = []
+    for t in thresholds:
+        go = p >= t
+        tp, fp, fn = (
+            int((go & (y == 1)).sum()),
+            int((go & (y == 0)).sum()),
+            int((~go & (y == 1)).sum()),
+        )
+        rows.append({
+            "threshold": t,
+            "go_rate": float(go.mean()),
+            "false_clear_rate": fp / (tp + fp) if tp + fp else None,
+            "miss_rate": fn / (tp + fn) if tp + fn else None,
+        })  # fmt: skip
+    return rows
+
+
 def reliability_table(y: np.ndarray, p: np.ndarray, n_bins: int = N_BINS) -> list[dict]:
     """10 equal-width probability bins: count, mean forecast, observed frequency."""
     edges = np.linspace(0, 1, n_bins + 1)
@@ -184,6 +249,9 @@ def evaluate_lead(result: LeadResult, settings: Settings, seed: int) -> dict:
                 "n_weeks": int(len(np.unique(codes[mask]))), "base_rate": float(yy.mean()),
             }  # fmt: skip
             enough_weeks = rec["n_weeks"] >= settings.raw["min_weeks_for_ci"]
+            if subset_type == "overall" and method.kind == "prob":
+                decomposition = brier_decomposition(yy, pp)
+                rec.update({f"brier_{k}": v for k, v in decomposition.items()})
             for name, value in point.items():
                 # Too few weeks -> a bootstrap interval would be unreliable; report none.
                 lo, hi = _ci(boot[name]) if enough_weeks else (float("nan"), float("nan"))
@@ -196,9 +264,20 @@ def evaluate_lead(result: LeadResult, settings: Settings, seed: int) -> dict:
         for m in result.methods.values()
         if m.kind == "prob"
     ]  # fmt: skip
+    value_curves = [
+        {"label": result.label, "lead": result.lead, "method": m.method, "alpha": list(ALPHAS),
+         "value": relative_value(y, m.p)}
+        for m in result.methods.values()
+        if m.kind == "prob"
+    ]  # fmt: skip
+    main = "blend" if "blend" in result.methods else "equal_weight"
+    thresholds = {"label": result.label, "lead": result.lead, "method": main,
+                  "curve": threshold_curve(y, result.methods[main].p)}  # fmt: skip
     return {
         "records": records,
         "reliability": reliability,
+        "value_curves": value_curves,
+        "threshold_curves": [thresholds],
         "differences": paired_differences(result, y, W_boot),
         "model_info": {m.method: m.info for m in result.methods.values() if m.info},
         "best_single": result.best_single,
@@ -219,6 +298,8 @@ def comparison_pairs(result: LeadResult) -> list[tuple[str, str]]:
         # NOAA's own blend: calibrated head-to-head, and against its raw forecast.
         head += [("blend", "nbm_lr"), ("blend", "nbm_raw"), ("nbm_lr", "climatology")]
         head += [("blend_nbm", "blend"), ("blend_nbm", "nbm_lr")]
+        # Weights vs calibration: blend - B6 = learned weights; B6 - B5 = calibration.
+        head += [("blend", "equal_weight_cal"), ("equal_weight_cal", "equal_weight")]
         pairs = head + pairs
     return [(a, b) for a, b in pairs if a in result.methods and b in result.methods]
 
@@ -342,13 +423,16 @@ def lead_results(
 
 def run_evaluation(df: pd.DataFrame, settings: Settings, artifacts_dir: Path | None = None) -> dict:
     base_seed = int(settings.raw["seed"])
-    out = {"records": [], "reliability": [], "differences": [], "leads": []}
+    out = {"records": [], "reliability": [], "differences": [], "leads": [], "value_curves": [],
+           "threshold_curves": []}  # fmt: skip
     for i, result in enumerate(lead_results(df, settings, artifacts_dir)):
         # A fixed seed per (label, lead) keeps each result reproducible on its own.
         ev = evaluate_lead(result, settings, seed=base_seed + i)
         out["records"] += ev["records"]
         out["reliability"] += ev["reliability"]
         out["differences"] += ev["differences"]
+        out["value_curves"] += ev["value_curves"]
+        out["threshold_curves"] += ev["threshold_curves"]
         out["leads"].append(
             {
                 "label": result.label,

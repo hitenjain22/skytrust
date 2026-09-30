@@ -51,6 +51,15 @@ def render(ctx: Context) -> None:
         width="stretch",
     )
     st.plotly_chart(charts.skill_by_lead(v.records, label, ctx.palette), width="stretch")
+    if ctx.metrics.get("value_curves"):
+        st.plotly_chart(
+            charts.value_curves(ctx.metrics["value_curves"], shown, label, lead, ctx.palette),
+            width="stretch",
+        )
+        st.caption(
+            "Relative value: if a good night is worth 5× your setup effort (α = 0.2), this is "
+            "the share of a perfect forecast's benefit you'd get by going out when P ≥ α."
+        )
 
     st.subheader("By site and season")
     st.dataframe(report.breakdown_table(v, label, lead, "site"), width="stretch")

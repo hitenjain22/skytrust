@@ -99,7 +99,7 @@ def test_run_baselines_shapes_and_common_eval_set(synthetic_built, fast_settings
     n = len(result.rows)
     assert n > 0 and set(result.rows.columns) >= {"site", "night_date", "y"}
     assert (pd.to_datetime(result.rows["night_date"]) >= "2026-01-01").all()
-    expected = {"climatology", "persistence", "equal_weight"}
+    expected = {"climatology", "persistence", "equal_weight", "equal_weight_cal"}
     for m in fast_settings.models:
         expected |= {f"{m.short}_rule", f"{m.short}_lr"}
     for b in fast_settings.benchmarks:
@@ -149,3 +149,11 @@ def test_benchmark_features_never_change_blend_inputs(synthetic_built, fast_sett
     lead1 = df[df["lead"] == 1]
     assert (lead1["n_models_available"] == lead1[members].notna().sum(axis=1)).all()
     assert "nbm_frac_clear" in df and lead1["nbm_frac_clear"].notna().any()
+
+
+def test_calibrated_equal_weight_uses_one_shared_weight(synthetic_built, fast_settings):
+    result = baselines.run_baselines(synthetic_built[0], "primary", 1, fast_settings)
+    b6 = result.methods["equal_weight_cal"]
+    assert b6.kind == "prob" and ((b6.p > 0) & (b6.p < 1)).all()
+    # Monotone in the average clear fraction at fixed context: more clear -> higher P.
+    assert np.corrcoef(b6.p, result.methods["equal_weight"].p)[0, 1] > 0.8

@@ -46,6 +46,41 @@ def reliability_card(night, site_id: str) -> None:
     )
 
 
+RISK_SETTINGS = {
+    "Adventurous: go at 30%+": 0.3,
+    "Balanced: go at 50%+": 0.5,
+    "Cautious: go at 70%+": 0.7,
+}
+
+
+def risk_panel(ctx: Context, night) -> None:
+    """Let the user pick their own go threshold and show what that meant in the backtest."""
+    if night.p_usable is None or not ctx.metrics:
+        return
+    curve = next(
+        (c["curve"] for c in ctx.metrics.get("threshold_curves", [])
+         if c["label"] == "primary" and c["lead"] == night.lead),
+        None,
+    )  # fmt: skip
+    if not curve:
+        return
+    choice = st.select_slider(
+        "How much does a wasted setup bother you?",
+        options=list(RISK_SETTINGS),
+        value="Balanced: go at 50%+",
+        key="risk",
+    )
+    threshold = RISK_SETTINGS[choice]
+    row = min(curve, key=lambda r: abs(r["threshold"] - threshold))
+    call = "Go" if night.p_usable >= threshold else "Skip"
+    fcr, miss = row["false_clear_rate"], row["miss_rate"]
+    st.markdown(
+        f"At this setting tonight's call is **{call}**. In the backtest at this lead, "
+        f"{'–' if fcr is None else f'{fcr:.0%}'} of 'go' calls turned out cloudy and "
+        f"{'–' if miss is None else f'{miss:.0%}'} of usable nights would have been skipped."
+    )
+
+
 def render(ctx: Context) -> None:
     st.header(f"Tonight at {ctx.site.id}")
     if unavailable(ctx):
@@ -89,6 +124,7 @@ def render(ctx: Context) -> None:
             )
     st.divider()
     reliability_card(night, ctx.site.id)
+    risk_panel(ctx, night)
     st.plotly_chart(charts.darkness_timeline(ctx.site, night, tz, pal), width="stretch")
     st.plotly_chart(
         charts.hourly_cloud(fc.hourly, night, tz, ctx.settings.clear_threshold, pal),

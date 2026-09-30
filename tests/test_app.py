@@ -203,3 +203,13 @@ def test_live_verification_unreachable_is_graceful(offline, monkeypatch):
     at = visit("Track Record")
     assert not at.exception
     assert any("isn't reachable" in i.value for i in at.info)
+
+
+def test_risk_slider_changes_the_call(offline, monkeypatch):
+    api_up(monkeypatch)
+    at = visit("Tonight")
+    assert not at.exception
+    for setting in ["Adventurous: go at 30%+", "Cautious: go at 70%+"]:
+        at.select_slider(key="risk").set_value(setting).run()
+        assert not at.exception
+        assert any("At this setting tonight's call is" in m.value for m in at.markdown)

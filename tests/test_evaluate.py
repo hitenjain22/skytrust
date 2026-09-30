@@ -139,7 +139,7 @@ def test_write_results_renders_every_section_and_figure(metrics, tmp_path):
     md = path.read_text()
     for heading in ["## Summary", "## 1. Headline", "## 2. Skill vs lead time", "## 3. Calibration",
                     "## 4. Paired comparisons", "## 5. By site", "## 6. Sensitivity",
-                    "## 7. Single-model tuning", "## Caveats"]:  # fmt: skip
+                    "## 7. Single-model tuning", "## 9. Decision value", "## Caveats"]:  # fmt: skip
         assert heading in md, heading
     for fig in [
         "lead_curves_primary.png",
@@ -287,3 +287,49 @@ def test_test_period_name():
         report.test_period_name({"test_period": ["2025-11-01", "2026-02-28"]})
         == "Nov 2025–Feb 2026"
     )
+
+
+def test_brier_decomposition_adds_up():
+    rng = np.random.default_rng(3)
+    p = rng.choice(np.arange(0.05, 1.0, 0.1), 2000)  # bin centres: constant within bins -> exact
+    y = (rng.random(2000) < p).astype(float)
+    d = evaluate.brier_decomposition(y, p)
+    assert np.mean((p - y) ** 2) == pytest.approx(
+        d["reliability"] - d["resolution"] + d["uncertainty"]
+    )
+    assert abs(d["binning_residual"]) < 1e-9
+    assert d["uncertainty"] == pytest.approx(y.mean() * (1 - y.mean()))
+    perfect = evaluate.brier_decomposition(y, y)
+    assert perfect["reliability"] == 0 and perfect["resolution"] == pytest.approx(
+        perfect["uncertainty"]
+    )
+
+
+def test_relative_value_limits():
+    rng = np.random.default_rng(5)
+    y = (rng.random(500) < 0.6).astype(float)
+    perfect = evaluate.relative_value(y, y)
+    assert all(v == pytest.approx(1.0) for v in perfect if v is not None)
+    clim = evaluate.relative_value(y, np.full(500, y.mean()))
+    assert all(v == pytest.approx(0.0, abs=1e-9) for v in clim if v is not None)
+    # A useless forecast that says "go" at random is worse than climatology somewhere.
+    assert min(v for v in evaluate.relative_value(y, rng.random(500)) if v is not None) < 0
+
+
+def test_threshold_curve_is_monotone():
+    rng = np.random.default_rng(6)
+    p = rng.random(400)
+    y = (rng.random(400) < p).astype(float)
+    curve = evaluate.threshold_curve(y, p)
+    go = [c["go_rate"] for c in curve]
+    miss = [c["miss_rate"] for c in curve]
+    assert go == sorted(go, reverse=True) and miss == sorted(miss)
+
+
+def test_metrics_include_value_and_threshold_curves(metrics):
+    assert metrics["value_curves"] and metrics["threshold_curves"]
+    vc = metrics["value_curves"][0]
+    assert len(vc["alpha"]) == len(vc["value"])
+    rec = pd.DataFrame(metrics["records"])
+    overall_prob = rec[(rec["subset_type"] == "overall") & (rec["kind"] == "prob")]
+    assert overall_prob["brier_resolution"].notna().all()

@@ -280,3 +280,22 @@ def skill_by_lead(records: pd.DataFrame, label: str, pal: dict) -> go.Figure:
         height=380,
         yaxis={"title": "BSS (higher = better)"},
     )
+
+
+def value_curves(
+    curves: list[dict], methods: list[str], label: str, lead: int, pal: dict
+) -> go.Figure:
+    fig = go.Figure()
+    for c in curves:
+        if c["label"] != label or c["lead"] != lead or c["method"] not in methods:
+            continue
+        fig.add_trace(go.Scatter(
+            x=c["alpha"], y=[None if v is None else v * 100 for v in c["value"]], mode="lines",
+            name=display_name(c["method"]),
+            line={"width": 3 if c["method"] in pal["methods"] else 1.5,
+                  "color": pal["methods"].get(c["method"])},
+        ))  # fmt: skip
+    fig.add_hline(y=0, line_color=pal["muted"])
+    fig.update_xaxes(title="Setup effort ÷ value of a good night (α)")
+    return _layout(fig, pal, f"Decision value, lead {lead}: % of a perfect forecast's benefit",
+                   height=360, yaxis={"range": [-20, 100], "title": "%"})  # fmt: skip

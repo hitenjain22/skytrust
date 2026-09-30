@@ -27,6 +27,7 @@ def display_name(method: str) -> str:
         "climatology": "Climatology (B1)",
         "persistence": "Persistence (B2)",
         "equal_weight": "Equal-weight average (B5)",
+        "equal_weight_cal": "Equal-weight, calibrated (B6)",
         "blend": "Blend",
         "blend_nbm": "Blend + NBM input (research)",
     }
@@ -527,7 +528,7 @@ def _diff_phrase(d: pd.Series | None) -> str:
 def blend_verdicts(v: MetricsView, label: str = "primary") -> dict[str, dict[str, list[int]]]:
     """Per comparison target, which leads the blend is significantly better / not better."""
     out: dict[str, dict[str, list[int]]] = {}
-    for target in ["best_single", "equal_weight", "nbm_lr"]:
+    for target in ["best_single", "equal_weight", "equal_weight_cal", "nbm_lr"]:
         better, not_better = [], []
         for ld in v.lead_list(label):
             if (
@@ -587,6 +588,10 @@ def blend_summary_lines(v: MetricsView) -> list[str]:
     for target, name in [
         ("best_single", "the best single model"),
         ("equal_weight", "the simple equal-weight average"),
+        (
+            "equal_weight_cal",
+            "the calibrated equal-weight average (B6: same model, one shared weight)",
+        ),
         ("nbm_lr", "NOAA's calibrated NBM"),
     ]:
         if not (verdict[target]["better"] or verdict[target]["not_better"]):
@@ -669,6 +674,60 @@ def spread_sentence(v: MetricsView) -> str:
     )
 
 
+VALUE_ALPHAS = (0.1, 0.2, 0.3, 0.5)
+
+
+def value_table(v: MetricsView, label: str, lead: int, methods: list[str]) -> pd.DataFrame:
+    rows = {}
+    for c in v.m.get("value_curves", []):
+        if c["label"] == label and c["lead"] == lead and c["method"] in methods:
+            lookup = dict(zip([round(a, 2) for a in c["alpha"]], c["value"], strict=True))
+            rows[v.name(c["method"])] = {
+                f"α = {a}": _fmt(lookup.get(a), "pct") for a in VALUE_ALPHAS
+            }
+    out = pd.DataFrame(rows).T
+    out.index.name = "share of a perfect forecast's value"
+    return out.reindex([v.name(m) for m in methods if v.name(m) in out.index])
+
+
+def decomposition_table(v: MetricsView, label: str, lead: int) -> pd.DataFrame:
+    rows = {}
+    for method in v.methods(label, lead, kind="prob"):
+        r = v.rec(label, lead, method)
+        if r is None or pd.isna(r.get("brier_resolution")):
+            continue
+        rows[v.name(method)] = {
+            "Brier": _fmt(r["brier"], "num"),
+            "reliability ↓": f"{r['brier_reliability']:.4f}",
+            "resolution ↑": f"{r['brier_resolution']:.4f}",
+            "uncertainty": f"{r['brier_uncertainty']:.4f}",
+        }
+    out = pd.DataFrame(rows).T
+    out.index.name = f"lead {lead}"
+    return out
+
+
+def value_sentence(v: MetricsView, label: str, lead: int, alpha: float = 0.2) -> str:
+    def at(method: str):
+        for c in v.m.get("value_curves", []):
+            if c["label"] == label and c["lead"] == lead and c["method"] == method:
+                return dict(zip([round(a, 2) for a in c["alpha"]], c["value"], strict=True)).get(
+                    alpha
+                )
+        return None
+
+    blend, nbm = at("blend"), at("nbm_lr")
+    if blend is None:
+        return ""
+    return (
+        f"For an astrophotographer whose good night is worth {1 / alpha:.0f}× the setup effort "
+        f"(α = {alpha}), acting on SkyTrust's night-before probability captures "
+        f"{blend:.0%} of the value of a perfect forecast"
+        + (f", versus {nbm:.0%} for NOAA's calibrated NBM" if nbm is not None else "")
+        + ". Where a curve drops below zero, following that forecast is worse than a fixed habit."
+    )
+
+
 def blend_section(v: MetricsView) -> list[str]:
     if v.rec("primary", RESULTS_LEAD, "blend") is None:
         return []
@@ -704,6 +763,35 @@ def blend_section(v: MetricsView) -> list[str]:
         "(positive = more likely usable):",
         "",
         md_table(coefficient_table(v, "primary", RESULTS_LEAD)),
+        "",
+    ]
+
+
+def decision_section(v: MetricsView, figure_paths: dict[str, str]) -> list[str]:
+    lead = RESULTS_LEAD
+    best = v.best_single("primary", lead)
+    methods = [m for m in ["blend", "nbm_lr", "equal_weight_cal", "equal_weight", best] if m]
+    if not v.m.get("value_curves"):
+        return []
+    return [
+        "## 9. Decision value and forecast quality",
+        "",
+        "Skill scores don't say whether a forecast is worth acting on. The cost-loss model does: "
+        "setting up costs effort C; skipping a usable night loses L. With α = C/L, a calibrated "
+        "user goes out when P ≥ α. *Relative value* is the share of a perfect forecast's benefit "
+        "(over the best fixed habit: always go, or never go) that acting on the forecast delivers.",
+        "",
+        f"![Decision value]({figure_paths['value']})" if "value" in figure_paths else "",
+        "",
+        md_table(value_table(v, "primary", lead, methods)),
+        "",
+        value_sentence(v, "primary", lead),
+        "",
+        "**Brier score decomposition** (Murphy 1973): reliability measures how honest the "
+        "probabilities are (lower is better), resolution how well they separate good nights from "
+        "bad (higher is better); uncertainty is the same for every method.",
+        "",
+        md_table(decomposition_table(v, "primary", lead)),
         "",
     ]
 
@@ -859,6 +947,7 @@ def results_markdown(metrics: dict, figure_paths: dict[str, str]) -> str:
         md_table(model_info_table(v, "primary"), index=False),
         "",
         *blend_section(v),
+        *decision_section(v, figure_paths),
         "## Caveats",
         "",
         *[f"- {c}" for c in data_caveats(v) + CAVEATS],
@@ -892,6 +981,12 @@ def write_results(metrics: dict, docs: Path = DOCS) -> Path:
             fig_dir / "site_skill_primary_lead1.png",
         ),  # fmt: skip
     }
+    if metrics.get("value_curves"):
+        value_methods = ["blend", "nbm_lr", "equal_weight_cal", "equal_weight", best, "climatology"]
+        paths["value"] = figures.value_curves(
+            metrics["value_curves"], [m for m in value_methods if m], "primary", RESULTS_LEAD,
+            fig_dir / "value_primary_lead1.png",
+        )  # fmt: skip
     rel = {k: str(p.relative_to(docs)) for k, p in paths.items()}
     path = docs / "RESULTS.md"
     path.write_text(results_markdown(metrics, rel))
