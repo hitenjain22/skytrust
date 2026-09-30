@@ -289,3 +289,17 @@ Hiten asked for the path that is easiest to understand and gives the most consis
   test depends on. Finding while writing them: Open-Meteo's docs now show `gfs_global_011` /
   `gfs_global_025`, but the API rejects those and still serves `gfs_global`; the test will flag it
   if that ever flips.
+
+### 2026-09-30 · NOAA NBM as a benchmark, not a blend input
+- **Design:** NBM is fetched and featurized like the five members (`benchmark_models` in config),
+  scored three ways: its own usable rule (hard), its raw clear fraction as a probability, and
+  calibrated with exactly B4's context features (the fair head-to-head). The shipped blend's inputs,
+  including the model spread, use members only, so the forward test's model is unchanged (the
+  retrained artifacts differ only in their timestamp/commit lines, checked).
+- **Evaluation set** now also requires NBM present (same nights for every method). That removed
+  50 lead-1 nights (NBM lead-1 gaps) and nothing at other leads; headline blend BSS 0.640 → 0.631.
+- **Research variant "blend + NBM input"** (trained on the ~15 months NBM exists): not
+  significantly different from the shipped blend at lead 1 (ΔBrier +0.0005, CI spans 0), so NBM
+  is *not* added to the shipped model. RESULTS regenerates this comparison every run.
+- **Result:** SkyTrust's blend beats NOAA's calibrated NBM at 5 of 7 leads (paired week-block CIs
+  exclude zero); leads 5 and 7 are not significant, and RESULTS says so plainly.

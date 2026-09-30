@@ -587,3 +587,28 @@ only approximate with lead-1 data.
 1. Your backtest already had a held-out test year. Why build a forward test?
 2. How do you make sure the logged forecasts can't be changed later?
 3. Why compare against NOAA's NBM and raw ensembles, and what would it mean if they won?
+
+---
+
+## NOAA's National Blend of Models (NBM) as the benchmark
+
+**What:** NBM is NOAA's operational forecast made by statistically blending many models, the
+professional version of SkyTrust's idea. It's now scored on the same test nights three ways:
+its own clear/not-clear rule, its raw clear fraction used as a probability, and a calibrated
+version with the same site/season context the blend gets (the fair comparison).
+
+**Result (numbers in RESULTS.md):** SkyTrust's blend beats calibrated NBM at most lead times,
+with paired confidence intervals excluding zero, and the report states where it doesn't. Giving
+the blend NBM as an extra input didn't help, so the shipped model stays as it is.
+
+**Why it matters:** "Better than the individual models" could just mean the models are weak.
+Beating (or honestly matching) a national weather service's operational blend is a much harder,
+more meaningful bar. Keeping NBM *out* of the shipped model preserved the integrity of the live
+forward test, which must score one fixed model.
+
+**Interview questions:**
+1. Why is NBM a better benchmark than the individual models?
+2. Why calibrate NBM before comparing? (Its raw output is a deterministic cloud forecast, not a
+   probability; comparing a probability to it uncalibrated would flatter your model.)
+3. NBM didn't help as an input. What does that suggest? (Its information is already contained in
+   the models the blend sees; it's largely built from them.)

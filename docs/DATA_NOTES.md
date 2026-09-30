@@ -183,3 +183,16 @@ today so the last night is fully in the past.) All five pass the 85 % bar; no su
   FAT's primary label a little stricter than other sites'.
 - **ASOS nearest vs max rule:** base rates differ by ≤ 3.1 points (largest at TRK and AUN, the
   multi-report stations; identical at FAT and BIH), consistent with the Phase 0 reasoning.
+
+---
+
+## 9. NOAA National Blend of Models (NBM), added 2026-09-30
+
+- `models=ncep_nbm_conus` (2.5 km; hourly to 36 h, 3-hourly after). Works in both the Previous
+  Runs and live Forecast APIs. Previous Runs archive: **lead 1 from 2024-10-09 (98.6 % fill), leads
+  2–7 from 2024-10-10…15 (100 %)**, so NBM covers the whole 2026 test period and 15 of the 24
+  training months.
+- NBM is NOAA's operational statistically post-processed blend of many models, i.e. the
+  professional version of what SkyTrust's blend does, which makes it the natural benchmark.
+- Open-Meteo's docs page lists GFS as `gfs_global_011` / `gfs_global_025`, but the API rejects
+  both; `gfs_global` still works (checked 2026-09-29; guarded by the weekly contract tests).
