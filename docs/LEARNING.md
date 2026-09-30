@@ -612,3 +612,30 @@ forward test, which must score one fixed model.
    probability; comparing a probability to it uncalibrated would flatter your model.)
 3. NBM didn't help as an input. What does that suggest? (Its information is already contained in
    the models the blend sees; it's largely built from them.)
+
+---
+
+## Methods batch: where the skill comes from, and what it's worth
+
+**B6, the calibrated equal-weight average.** Same model family as the blend but with *one*
+shared weight for all forecast models. Comparing blend vs B6 isolates the value of learning a
+weight per model; B6 vs B5 isolates calibration. The data said: combining models is most of the
+value, and learned weights add little. That's the well-known *forecast combination puzzle*
+(simple averages are hard to beat because estimated weights are noisy). Reporting it plainly is
+more convincing than claiming a fancy model did the work.
+
+**Brier decomposition.** Brier = reliability − resolution + uncertainty. Reliability: do the
+probabilities mean what they say? Resolution: do they separate good nights from bad? Uncertainty:
+how hard the period was (same for every method). A method can improve by being more honest or by
+discriminating better; the decomposition shows which.
+
+**Decision value (cost-loss model).** Setting up costs effort C; skipping a good night loses L.
+With α = C/L, going out when P ≥ α is the best policy for a calibrated forecast. Relative value
+= share of a perfect forecast's benefit (over the best fixed habit) that acting on the forecast
+delivers. It turns "BSS 0.63" into "you'd get about half the benefit of a perfect forecast", and
+it differs by user, which is why the app has a risk slider.
+
+**Interview questions:**
+1. Your blend barely beats a calibrated average. Why keep it, and why report that?
+2. What does the Brier decomposition tell you that the Brier score doesn't?
+3. Explain relative economic value to a non-statistician. Why does it depend on the user?

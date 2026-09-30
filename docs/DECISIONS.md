@@ -303,3 +303,15 @@ Hiten asked for the path that is easiest to understand and gives the most consis
   is *not* added to the shipped model. RESULTS regenerates this comparison every run.
 - **Result:** SkyTrust's blend beats NOAA's calibrated NBM at 5 of 7 leads (paired week-block CIs
   exclude zero); leads 5 and 7 are not significant, and RESULTS says so plainly.
+
+### 2026-09-30 · Methods batch 1: B6, Brier decomposition, decision value
+- **B6 = calibrated equal-weight average** (logistic regression on the members' mean clear
+  fraction + the same context as B4/blend). It splits the blend's edge into *calibration*
+  (B6 − B5) and *learned per-model weights* (blend − B6). Result: averaging beats the best single
+  model at 6/7 leads, calibration adds significantly at 1/7, learned weights at 1/7. The blend is
+  essentially a well-calibrated average (the "forecast combination puzzle"). The shipped model is
+  unchanged (the forward test scores one fixed model); stated plainly in RESULTS.
+- **Murphy Brier decomposition** (reliability / resolution / uncertainty, 10 bins) per method.
+- **Relative economic value** (Richardson 2000) over cost/loss ratios α = 0.05…0.95, with the
+  decision rule "go when P ≥ α" (what a user of a calibrated forecast would do), plus per-threshold
+  false-clear / miss rates stored in metrics.json for the app's risk slider.

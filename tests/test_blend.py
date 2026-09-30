@@ -198,3 +198,13 @@ def test_resume_bullets_use_only_metrics_numbers(trained, tmp_path):
     text = report.write_resume_bullets(metrics, tmp_path / "r.md").read_text()
     assert "Every number below comes from that file" in text
     assert re.search(r"\d+ weather models", bullets[0])
+
+
+def test_attribution_and_decision_sections(trained):
+    v = report.MetricsView(trained[2])
+    line = report.attribution_line(v)
+    assert "averaging the models" in line and "blend vs B6" in line
+    table = report.value_table(v, "primary", 1, ["blend", "nbm_lr"])
+    assert list(table.columns) == [f"α = {a}" for a in report.VALUE_ALPHAS]
+    assert "Blend" in table.index
+    assert "Blend" in report.decomposition_table(v, "primary", 1).index
