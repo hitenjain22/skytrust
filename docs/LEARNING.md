@@ -1,9 +1,111 @@
 # Learning Notes
 
-One entry per module: what it does, why it's built that way, the key concept, and interview
-questions to be ready for. Terms follow the glossary in SPEC.md Section 18.
+How to use this file: read **Start here** first (it's the whole project in a few pages), then
+the module entries below it when you want the details. Numbers are deliberately not copied here,
+so they can't go stale: see [RESULTS.md](RESULTS.md) and [RESUME_BULLETS.md](RESUME_BULLETS.md).
 
 ---
+
+# Start here
+
+## The 2-minute explanation
+
+> Astrophotographers check five or six forecast apps before driving out, because forecasts
+> disagree and none tells you how often it's been wrong. The #1 complaint is the "false clear":
+> it said clear, you set up, it clouded over. I built SkyTrust to measure that.
+>
+> First, a backtest: for every night since January 2024 at five California sites, I compared
+> what five weather models forecast one to seven days ahead with what the sky actually did.
+> "Actually did" is tricky: airport ceilometers can't see high cirrus, and reanalysis is a
+> model, so I count an hour as clear only if both agree. I used archived forecasts at fixed lead
+> times so the backtest can't peek at information a user wouldn't have had.
+>
+> Then a blend: a logistic regression per lead time that combines all the models, how much they
+> disagree, and site and season. I trained on 2024-25, tuned with time-ordered cross-validation,
+> and tested exactly once on 2026 with week-block bootstrap confidence intervals.
+>
+> The blend beats every single model at every lead time and cuts the night-before false-clear
+> rate by a lot versus climatology. Honestly, it only beats a plain average of the models at some
+> lead times, because most of the gain comes from averaging at all. The app shows tonight's
+> probability *and* how reliable that number has been at your site, and the trust indicator drops
+> for nights further out because I measured how skill decays.
+
+## The data flow in 8 steps
+
+1. **Sites** (`sites.py`): five airports; coordinates come from IEM metadata, never typed.
+2. **Raw data** (`data/`): ASOS reports, ERA5 reanalysis, archived forecasts, fetched
+   once through one HTTP client with retries and cached to disk.
+3. **Astronomy** (`astro.py`): each night's astronomical dark window, in UTC.
+4. **Rules** (`nightly.py`): clear hour, consecutive runs, usable night, missing-data rule.
+5. **Labels + features** (`labels.py`, `features.py`): what happened vs what was forecast,
+   per night; joined into `dataset.parquet` and validated (`dataset.py`).
+6. **Baselines + blend** (`baselines.py`, `blend.py`): trained on 2024-25 only, and the
+   blend exported to JSON.
+7. **Evaluation** (`evaluate.py`, `report.py`): scored once on 2026 with CIs, written to
+   `metrics.json`, RESULTS.md, and the README by code.
+8. **Live** (`live.py`, `app/`): the same features on today's forecasts, the same JSON model,
+   plus the measured track record.
+
+## Questions you'll most likely get (and where the answer lives)
+
+| Question | Short answer | Details |
+|---|---|---|
+| What is a "usable night" and why that definition? | ≥ 3 consecutive clear dark hours; imaging needs continuous time, not scattered clear hours | nightly.py |
+| How do you know what the sky actually did? | ASOS + ERA5, clear only if both agree; each covers the other's blind spot | labels.py |
+| What's look-ahead bias and how did you avoid it? | Using info you wouldn't have had; Previous Runs = forecasts actually issued d days ahead | SPEC 4.7, DECISIONS |
+| Why a time-based split? | Tomorrow resembles today; random splits leak. CV folds are grouped by date too | modeling.py |
+| How do you prove no test data reached training? | Overlap assertion + a test that spies on every `fit()` call | modeling.py, blend.py |
+| Why Brier score / BSS rather than accuracy? | Scores the probability itself; BSS = improvement over the seasonal base rate | evaluate.py |
+| What's a block bootstrap and why? | Resample whole weeks; nights are correlated, so single-night resampling overstates confidence | evaluate.py |
+| Why logistic regression? | Small data, calibrated probabilities, explainable coefficients; calibration check passed | blend.py |
+| The blend barely beats a simple average. Failure? | No: an honest result. Averaging does most of the work; learned weights add a little, mostly at lead 1 | blend.py, RESULTS |
+| Why do forecasts look bad against ASOS alone? | Models forecast total cloud incl. cirrus; ASOS can't see cirrus | RESULTS §6 |
+| What happens if the weather API is down? | Last good forecast with an "as of" banner; tested | live.py, app |
+| How do you keep README numbers honest? | Generated from metrics.json by code, with the commit hash | report.py |
+
+## Bugs we hit, and what each taught (good interview stories)
+
+- **NaN handling changed in pandas 3.** `stack()` stopped dropping NaN, so an all-missing HRRR
+  column failed a range check. *Lesson:* a test caught it before real data did; treat missing
+  as missing, never as a value.
+- **A permanently empty month re-downloaded forever.** ECMWF's archive starts in February 2024,
+  so January never "finished" and was never cached. *Lesson:* know which gaps are permanent.
+- **GFS reported −1% and 101% cloud.** Rare rounding artifacts. *Lesson:* validate at the
+  boundary, and decide deliberately (clip within 1 point, reject anything worse).
+- **Tuning drifted to the edge of the grid.** Flat validation curves plus noise. *Lesson:* treat
+  near-ties as ties and prefer the simpler model.
+- **Two lines in a figure shared a colour.** *Lesson:* test what the reader sees, not just
+  that the code runs.
+- **The app crashed only when the Moon was up at the chart's edge**, found by screenshotting the
+  real app on a real night. *Lesson:* fixtures can't cover every real condition; run the real
+  thing.
+- **Every results file said "-dirty".** Training rewrote tracked model files right before
+  evaluation recorded the commit. *Lesson:* define precisely what "the code that produced this"
+  means.
+- **The app took 10 s to start.** 3 s was importing a library it never used at run time.
+  *Lesson:* measure before optimizing; the biggest cost is often something you don't need.
+
+## Glossary (consistent with SPEC §18)
+
+- **Lead time:** how far ahead a forecast was made. Lead 1 ≈ issued 24 h before the valid time.
+- **Look-ahead bias:** using information that wouldn't have been available when the decision
+  was made; it makes backtests look better than reality.
+- **Brier score:** mean squared error of probability forecasts vs 0/1 outcomes (lower is better).
+- **Brier Skill Score (BSS):** 1 − Brier / Brier(climatology). 0 = no better than climatology,
+  1 = perfect, negative = worse.
+- **Calibration / reliability:** when the model says 70%, does it happen ~70% of the time?
+- **Log loss:** penalizes confident wrong predictions heavily.
+- **Climatology:** the historical base rate for that site and month.
+- **False-clear rate:** of the nights we said "go", the share that weren't usable.
+- **Reanalysis (ERA5):** a best estimate of past weather from a model constrained by observations.
+- **METAR / ASOS:** standardized automated airport weather reports; sky cover in oktas (eighths).
+- **Block bootstrap:** resampling whole weeks so intervals respect night-to-night correlation.
+- **TimeSeriesSplit:** cross-validation that always trains on the past and validates on the future.
+- **Logistic regression:** a probability from a weighted sum of features; coefficients show reliance.
+
+---
+
+# Module notes
 
 ## Project setup (`pyproject.toml`, `Makefile`, CI)
 
@@ -313,7 +415,8 @@ today's); row-based folds leak (sites share weather); picking the "best" model o
 **What:** Five reference forecasts, all scored on the same test nights:
 B1 climatology (training base rate for that site and month), B2 persistence (what happened d
 nights ago), B3 each model's own forecast as a yes/no, B4 each model recalibrated by logistic
-regression, B5 the plain average of all models' forecast clear fraction.
+regression *with the same site/month/dark-hours context the blend gets* (so blend vs B4 isolates
+the value of combining models), B5 the plain average of all models' forecast clear fraction.
 
 **Why:** A number like "Brier 0.10" means nothing alone. Baselines answer: better than just
 knowing the season? Better than the best single model? Better than naive averaging?
