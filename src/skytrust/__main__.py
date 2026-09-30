@@ -6,6 +6,7 @@ import argparse
 import datetime as dt
 import logging
 import sys
+from pathlib import Path
 
 from skytrust.config import load_settings, load_sites
 from skytrust.data.http import HttpClient
@@ -136,6 +137,29 @@ def cmd_build_climatology(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build_light_pollution(args: argparse.Namespace) -> int:
+    from skytrust import lightpollution
+
+    settings = load_settings()
+    tif = Path(args.atlas) if args.atlas else lightpollution.ATLAS_TIF
+    if not tif.exists():
+        print(
+            f"Atlas not found at {tif}. Download {settings.raw['light_pollution']['atlas_url']} "
+            f"(653 MB) and unzip World_Atlas_2015.tif there, or pass --atlas PATH.",
+            file=sys.stderr,
+        )
+        return 2
+    grid = lightpollution.build(settings, tif)
+    lightpollution.save(grid)
+    lightpollution.save_overlay(grid)
+    print(
+        f"Wrote {lightpollution.GRID_PATH} and {lightpollution.OVERLAY_PATH} "
+        f"({grid.ucd.shape[0]} x {grid.ucd.shape[1]} cells, {grid.south:.2f}..{grid.north:.2f} N, "
+        f"{grid.west:.2f}..{grid.east:.2f} E)"
+    )
+    return 0
+
+
 def cmd_sensitivity(args: argparse.Namespace) -> int:
     from skytrust import sensitivity
 
@@ -235,6 +259,11 @@ def build_parser() -> argparse.ArgumentParser:
     ev.set_defaults(func=cmd_evaluate)
     cl = sub.add_parser("build-climatology", help="20-year reference climatology (2004-2023)")
     cl.set_defaults(func=cmd_build_climatology)
+    lp = sub.add_parser(
+        "build-light-pollution", help="Crop the light-pollution atlas to the mapped region"
+    )
+    lp.add_argument("--atlas", help="path to World_Atlas_2015.tif (default: data/raw/...)")
+    lp.set_defaults(func=cmd_build_light_pollution)
     se = sub.add_parser("sensitivity", help="Re-run everything for 9 cloud definitions")
     se.set_defaults(func=cmd_sensitivity)
     wf = sub.add_parser("walkforward", help="Monthly refit-and-forecast evaluation from 2025")

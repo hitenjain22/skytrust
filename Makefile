@@ -1,4 +1,4 @@
-.PHONY: setup lint format test test-fast test-network tonight validate-sites data climatology dataset train hourly sensitivity walkforward spatial report app all
+.PHONY: setup lint format test test-fast test-network tonight validate-sites data climatology light-pollution dataset train hourly sensitivity walkforward spatial report app all
 
 # All commands run inside the uv-managed virtual environment.
 RUN = uv run
@@ -37,6 +37,9 @@ climatology:  ## 20-year reference climatology (history cached after the first r
 	$(RUN) python -m skytrust fetch --source asos --start 2004-01-01 --end 2023-12-31
 	$(RUN) python -m skytrust fetch --source era5 --start 2004-01-01 --end 2023-12-31
 	$(RUN) python -m skytrust build-climatology
+
+light-pollution:  ## crop the light-pollution atlas (download it first; see docs/DATA_NOTES.md §11)
+	$(RUN) python -m skytrust build-light-pollution
 
 dataset:
 	$(RUN) python -m skytrust build-dataset

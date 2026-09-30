@@ -128,3 +128,15 @@ seed: 20260101
 bootstrap_resamples: 1000
 # A bootstrap CI needs enough independent blocks; subsets spanning fewer weeks get no CI.
 min_weeks_for_ci: 8
+
+light_pollution:
+  # World Atlas of Artificial Night Sky Brightness (Falchi et al. 2016, Science Advances 2:e1600377;
+  # data doi:10.5880/GFZ.1.4.2016.001, CC BY-NC 4.0). Artificial zenith brightness, 30" grid.
+  atlas_url: https://datapub.gfz.de/download/10.5880.GFZ.1.4.2016.001/World_Atlas_2015.zip
+  # Same region as custom locations (live.CUSTOM_BOUNDS).
+  bounds: {lat: [32.0, 49.0], lon: [-125.0, -114.0]}
+  natural_ucd: 174.0          # paper: natural background 22.0 mag/arcsec2 = 174 ucd/m2
+  natural_sqm: 22.0
+  sigma_sqm: 0.15             # paper: model vs SQM measurements, standard deviation (mag/arcsec2)
+  radii_km: [25, 50, 100]     # "darkest sky within ..." search radii
+  dark_bortle: 4              # counted as a dark site in the "3 conditions" check
