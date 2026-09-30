@@ -664,3 +664,21 @@ good on average.
 1. Why does the reference climatology matter for a skill score?
 2. How do you show your conclusions aren't an artifact of your chosen thresholds?
 3. What's the difference between a frozen-model test and a walk-forward evaluation, and why do both?
+
+---
+
+## Unseen locations: the site-agnostic blend and leave-one-site-out
+
+**What:** A version of the blend with no site identity in its inputs, tested by holding each
+airport out entirely: train on the other four, forecast the fifth. It powers the app's custom
+locations, where the honest reliability statement is "at places the model had never seen, it
+did this well", not a made-up local record.
+
+**Key concept: spatial generalization.** A model can look great at the places it trained on and
+fail elsewhere. Leave-one-group-out cross-validation is how you measure transfer to new groups
+(sites, patients, stores). Here the group is the site, and the test period stays in the future.
+
+**Interview questions:**
+1. How would you know your model works at a location with no training data?
+2. Why hold out a whole site instead of random nights from every site?
+3. What would you tell a user about reliability at a custom location?

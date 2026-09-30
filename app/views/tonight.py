@@ -138,6 +138,9 @@ def render(ctx: Context) -> None:
     reliability_card(night, ctx.site.id)
     risk_panel(ctx, night)
     st.plotly_chart(charts.darkness_timeline(ctx.site, night, tz, pal), width="stretch")
+    chance = charts.hourly_clear_chance(night, tz, pal)
+    if chance is not None:
+        st.plotly_chart(chance, width="stretch")
     st.plotly_chart(
         charts.hourly_cloud(fc.hourly, night, tz, ctx.settings.clear_threshold, pal),
         width="stretch",

@@ -160,6 +160,17 @@ def cmd_spatial(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_hourly(args: argparse.Namespace) -> int:
+    from skytrust import hourly
+
+    settings = load_settings()
+    df = hourly.build_hourly(settings, load_sites())
+    df.to_parquet(hourly.HOURLY_DATASET, index=False)
+    path = hourly.save(hourly.train_and_evaluate(df, settings))
+    print(f"Wrote {hourly.HOURLY_DATASET} ({len(df):,} hour rows) and {path}")
+    return 0
+
+
 def cmd_forward_log(args: argparse.Namespace) -> int:
     from pathlib import Path
 
@@ -230,6 +241,8 @@ def build_parser() -> argparse.ArgumentParser:
     wf.set_defaults(func=cmd_walkforward)
     sp = sub.add_parser("spatial", help="Leave-one-site-out test of the site-agnostic blend")
     sp.set_defaults(func=cmd_spatial)
+    hr = sub.add_parser("hourly", help="Hourly P(clear) model: build, train, evaluate")
+    hr.set_defaults(func=cmd_hourly)
     tr = sub.add_parser("train", help="Fit the blend per label x lead (train years only) -> JSON")
     tr.set_defaults(func=cmd_train)
     tn = sub.add_parser("tonight", help="Tonight + 7-night outlook for one site (live)")

@@ -350,3 +350,26 @@ def outlook_grid(forecast, tz: str, pal: dict) -> go.Figure:
     return _layout(
         fig, pal, "Median forecast cloud cover by dark hour (P(usable) after the date)", height=330
     )
+
+
+def hourly_clear_chance(night, tz: str, pal: dict) -> go.Figure | None:
+    """Bars: the hourly model's probability that each dark hour is clear."""
+    if night.hourly_clear is None or night.hourly_clear.empty:
+        return None
+    p = night.hourly_clear
+    fig = go.Figure(
+        go.Bar(
+            x=_local(p.index, tz),
+            y=p.values * 100,
+            marker_color=pal["accent"],
+            hovertemplate="%{x|%-I %p}: %{y:.0f}% chance clear<extra></extra>",
+        )
+    )
+    return _layout(
+        fig,
+        pal,
+        "Chance each dark hour is clear (hourly model, %)",
+        height=240,
+        yaxis={"range": [0, 100]},
+        time_axis=True,
+    )

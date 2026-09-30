@@ -214,3 +214,22 @@ def test_parse_survives_real_metar_quirks():
     assert df["metar"].iloc[0].endswith("FIRST 4  24HR MAX")
     assert df["metar"].iloc[1].endswith('9" T1133')
     assert df["skyc1"].iloc[2] == "CLR"
+
+
+def test_load_asos_keeps_only_what_labelling_needs(tmp_path, fixtures_dir):
+    """Regression: loading 20 years of AUN history with every column (incl. raw METAR text)
+    exhausted 8 GB of RAM. Labelling only needs the time and the four sky-cover codes."""
+    folder = tmp_path / "asos" / "SAC" / "na"
+    folder.mkdir(parents=True)
+    text = (fixtures_dir / "iem_asos_SAC_20250309_20250311.csv").read_text()
+    (folder / "a.csv").write_text(text)
+    (folder / "b.csv").write_text(text)  # overlapping chunk
+    df = iem.load_asos("SAC", root=tmp_path)
+    assert list(df.columns) == ["station", "valid", *iem.SKY_COLS]
+    assert all(isinstance(df[c].dtype, pd.CategoricalDtype) for c in iem.SKY_COLS)
+    assert df["valid"].is_unique
+    full = iem.parse_asos_csv(text)
+    assert len(df) == len(full)
+    hourly_new = iem.hourly_cover(df, DEFAULT)
+    hourly_old = iem.hourly_cover(full, DEFAULT)
+    pd.testing.assert_series_equal(hourly_new, hourly_old)  # identical labels

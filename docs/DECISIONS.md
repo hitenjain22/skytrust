@@ -340,3 +340,20 @@ Hiten asked for the path that is easiest to understand and gives the most consis
   before that month and forecasts that month; the long-term climatology is the fixed reference.
   Gives out-of-sample evidence for 2025 too and a month-by-month stability check. It complements,
   not replaces, the frozen-model test (which evaluates the exact shipped model).
+
+### 2026-09-30 · Site-agnostic blend, leave-one-site-out test, custom locations
+- **Geo blend:** same pipeline as the blend minus the site one-hot, trained on all sites'
+  training years and exported to `artifacts/geo/`. Used only for custom locations; the airport
+  forecasts keep the site-aware blend.
+- **Evidence:** leave-one-site-out. Each site is held out, the geo blend is trained on the other
+  sites' training years only, then scored on the held-out site's test period, on the same nights as
+  the shipped blend (RESULTS §12). A spy test proves the held-out site never reaches training.
+- **Custom locations** are limited to the Pacific-time West (lat 32–49, lon −125…−114): the app
+  displays Pacific time and that's the region the models were validated on. Elevation comes from
+  Open-Meteo's terrain model. Instead of a local track record, the app shows the unseen-site skill.
+- **Where Tonight:** all sites ranked by tonight's probability, on a map (MapLibre dark tiles).
+
+### 2026-09-30 · UI/engineering batch
+- Night-by-hour outlook grid (Clear Sky Chart style), the latest GOES-West GeoColor image with a
+  link to the animated loop, an About section, Paul Tol colour-blind-safe palettes in figures and
+  app, and Dependabot for weekly dependency/Actions update PRs (tested by CI).

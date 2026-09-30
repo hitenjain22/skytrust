@@ -204,6 +204,43 @@ def test_sufficiency(df: pd.DataFrame) -> tuple[int, str]:
     return n, verdict
 
 
+def climatology_quality_section(nights: pd.DataFrame) -> list[str]:
+    """Long-term reference: years used per site, and 20-year vs training-years base rates."""
+    import json
+
+    from skytrust import climatology
+
+    if not climatology.TABLE_PATH.exists():
+        return []
+    table = json.loads(climatology.TABLE_PATH.read_text())
+    train = nights[nights["split"] == "train"]
+    rows = {}
+    for site, years in table["years_used"].items():
+        months = table["tables"]["primary"].get(site, {})
+        n = sum(v["n"] for v in months.values())
+        long_rate = sum(v["rate"] * v["n"] for v in months.values()) / n if n else float("nan")
+        train_rate = (
+            train.loc[train["site"] == site, "usable_primary"].dropna().astype(float).mean()
+        )
+        rows[site] = {
+            "usable years": f"{len(years)} ({min(years)}–{max(years)})" if years else "0",
+            "labeled nights": n,
+            "base rate, 20-yr": pct(long_rate),
+            "base rate, training years": pct(train_rate),
+        }
+    out = pd.DataFrame(rows).T
+    out.index.name = "site"
+    return [
+        "## 10. Long-term climatology (the skill-score reference)",
+        "",
+        f"Nights {table['period'][0]} → {table['period'][1]} labeled with the same code; station-"
+        f"years with < {table['min_year_coverage']:.0%} labeled nights dropped.",
+        "",
+        md_table(out),
+        "",
+    ]
+
+
 def data_quality_markdown(df: pd.DataFrame, settings: Settings, generated: dt.datetime) -> str:
     nights = one_row_per_night(df)
     n_test, verdict = test_sufficiency(df)
@@ -270,6 +307,7 @@ def data_quality_markdown(df: pd.DataFrame, settings: Settings, generated: dt.da
         "",
         f"Labeled test nights at lead 1 with ≥ 1 model available (all sites): **{verdict}**.",
         "",
+        *climatology_quality_section(nights),
     ]
     return "\n".join(parts)
 
@@ -986,6 +1024,37 @@ def spatial_section(sp: dict | None) -> list[str]:
     ]
 
 
+def hourly_section(h: dict | None) -> list[str]:
+    if not h:
+        return []
+    names = {
+        "hourly_model": "Hourly model",
+        "share_of_models": "Share of models saying clear",
+        "climatology": "Hourly climatology",
+    }
+    rows = {}
+    for e in h["leads"]:
+        row = {"dark hours": e["n_hours"], "clear rate": _fmt(e["base_rate"], "pct")}
+        for m, name in names.items():
+            row[f"BSS {name}"] = with_ci(pd.Series(e["methods"][m]), "bss")
+        rows[f"L{e['lead']}"] = row
+    table = pd.DataFrame(rows).T
+    table.index.name = "lead"
+    return [
+        "## 13. Hourly probabilities",
+        "",
+        "Planning *when* to image needs hour-level forecasts. A second logistic model per lead "
+        "predicts P(this dark hour is clear) from every model's forecast cover for that hour, "
+        "their mean and spread, the hour's position in the night, month and site; the app shows "
+        "these as "
+        "hourly bars. Test period, scored per dark hour (BSS vs the hourly training-years "
+        "climatology; CIs resample weeks).",
+        "",
+        md_table(table),
+        "",
+    ]
+
+
 def decision_section(v: MetricsView, figure_paths: dict[str, str]) -> list[str]:
     lead = RESULTS_LEAD
     best = v.best_single("primary", lead)
@@ -1084,6 +1153,12 @@ def ecmwf_flags(v: MetricsView) -> list[str]:
                 "physics rather than real-world skill."
             )
     return flags
+
+
+def hourly_results() -> dict | None:
+    from skytrust import hourly
+
+    return hourly.load()
 
 
 def spatial_results() -> dict | None:
@@ -1188,6 +1263,7 @@ def results_markdown(metrics: dict, figure_paths: dict[str, str]) -> str:
         *robustness_section(sensitivity_results()),
         *walkforward_section(walkforward_results(), figure_paths),
         *spatial_section(spatial_results()),
+        *hourly_section(hourly_results()),
         "## Caveats",
         "",
         *[f"- {c}" for c in data_caveats(v) + CAVEATS],

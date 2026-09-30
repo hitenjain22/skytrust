@@ -132,18 +132,25 @@ def fetch_asos_range(
     return pd.concat(frames, ignore_index=True)
 
 
+LABEL_COLUMNS = ["station", "valid", *SKY_COLS]
+
+
 def load_asos(station: str, root: Path = RAW_DIR) -> pd.DataFrame:
-    """Every cached report for a station. Overlapping chunks (the current year re-fetched
-    with a later end date) are de-duplicated on (valid time, raw METAR)."""
+    """Every cached report for a station, keeping only what labelling needs (time + the four
+    sky-cover codes, stored as categories). 20 years of history with every column, including the
+    raw METAR text, didn't fit in 8 GB of RAM. Overlapping chunks (the current year re-fetched with
+    a later end date) are de-duplicated on (time, sky codes)."""
     files = sorted((root / "asos" / station / "na").glob("*.csv"))
     if not files:
-        return parse_asos_csv(",".join(["station", "valid", *SKY_COLS]) + "\n")
-    df = pd.concat([parse_asos_csv(p.read_text()) for p in files], ignore_index=True)
-    key = ["valid", "metar"] if "metar" in df.columns else ["valid"]
-    return df.drop_duplicates(subset=key).sort_values("valid").reset_index(drop=True)
+        return parse_asos_csv(",".join(LABEL_COLUMNS) + "\n", columns=LABEL_COLUMNS)
+    df = pd.concat(
+        [parse_asos_csv(p.read_text(), columns=LABEL_COLUMNS) for p in files], ignore_index=True
+    )
+    df = df.drop_duplicates(subset=["valid", *SKY_COLS]).sort_values("valid").reset_index(drop=True)
+    return df.astype({c: "category" for c in SKY_COLS})
 
 
-def parse_asos_csv(text: str) -> pd.DataFrame:
+def parse_asos_csv(text: str, columns: list[str] | None = None) -> pd.DataFrame:
     """Parse IEM CSV into a DataFrame with a tz-aware UTC `valid` column.
 
     Raw METAR text has real-world quirks: a stray carriage return inside a remark (TRK, 2008)
@@ -156,6 +163,7 @@ def parse_asos_csv(text: str) -> pd.DataFrame:
             dtype=str,
             keep_default_na=False,
             quoting=csv.QUOTE_NONE,
+            usecols=(lambda c: c in columns) if columns else None,
         )
     except (pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
         raise BadResponseError(f"Malformed IEM CSV: {exc}") from exc

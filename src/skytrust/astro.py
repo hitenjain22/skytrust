@@ -36,7 +36,10 @@ def _timescale():
 
 
 def _topos(site: Site):
-    return wgs84.latlon(site.lat, site.lon, elevation_m=site.elevation_m)
+    # An unknown elevation (custom location whose terrain lookup failed) falls back to sea level:
+    # it shifts dusk/dawn by seconds, whereas NaN would poison every calculation.
+    elevation = site.elevation_m if site.elevation_m == site.elevation_m else 0.0
+    return wgs84.latlon(site.lat, site.lon, elevation_m=elevation)
 
 
 def _to_skyfield(times: pd.DatetimeIndex):

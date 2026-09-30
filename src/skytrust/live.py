@@ -64,8 +64,15 @@ def custom_site(
         )
     except (SourceUnavailableError, BadResponseError, KeyError, IndexError):
         elevation = float("nan")  # the forecast API then uses its own terrain lookup
-    return Site(f"{CUSTOM_ID}_{lat:.3f}_{lon:.3f}", name or "Custom location", lat, lon, elevation,
-                "custom", "America/Los_Angeles")  # fmt: skip
+    return Site(
+        f"{CUSTOM_ID}_{lat:.3f}_{lon:.3f}",
+        name or "Custom location",
+        lat,
+        lon,
+        elevation,
+        "custom",
+        "America/Los_Angeles",
+    )
 
 
 def is_custom(site: Site) -> bool:
@@ -116,6 +123,7 @@ class NightForecast:
     # {model: {frac_clear, longest_clear_run_frac, mean_cover}} exactly as fed to the blend
     model_features: dict = field(default_factory=dict)
     blend_version: str | None = None  # git commit recorded in the artifact that produced p_usable
+    hourly_clear: pd.Series | None = None  # P(clear) per dark hour from the hourly model
 
 
 @dataclass
@@ -183,8 +191,16 @@ def track_record(metrics: dict | None, site_id: str, lead: int) -> dict | None:
     overall = base[base["subset_type"] == "overall"]
     if overall.empty:
         return None
-    keys = ["bss", "bss_lo", "bss_hi", "false_clear_rate", "false_clear_rate_lo",
-            "false_clear_rate_hi", "n", "n_weeks"]  # fmt: skip
+    keys = [
+        "bss",
+        "bss_lo",
+        "bss_hi",
+        "false_clear_rate",
+        "false_clear_rate_lo",
+        "false_clear_rate_hi",
+        "n",
+        "n_weeks",
+    ]
     out = {"overall": {k: overall.iloc[0].get(k) for k in keys}}
     out["site"] = {k: site_row.iloc[0].get(k) for k in keys} if len(site_row) else None
     return out
@@ -207,9 +223,11 @@ def upcoming_nights(site: Site, now_utc: pd.Timestamp, settings: Settings) -> pd
     """The dark window we're in (or the next one) plus the following nights, N_NIGHTS total."""
     today = now_utc.tz_convert(site.timezone).date()
     windows = astro.dark_windows(
-        site, today - dt.timedelta(days=1), today + dt.timedelta(days=N_NIGHTS + 1),
+        site,
+        today - dt.timedelta(days=1),
+        today + dt.timedelta(days=N_NIGHTS + 1),
         settings.raw["definitions"]["sun_altitude_deg"],
-    )  # fmt: skip
+    )
     windows = windows.dropna()
     return windows[windows["dawn_utc"] > now_utc].head(N_NIGHTS)
 
@@ -251,6 +269,36 @@ def _model_features(summaries: dict, models: list[str], night: dt.date) -> dict:
     return out
 
 
+def hourly_probabilities(
+    ctx: _Context,
+    night: dt.date,
+    hours: pd.DatetimeIndex,
+    dusk: pd.Timestamp,
+    dawn: pd.Timestamp,
+    lead: int,
+) -> pd.Series | None:
+    """P(clear) for each dark hour from the hourly model (same features as its training)."""
+    path = ctx.artifacts_dir / "hourly" / f"model_hourly_lead{lead}.json"
+    if not path.exists() or len(hours) == 0:
+        return None
+    artifact = inference.load_artifact(path)
+    covers = ctx.hourly_covers.reindex(hours)
+    rows = pd.DataFrame(index=hours)
+    for m in artifact["models"]:
+        rows[f"{m}_cover"] = covers[m] if m in covers else np.nan
+    cols = [f"{m}_cover" for m in artifact["models"]]
+    rows["mean_cover"] = rows[cols].mean(axis=1)
+    rows["spread_cover"] = rows[cols].std(axis=1, ddof=0).where(rows[cols].notna().sum(axis=1) >= 2)
+    span = (dawn - dusk).total_seconds()
+    rows["night_position"] = ((hours - dusk).total_seconds() / span).clip(0, 1)
+    rows = rows.assign(site=ctx.site.id, month=pd.Timestamp(night).month, dark_hours=0.0)
+    if rows["mean_cover"].isna().all():
+        return None
+    return pd.Series(
+        inference.predict_proba(artifact, inference.raw_inputs(rows, artifact)), index=hours
+    )
+
+
 def _agreement(spread: float, threshold: float | None) -> str:
     if np.isnan(spread) or threshold is None:
         return "Not enough models"
@@ -272,6 +320,7 @@ class _Context:
     nights_astro: pd.DataFrame
     moon_events: pd.DataFrame
     variant: str = "primary"  # "geo" = site-agnostic blend for custom locations
+    hourly_covers: pd.DataFrame | None = None  # time x model cloud cover (for the hourly model)
 
 
 def _forecast_night(
@@ -329,6 +378,7 @@ def _forecast_night(
         ],
         model_features=per_model,
         blend_version=artifact.get("git_commit"),
+        hourly_clear=hourly_probabilities(ctx, night, hours, dusk, dawn, lead),
     )
 
 
@@ -368,8 +418,21 @@ def build_forecast(
     }
     median = hourly.pivot_table(index="time", columns="model", values="cloud_cover").median(axis=1)
     variant = "geo" if is_custom(site) else "primary"
-    ctx = _Context(site, settings, now_utc, artifacts_dir, metrics, summaries, median,
-                   night_hours, nights_astro.loc[windows.index], moon_events, variant)  # fmt: skip
+    covers = hourly.pivot_table(index="time", columns="model", values="cloud_cover")
+    ctx = _Context(
+        site,
+        settings,
+        now_utc,
+        artifacts_dir,
+        metrics,
+        summaries,
+        median,
+        night_hours,
+        nights_astro.loc[windows.index],
+        moon_events,
+        variant,
+        covers,
+    )
     nights = [_forecast_night(ctx, n, w["dusk_utc"], w["dawn_utc"]) for n, w in windows.iterrows()]
     return LiveForecast(site, fetched_at, source, warning, nights, hourly)
 

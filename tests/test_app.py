@@ -213,3 +213,43 @@ def test_risk_slider_changes_the_call(offline, monkeypatch):
         at.select_slider(key="risk").set_value(setting).run()
         assert not at.exception
         assert any("At this setting tonight's call is" in m.value for m in at.markdown)
+
+
+def test_custom_location_via_deep_link(offline, monkeypatch):
+    import math
+
+    from skytrust.config import Site
+
+    api_up(monkeypatch)
+    monkeypatch.setattr(
+        live,
+        "custom_site",
+        lambda lat, lon, name, settings, client=None: Site(
+            f"CUSTOM_{lat:.3f}_{lon:.3f}", name, lat, lon, math.nan, "custom", "America/Los_Angeles"
+        ),
+    )
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params.update(
+        {"page": "tonight", "lat": "37.7306", "lon": "-119.5738", "name": "Glacier Point"}
+    )
+    at.run()
+    assert not at.exception, at.exception
+    assert any("Tonight at Glacier Point" in h.value for h in at.header)
+    assert any("never seen" in c.value for c in at.caption)
+
+
+def test_custom_location_out_of_bounds_is_friendly(offline, monkeypatch):
+    api_up(monkeypatch)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params.update({"page": "tonight", "lat": "37.7", "lon": "-119.6"})
+    at.run()
+    at.sidebar.number_input(key="lat").set_value(48.9).run()
+    assert not at.exception
+
+
+def test_where_tonight_ranks_every_site(offline, monkeypatch):
+    api_up(monkeypatch)
+    at = visit("Where Tonight")
+    assert not at.exception, at.exception
+    assert any("Where should I go tonight?" in h.value for h in at.header)
+    assert len(at.dataframe) == 1 and len(at.dataframe[0].value) == 5

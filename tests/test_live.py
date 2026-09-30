@@ -225,3 +225,38 @@ def test_live_path_does_not_import_sklearn_or_matplotlib():
     )
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert out.stdout.strip() == ""
+
+
+def test_custom_site_bounds_and_elevation(settings):
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    client.get_json.return_value = {"elevation": [2199.0]}
+    site = live.custom_site(37.7306, -119.5738, "Glacier Point", settings, client)
+    assert live.is_custom(site) and site.elevation_m == 2199.0 and site.name == "Glacier Point"
+    assert site.timezone == "America/Los_Angeles"
+    with pytest.raises(ValueError):
+        live.custom_site(25.0, -80.0, "Miami", settings, client)  # outside the Pacific-time West
+
+
+def test_custom_site_forecast_uses_geo_blend_and_unseen_record(settings):
+    import math
+
+    from conftest import FIXTURES
+    from skytrust.config import Site
+
+    payload = json.loads((FIXTURES / "openmeteo_forecast_SAC_live.json").read_text())
+    site = Site(
+        "CUSTOM_38.500_-121.500",
+        "Test spot",
+        38.5,
+        -121.5,
+        math.nan,
+        "custom",
+        "America/Los_Angeles",
+    )
+    now = pd.Timestamp("2026-09-25 01:00", tz="UTC")
+    fc = live.build_forecast(site, payload, now, now, settings)
+    n = fc.nights[0]
+    assert n.p_usable is not None and 0 <= n.p_usable <= 1
+    assert n.track_record is None or n.track_record.get("kind") == "unseen"
