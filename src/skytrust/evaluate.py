@@ -246,14 +246,19 @@ def paired_differences(result: LeadResult, y: np.ndarray, W_boot: np.ndarray) ->
 # ---------- the whole evaluation ----------
 
 
+# Paths whose changes would change the results (everything else is an output or docs).
+RESULT_INPUTS = ("src", "config", "pyproject.toml", "uv.lock")
+
+
 def git_commit() -> str | None:
-    """Short commit hash, with '-dirty' if tracked files have uncommitted changes, so a
-    metrics file always says whether it came from exactly that commit."""
+    """Short commit hash, with '-dirty' if the *code or config that produces results* has
+    uncommitted changes. Generated outputs (artifacts/, docs/, data/) are excluded: `make train`
+    rewrites the model files just before `evaluate` records this."""
     try:
         run = lambda *args: subprocess.run(  # noqa: E731
             ["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, check=True
         ).stdout.strip()
-        dirty = run("status", "--porcelain", "--untracked-files=no")
+        dirty = run("status", "--porcelain", "--untracked-files=no", "--", *RESULT_INPUTS)
         return run("rev-parse", "--short", "HEAD") + ("-dirty" if dirty else "")
     except (OSError, subprocess.CalledProcessError):
         return None

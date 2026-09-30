@@ -257,3 +257,23 @@ def test_subsets_with_too_few_weeks_get_no_ci(synthetic_built, fast_settings):
     rec = pd.DataFrame(evaluate.evaluate_lead(result, strict, seed=1)["records"])
     assert rec["brier"].notna().any()  # point estimates are still reported
     assert rec["brier_lo"].isna().all() and rec["false_clear_rate_hi"].isna().all()
+
+
+def test_git_commit_dirty_check_ignores_generated_outputs(monkeypatch):
+    """Regression: `make train` rewrites artifacts/*.json right before `evaluate` records the
+    commit, which falsely marked every pipeline run '-dirty'. Only code/config count."""
+    import subprocess
+
+    seen = {}
+
+    def fake_run(args, **kw):
+        if "status" in args:
+            seen["status_args"] = args
+            return subprocess.CompletedProcess(args, 0, stdout="")
+        return subprocess.CompletedProcess(args, 0, stdout="abc1234")
+
+    monkeypatch.setattr(evaluate.subprocess, "run", fake_run)
+    assert evaluate.git_commit() == "abc1234"
+    pathspec = seen["status_args"][seen["status_args"].index("--") + 1 :]
+    assert "src" in pathspec and "config" in pathspec
+    assert "artifacts" not in pathspec and "docs" not in pathspec
