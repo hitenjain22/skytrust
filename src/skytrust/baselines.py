@@ -302,7 +302,7 @@ def run_baselines(df: pd.DataFrame, label: str, lead: int, settings: Settings) -
     methods["equal_weight_cal"] = equal_weight_calibrated(
         train, rows, label_col, lead, settings, site_ids
     )
-    best = min(cv_losses, key=cv_losses.get) if cv_losses else None
+    best = min(cv_losses, key=cv_losses.__getitem__) if cv_losses else None
     log.info("%s lead %d: %d eval rows, best single (CV) = %s", label, lead, len(rows), best)
     return LeadResult(
         label, lead, eval_rows.reset_index(drop=True), methods, best, rows.reset_index(drop=True)

@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -121,7 +122,7 @@ def summarize(preds: pd.DataFrame, settings: Settings) -> dict:
         y, clim_p = g["y"].to_numpy(), g["climatology"].to_numpy()
         codes = evaluate.week_codes(g["night_date"])
         W = evaluate.bootstrap_weights(codes, settings.raw["bootstrap_resamples"], rng)
-        entry = {
+        entry: dict[str, Any] = {
             "lead": int(lead),
             "n": int(len(g)),
             "n_weeks": int(codes.max()) + 1,
@@ -133,13 +134,7 @@ def summarize(preds: pd.DataFrame, settings: Settings) -> dict:
             if m not in g:
                 continue
             p = g[m].to_numpy(dtype=float)
-            point = evaluate.all_metrics(y, p, clim_p, np.ones((1, len(y))), "prob", m, threshold)
-            boot = evaluate.all_metrics(y, p, clim_p, W, "prob", m, threshold)
-            entry["methods"][m] = {k: float(v[0]) for k, v in point.items()} | {
-                f"{k}_{b}": ci
-                for k, v in boot.items()
-                for b, ci in zip(("lo", "hi"), evaluate._ci(v), strict=True)
-            }
+            entry["methods"][m] = evaluate.point_and_ci(y, p, clim_p, W, m, threshold)
         for a, b in PAIRS:
             if a in g and b in g:
                 diff = evaluate.brier_matrix(y, g[a].to_numpy(float), W) - evaluate.brier_matrix(
@@ -160,7 +155,7 @@ def summarize(preds: pd.DataFrame, settings: Settings) -> dict:
         pooled.append(entry)
         for period, mg in g.groupby("period"):
             ref = np.mean((mg["climatology"] - mg["y"]) ** 2)
-            row = {
+            row: dict[str, Any] = {
                 "lead": int(lead),
                 "period": period,
                 "n": int(len(mg)),

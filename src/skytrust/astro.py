@@ -78,7 +78,7 @@ def dark_windows(
     def is_dark(t) -> np.ndarray:
         return _altitude_deg(site, "sun", t) < sun_altitude_deg
 
-    is_dark.step_days = SEARCH_STEP_DAYS
+    is_dark.step_days = SEARCH_STEP_DAYS  # type: ignore[attr-defined]  # skyfield's convention
     times, became_dark = almanac.find_discrete(
         ts.from_datetime(t0.to_pydatetime()), ts.from_datetime(t1.to_pydatetime()), is_dark
     )

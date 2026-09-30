@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -59,7 +60,7 @@ def summarize(preds: pd.DataFrame, settings: Settings) -> dict:
     clim = climatology.load_table("primary")
     rng = np.random.default_rng(int(settings.raw["seed"]))
     threshold = settings.raw["decision_threshold"]
-    out = {"leads": []}
+    out: dict[str, Any] = {"leads": []}
     for lead, g in preds.groupby("lead"):
         y = g["y"].to_numpy()
         p_clim = (
@@ -71,16 +72,10 @@ def summarize(preds: pd.DataFrame, settings: Settings) -> dict:
         )
         codes = evaluate.week_codes(g["night_date"])
         W = evaluate.bootstrap_weights(codes, settings.raw["bootstrap_resamples"], rng)
-        entry = {"lead": int(lead), "n": int(len(g)), "methods": {}, "per_site": {}}
+        entry: dict[str, Any] = {"lead": int(lead), "n": int(len(g)), "methods": {}, "per_site": {}}
         for m in ["geo_unseen", "blend_site", "equal_weight"]:
             p = g[m].to_numpy(float)
-            point = evaluate.all_metrics(y, p, p_clim, np.ones((1, len(y))), "prob", m, threshold)
-            boot = evaluate.all_metrics(y, p, p_clim, W, "prob", m, threshold)
-            entry["methods"][m] = {k: float(v[0]) for k, v in point.items()} | {
-                f"{k}_{b}": ci
-                for k, v in boot.items()
-                for b, ci in zip(("lo", "hi"), evaluate._ci(v), strict=True)
-            }
+            entry["methods"][m] = evaluate.point_and_ci(y, p, p_clim, W, m, threshold)
         diff = evaluate.brier_matrix(y, g["geo_unseen"].to_numpy(float), W) - evaluate.brier_matrix(
             y, g["blend_site"].to_numpy(float), W
         )

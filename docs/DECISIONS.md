@@ -395,5 +395,14 @@ Hiten asked for the path that is easiest to understand and gives the most consis
   lack data (e.g. GOES before it's fetched) are skipped by training and evaluation automatically.
 
 ### 2026-09-30 · Static type checking (Hiten approved adding mypy)
-- mypy runs in CI next to ruff, so type hints are checked, not decorative.
+- mypy runs in CI (and `make lint`) next to ruff over `src/skytrust`, so the type hints are
+  checked, not decorative. Untyped third-party libraries (skyfield, sklearn, plotly) are treated
+  as `Any` instead of adding stub packages.
+- Fixing its 46 findings changed no results. The notable ones: `MetricsView.req()` now fails
+  loudly when a record that must exist (e.g. climatology) is missing, instead of indexing `None`;
+  the metrics-with-CI block copied in walk-forward, spatial and hourly became one helper
+  (`evaluate.point_and_ci`).
+- While wiring the GOES label, the full test run exposed a real bug: once the hourly model files
+  were committed, the live forecast crashed (`Index` has no `.clip`), which would have broken the
+  app and the daily forward test. Fixed with a regression test on the recorded live payload.
 

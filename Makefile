@@ -9,6 +9,7 @@ setup:
 lint:
 	$(RUN) ruff check .
 	$(RUN) ruff format --check .
+	$(RUN) mypy
 
 format:
 	$(RUN) ruff format .

@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -167,20 +168,21 @@ def evaluate_lead(
         settings.raw["bootstrap_resamples"],
         np.random.default_rng(seed),
     )
-    out = {"lead": lead, "n_hours": int(len(rows)), "base_rate": float(y.mean()), "methods": {}}
+    out: dict[str, Any] = {
+        "lead": lead,
+        "n_hours": int(len(rows)),
+        "base_rate": float(y.mean()),
+        "methods": {},
+    }
     for name, p in [
         ("hourly_model", p_model),
         ("share_of_models", p_share),
         ("climatology", p_clim),
     ]:
-        point = evaluate.all_metrics(y, p, p_clim, np.ones((1, len(y))), "prob", name, 0.5)
-        boot = evaluate.all_metrics(y, p, p_clim, W, "prob", name, 0.5)
-        out["methods"][name] = {k: float(v[0]) for k, v in point.items()} | {
-            f"{k}_{b}": ci
-            for k, v in boot.items()
-            for b, ci in zip(("lo", "hi"), evaluate._ci(v), strict=True)
+        out["methods"][name] = {
+            **evaluate.point_and_ci(y, p, p_clim, W, name, 0.5),
+            "reliability": evaluate.reliability_table(y, p),
         }
-        out["methods"][name]["reliability"] = evaluate.reliability_table(y, p)
     return out
 
 

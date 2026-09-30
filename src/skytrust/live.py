@@ -201,7 +201,7 @@ def track_record(metrics: dict | None, site_id: str, lead: int) -> dict | None:
         "n",
         "n_weeks",
     ]
-    out = {"overall": {k: overall.iloc[0].get(k) for k in keys}}
+    out: dict[str, dict | None] = {"overall": {k: overall.iloc[0].get(k) for k in keys}}
     out["site"] = {k: site_row.iloc[0].get(k) for k in keys} if len(site_row) else None
     return out
 
@@ -264,8 +264,10 @@ def _model_features(summaries: dict, models: list[str], night: dt.date) -> dict:
     out = {}
     for m in models:
         table = summaries.get(m)
-        has = table is not None and night in table.index
-        out[m] = {k: (table.loc[night, k] if has else np.nan) for k in FEATURES}
+        if table is None or night not in table.index:
+            out[m] = {k: np.nan for k in FEATURES}
+        else:
+            out[m] = {k: table.loc[night, k] for k in FEATURES}
     return out
 
 
@@ -279,7 +281,7 @@ def hourly_probabilities(
 ) -> pd.Series | None:
     """P(clear) for each dark hour from the hourly model (same features as its training)."""
     path = ctx.artifacts_dir / "hourly" / f"model_hourly_lead{lead}.json"
-    if not path.exists() or len(hours) == 0:
+    if not path.exists() or len(hours) == 0 or ctx.hourly_covers is None:
         return None
     artifact = inference.load_artifact(path)
     covers = ctx.hourly_covers.reindex(hours)

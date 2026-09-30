@@ -17,6 +17,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -311,7 +312,7 @@ def score_forward(verified: pd.DataFrame, settings: Settings, backtest: dict | N
             continue
         y = g["usable_primary"].astype(float).to_numpy()
         weeks = evaluate.week_codes(g["night_date"]) if len(g) else np.array([])
-        entry = {
+        entry: dict[str, Any] = {
             "lead": int(lead) if lead else "all",
             "n": int(len(g)),
             "n_weeks": int(len(np.unique(weeks))),

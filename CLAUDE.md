@@ -25,7 +25,7 @@
 - **Split:** train 2024-01-01 → 2025-12-31, test 2026-01-01 → 2026-08-31 (`split.test_end`, frozen 2026-09-29; data must be final). Test set used once per final model.
 
 ## Commands
-- `uv sync` · `uv run pytest` · `uv run ruff check . && uv run ruff format --check .`
+- `uv sync` · `uv run pytest` · `uv run ruff check . && uv run ruff format --check . && uv run mypy`
 - `uv run python -m skytrust validate-sites` · `fetch --source {asos,era5,prevruns}` · `build-dataset` · `train` · `evaluate` · `report` (`make train report`; `make all` rebuilds everything)
 - Core rules live in `src/skytrust/nightly.py` (clear / run / usable / missing). Reuse it; don't reimplement.
 - Offline tests use the `fast_settings` fixture (light C grid/folds/resamples). Keep the suite < 30 s.

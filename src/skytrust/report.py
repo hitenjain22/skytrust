@@ -215,7 +215,7 @@ def goes_agreement_table(nights: pd.DataFrame) -> pd.DataFrame | None:
     groups = [(s, g) for s, g in nights.groupby("site", sort=False)] + [("all sites", nights)]
     rows = {}
     for site, g in groups:
-        row = {}
+        row: dict[str, str | int] = {}
         for name, col in [("primary", "usable_primary"), ("ASOS", "usable_asos"),
                           ("ERA5", "usable_era5")]:  # fmt: skip
             both = g.dropna(subset=[col, "usable_goes"])
@@ -468,7 +468,10 @@ class MetricsView:
         self.records = pd.DataFrame(metrics["records"])
         self.diffs = pd.DataFrame(metrics["differences"])
         self.leads = pd.DataFrame(metrics["leads"])
-        self.name = display_name
+
+    @staticmethod
+    def name(method: str | None) -> str:
+        return "–" if method is None else display_name(method)
 
     def rec(self, label, lead, method, subset_type="overall", subset="all") -> pd.Series | None:
         r = self.records
@@ -480,6 +483,17 @@ class MetricsView:
             & (r["subset"] == subset)
         ]
         return None if hit.empty else hit.iloc[0]
+
+    def req(self, label, lead, method, subset_type="overall", subset="all") -> pd.Series:
+        """Like rec, for records every evaluation has (climatology, a listed method): a missing
+        one means metrics.json is incomplete, which should fail loudly, not print dashes."""
+        r = self.rec(label, lead, method, subset_type, subset)
+        if r is None:
+            raise KeyError(
+                f"metrics.json has no {method} record for {label}, lead {lead}, "
+                f"{subset_type}={subset}"
+            )
+        return r
 
     def best_single(self, label, lead) -> str | None:
         hit = self.leads[(self.leads["label"] == label) & (self.leads["lead"] == lead)]
@@ -506,7 +520,7 @@ class MetricsView:
 def headline_table(v: MetricsView, label: str, lead: int) -> pd.DataFrame:
     rows = {}
     for method in v.methods(label, lead):
-        r = v.rec(label, lead, method)
+        r = v.req(label, lead, method)
         if r["family"] == "rule":
             continue  # shown in its own table (confusion metrics only)
         rows[v.name(method)] = {
@@ -577,9 +591,9 @@ def breakdown_table(v: MetricsView, label: str, lead: int, subset_type: str) -> 
     order = SEASON_ORDER if subset_type == "season" else sorted(subsets["subset"].unique())
     rows = {}
     for s in [x for x in order if x in set(subsets["subset"])]:
-        ew = v.rec(label, lead, "equal_weight", subset_type, s)
+        ew = v.req(label, lead, "equal_weight", subset_type, s)
         bs = v.rec(label, lead, best, subset_type, s) if best else None
-        cl = v.rec(label, lead, "climatology", subset_type, s)
+        cl = v.req(label, lead, "climatology", subset_type, s)
         bl = v.rec(label, lead, "blend", subset_type, s)
         row = {
             "n": int(ew["n"]),
@@ -613,7 +627,7 @@ def label_sensitivity_table(v: MetricsView, lead: int) -> pd.DataFrame:
     for method in methods:
         rows[v.name(method)] = {lab: with_ci(v.rec(lab, lead, method), "bss") for lab in labels}
     out = pd.DataFrame(rows).T
-    base = {lab: _fmt(v.rec(lab, lead, "climatology")["base_rate"], "pct") for lab in labels}
+    base = {lab: _fmt(v.req(lab, lead, "climatology")["base_rate"], "pct") for lab in labels}
     out.loc["(test base rate)"] = base
     out.index.name = f"BSS at lead {lead}"
     return out
@@ -626,7 +640,7 @@ def cross_truth_table(v: MetricsView, lead: int) -> pd.DataFrame | None:
         r = v.rec(lab, lead, "blend_primary")
         if r is None:
             continue
-        nbm, clim = v.rec(lab, lead, "nbm_lr"), v.rec(lab, lead, "climatology")
+        nbm, clim = v.rec(lab, lead, "nbm_lr"), v.req(lab, lead, "climatology")
         rows[LABEL_NAMES[lab]] = {
             "BSS shipped blend": with_ci(r, "bss"),
             "BSS NOAA NBM calibrated": with_ci(nbm, "bss"),
@@ -693,7 +707,8 @@ def blend_verdicts(v: MetricsView, label: str = "primary") -> dict[str, dict[str
     """Per comparison target, which leads the blend is significantly better / not better."""
     out: dict[str, dict[str, list[int]]] = {}
     for target in ["best_single", "equal_weight", "equal_weight_cal", "nbm_lr"]:
-        better, not_better = [], []
+        better: list[int] = []
+        not_better: list[int] = []
         for ld in v.lead_list(label):
             if (
                 v.rec(label, ld, "blend") is None
@@ -1207,7 +1222,8 @@ def summary_lines(v: MetricsView) -> list[str]:
         f"The best single calibrated model ({v.name(best)}, chosen by *training* cross-validation, "
         f"never by test results) scores {with_ci(bs, 'bss')}.",
     ]
-    wins, ties = [], []
+    wins: list[int] = []
+    ties: list[int] = []
     for ld in leads:
         d = v.diff(lab, ld, "equal_weight", v.best_single(lab, ld))
         if d is not None:
@@ -1223,7 +1239,7 @@ def summary_lines(v: MetricsView) -> list[str]:
         f"**{with_ci(ew, 'false_clear_rate', 'pct')}** for the equal-weight average vs "
         f"{with_ci(clim, 'false_clear_rate', 'pct')} for climatology."
     )
-    first, last = v.rec(lab, leads[0], "equal_weight"), v.rec(lab, leads[-1], "equal_weight")
+    first, last = v.req(lab, leads[0], "equal_weight"), v.req(lab, leads[-1], "equal_weight")
     lines.append(
         f"- Skill decays with lead time: equal-weight BSS falls from {_fmt(first['bss'], 'num')} "
         f"at lead {leads[0]} to {_fmt(last['bss'], 'num')} at lead {leads[-1]}, and its "
@@ -1505,7 +1521,7 @@ def takeaways(v: MetricsView, label: str, lead: int) -> list[str]:
         lines.append(f"Versus the best single model ({v.name(best)}): {vs_best}.")
         lines.append(f"Versus the simple equal-weight average: {vs_equal}.")
     leads = [ld for ld in v.lead_list(label) if v.rec(label, ld, main) is not None]
-    first, last = v.rec(label, leads[0], main), v.rec(label, leads[-1], main)
+    first, last = v.req(label, leads[0], main), v.req(label, leads[-1], main)
     lines.append(
         f"Skill fades with lead time: from {_fmt(first['bss'], 'num')} at {leads[0]} day(s) ahead "
         f"to {_fmt(last['bss'], 'num')} at {leads[-1]} days."

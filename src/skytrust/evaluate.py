@@ -18,6 +18,7 @@ import json
 import logging
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -217,6 +218,19 @@ def _ci(values: np.ndarray) -> tuple[float, float]:
     return float(lo), float(hi)
 
 
+def point_and_ci(
+    y: np.ndarray, p: np.ndarray, p_clim: np.ndarray, W: np.ndarray, family: str,
+    threshold: float,
+) -> dict[str, float]:  # fmt: skip
+    """Every probability metric at its point value, plus `{metric}_lo` / `{metric}_hi` from the
+    bootstrap weights `W` (the summary shape used by walk-forward, spatial and hourly results)."""
+    point = all_metrics(y, p, p_clim, np.ones((1, len(y))), "prob", family, threshold)
+    out = {k: float(v[0]) for k, v in point.items()}
+    for k, v in all_metrics(y, p, p_clim, W, "prob", family, threshold).items():
+        out[f"{k}_lo"], out[f"{k}_hi"] = _ci(v)
+    return out
+
+
 def subsets(rows: pd.DataFrame) -> list[tuple[str, str, np.ndarray]]:
     out = [("overall", "all", np.ones(len(rows), dtype=bool))]
     out += [("site", s, (rows["site"] == s).to_numpy()) for s in sorted(rows["site"].unique())]
@@ -288,8 +302,8 @@ def evaluate_lead(result: LeadResult, settings: Settings, seed: int) -> dict:
 
 def comparison_pairs(result: LeadResult) -> list[tuple[str, str]]:
     """(A, B) pairs whose Brier difference A - B we bootstrap. Negative = A is better."""
-    pairs = []
-    best = result.best_single
+    pairs: list[tuple[str, str]] = []
+    best = result.best_single or ""  # "" names no method, so its pairs are dropped below
     if best:
         pairs += [(best, "climatology"), ("equal_weight", best)]
     pairs += [("equal_weight", "climatology")]
@@ -447,8 +461,8 @@ def lead_results(
 
 def run_evaluation(df: pd.DataFrame, settings: Settings, artifacts_dir: Path | None = None) -> dict:
     base_seed = int(settings.raw["seed"])
-    out = {"records": [], "reliability": [], "differences": [], "leads": [], "value_curves": [],
-           "threshold_curves": []}  # fmt: skip
+    out: dict[str, Any] = {"records": [], "reliability": [], "differences": [], "leads": [],
+                           "value_curves": [], "threshold_curves": []}  # fmt: skip
     for i, result in enumerate(lead_results(df, settings, artifacts_dir)):
         # A fixed seed per (label, lead) keeps each result reproducible on its own.
         ev = evaluate_lead(result, settings, seed=base_seed + i)

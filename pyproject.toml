@@ -61,3 +61,12 @@ markers = [
 
 [tool.coverage.run]
 source = ["src/skytrust"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/skytrust"]
+# Third-party libraries without type information (skyfield, plotly, sklearn, ...) are treated
+# as untyped rather than failing the check.
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
