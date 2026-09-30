@@ -162,6 +162,9 @@ def test_end_to_end_offline_pipeline(trained, synthetic_built, fast_settings, tm
     # cross-truth check: the shipped primary model is scored under every other truth label
     cross = rec[(rec["method"] == "blend_primary") & (rec["subset_type"] == "overall")]
     assert set(cross["label"]) == set(LABELS) - {"primary"}
+    # ...and NOAA's NBM gets the same treatment (calibrated on primary), for a fair head-to-head
+    nbm_cross = rec[(rec["method"] == "nbm_lr_primary") & (rec["subset_type"] == "overall")]
+    assert set(nbm_cross["label"]) == set(LABELS) - {"primary"}
     blend_rows = rec[(rec["method"] == "blend") & (rec["subset_type"] == "overall")]
     assert set(blend_rows["label"]) == set(LABELS)
     assert blend_rows["brier"].between(0, 1).all()

@@ -314,8 +314,8 @@ def comparison_pairs(result: LeadResult) -> list[tuple[str, str]]:
         head += [("blend_nbm", "blend"), ("blend_nbm", "nbm_lr")]
         # Weights vs calibration: blend - B6 = learned weights; B6 - B5 = calibration.
         head += [("blend", "equal_weight_cal"), ("equal_weight_cal", "equal_weight")]
-        # Cross-truth: the shipped primary model vs NOAA and the base rate under this truth.
-        head += [("blend_primary", "nbm_lr"), ("blend_primary", "climatology")]
+        # Cross-truth: both trained on primary, judged by this label's truth.
+        head += [("blend_primary", "nbm_lr_primary"), ("blend_primary", "climatology")]
         pairs = head + pairs
     return [(a, b) for a, b in pairs if a in result.methods and b in result.methods]
 
@@ -401,16 +401,40 @@ def add_blend(result: LeadResult, settings: Settings, artifacts_dir: Path) -> bo
     blend.assert_trained_before(artifact, settings.raw["split"]["test_start"])
     p = blend.predict_proba(artifact, blend.raw_inputs(result.features, artifact))
     result.methods["blend"] = MethodPrediction("blend", "prob", "blend", p, blend.summary(artifact))
-    shipped = blend.artifact_path("primary", result.lead, artifacts_dir)
-    if result.label != "primary" and shipped.exists():
-        # Cross-truth check: the shipped model (trained on the primary label only) judged by a
-        # truth it never saw. GOES, a satellite observation, is the most independent of these.
-        art = blend.load_artifact(shipped)
-        p = blend.predict_proba(art, blend.raw_inputs(result.features, art))
-        result.methods["blend_primary"] = MethodPrediction(
-            "blend_primary", "prob", "cross_truth", p, blend.summary(art)
-        )
     return True
+
+
+def add_cross_truth(
+    result: LeadResult, df: pd.DataFrame, settings: Settings, artifacts_dir: Path
+) -> None:
+    """Cross-truth check: models trained on the *primary* label, scored against this label.
+
+    The shipped blend is judged by a truth it never saw (GOES, a satellite observation, is the
+    most independent). NOAA's NBM gets exactly the same treatment, calibrated on the primary
+    label too, so the head-to-head stays fair: neither model is fitted to the judging truth.
+    """
+    from skytrust import blend
+    from skytrust.modeling import design_matrix, split_train_test
+
+    shipped = blend.artifact_path("primary", result.lead, artifacts_dir)
+    if result.label == "primary" or not shipped.exists():
+        return
+    art = blend.load_artifact(shipped)
+    p = blend.predict_proba(art, blend.raw_inputs(result.features, art))
+    result.methods["blend_primary"] = MethodPrediction(
+        "blend_primary", "prob", "cross_truth", p, blend.summary(art)
+    )
+    train, _ = split_train_test(df)
+    site_ids = sorted(train["site"].unique())
+    for bench in baselines.benchmarks_at_lead(settings, result.lead):
+        tuned = baselines.fit_single_model(
+            train, bench, baselines.LABELS["primary"], result.lead, settings, site_ids
+        )
+        X = design_matrix(result.features, baselines.single_model_columns(bench), site_ids)
+        name = f"{bench.short}_lr_primary"
+        result.methods[name] = MethodPrediction(
+            name, "prob", "cross_truth", tuned.pipeline.predict_proba(X)[:, 1]
+        )
 
 
 def add_blend_with_benchmarks(result: LeadResult, df: pd.DataFrame, settings: Settings) -> None:
@@ -455,6 +479,7 @@ def lead_results(
             result = baselines.run_baselines(df, label, lead, settings)
             if artifacts_dir is not None and add_blend(result, settings, artifacts_dir):
                 add_blend_with_benchmarks(result, df, settings)
+                add_cross_truth(result, df, settings, artifacts_dir)
             results.append(result)
     return results
 

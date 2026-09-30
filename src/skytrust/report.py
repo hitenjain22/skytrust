@@ -32,6 +32,7 @@ def display_name(method: str) -> str:
         "blend": "Blend",
         "blend_nbm": "Blend + NBM input (research)",
         "blend_primary": "Shipped blend (trained on primary)",
+        "nbm_lr_primary": "NOAA NBM calibrated on primary",
     }
     if method in fixed:
         return fixed[method]
@@ -621,7 +622,8 @@ def labels_in(v: MetricsView) -> list[str]:
 
 def label_sensitivity_table(v: MetricsView, lead: int) -> pd.DataFrame:
     labels = labels_in(v)
-    methods = [m for lab in labels for m in v.methods(lab, lead, "prob") if m != "blend_primary"]
+    cross = {"blend_primary", "nbm_lr_primary"}  # cross-truth rows have their own table
+    methods = [m for lab in labels for m in v.methods(lab, lead, "prob") if m not in cross]
     methods = list(dict.fromkeys(methods))
     rows = {}
     for method in methods:
@@ -640,13 +642,20 @@ def cross_truth_table(v: MetricsView, lead: int) -> pd.DataFrame | None:
         r = v.rec(lab, lead, "blend_primary")
         if r is None:
             continue
-        nbm, clim = v.rec(lab, lead, "nbm_lr"), v.req(lab, lead, "climatology")
+        nbm, clim = v.rec(lab, lead, "nbm_lr_primary"), v.req(lab, lead, "climatology")
+        own = v.rec(lab, lead, "blend")
         rows[LABEL_NAMES[lab]] = {
+            "base rate": _fmt(clim["base_rate"], "pct"),
+            "AUC shipped blend": with_ci(r, "auc"),
+            "AUC NBM (primary)": with_ci(nbm, "auc"),
             "BSS shipped blend": with_ci(r, "bss"),
-            "BSS NOAA NBM calibrated": with_ci(nbm, "bss"),
+            "BSS NBM (primary)": with_ci(nbm, "bss"),
+            "BSS blend trained on this label": with_ci(own, "bss"),
             "false-clear shipped blend": _fmt(r["false_clear_rate"], "pct"),
             "false-clear climatology": _fmt(clim["false_clear_rate"], "pct"),
-            "shipped blend vs NBM": _diff_phrase(v.diff(lab, lead, "blend_primary", "nbm_lr")),
+            "shipped blend vs NBM (Brier)": _diff_phrase(
+                v.diff(lab, lead, "blend_primary", "nbm_lr_primary")
+            ),
         }
     if not rows:
         return None
@@ -662,7 +671,11 @@ def cross_truth_lines(v: MetricsView, lead: int) -> list[str]:
     lines = [
         "**Cross-truth check.** The shipped blend is trained on the primary label only. Scoring "
         "that same model against truths it never trained on tests whether its skill is an "
-        "artifact of how the primary label is built.",
+        "artifact of how the primary label is built. NOAA's NBM gets the same treatment "
+        "(calibrated on primary), so neither model is fitted to the judging truth. AUC measures "
+        "how well nights are *ranked* and is unaffected by a label's base rate; Brier skill also "
+        "charges for probabilities calibrated to the primary label's stricter base rate, so a "
+        "model trained on primary is expected to look conservative under a more lenient truth.",
     ]
     if "goes" in labels_in(v):
         lines[0] += (

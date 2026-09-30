@@ -11,6 +11,8 @@ from views.common import Context
 def render(ctx: Context) -> None:
     d = ctx.settings.raw["definitions"]
     split = ctx.settings.raw["split"]
+    clim = ctx.settings.raw["climatology"]
+    forward_start = ctx.settings.raw["forward"]["start_date"]
     models = ", ".join(f"{m.name}" for m in ctx.settings.models)
     st.header("Methodology")
     st.markdown(f"""
@@ -34,6 +36,8 @@ tells you how often it has been wrong *at your location*. SkyTrust measures that
 - **ERA5** reanalysis (via Open-Meteo): sees every layer, but it's a model on a ~28 km grid.
 - **Primary label:** each hour counts as clear only if **both** say clear. Results are also shown
   for each source alone.
+- **GOES-18 satellite** cloud mask (NOAA): a real observation that also sees high cloud, used as
+  an independent check on the other two and on the model (Track Record → Satellite).
 
 ### The forecasts and the blend
 Five models ({models}) via Open-Meteo. For each night and lead time we compute each model's
@@ -48,12 +52,15 @@ which would quietly let the backtest see the future and overstate how well you c
 
 ### A fair test
 Training data: **{split["train_start"]} → {split["train_end"]}**. Test data: **{split["test_start"]}
-onward**, used once, after every choice was made. Tuning uses time-ordered cross-validation inside
-the training years. A random split would leak (tomorrow's weather resembles today's).
+→ {split["test_end"]}**, used once, after every choice was made. Tuning uses time-ordered
+cross-validation inside the training years. A random split would leak (tomorrow's weather resembles
+today's). Since {forward_start}, every live forecast is also logged before the night and scored
+afterwards (the forward test on the Track Record page).
 
 ### How to read the numbers
 - **Brier score:** average squared error of the probability (lower is better).
-- **Brier Skill Score:** improvement over the seasonal base rate (0 = none, 1 = perfect).
+- **Brier Skill Score:** improvement over the seasonal base rate, measured over
+  {clim["start"].year}–{clim["end"].year} (0 = none, 1 = perfect).
 - **False-clear rate:** of the nights it said "go" (P ≥ {ctx.settings.raw["decision_threshold"]}),
   the share that weren't usable.
 - **95% intervals** resample whole calendar weeks, because neighbouring nights share weather.
@@ -70,6 +77,7 @@ the training years. A random split would leak (tomorrow's weather resembles toda
 ### Data and credits
 Weather data by [Open-Meteo.com](https://open-meteo.com/), licensed CC BY 4.0. ASOS
 observations courtesy of the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/),
-Iowa State University. Astronomy by [Skyfield](https://rhodesmill.org/skyfield/) with JPL's
+Iowa State University. Satellite cloud mask and imagery: NOAA GOES-18 (public AWS bucket
+`noaa-goes18`; NOAA/NESDIS STAR). Astronomy by [Skyfield](https://rhodesmill.org/skyfield/) with JPL's
 DE421 ephemeris.
 """)

@@ -224,3 +224,11 @@ Checked against real files (2025-01-10, 2025-06-15, 2026-02-03) before any code 
 - **In SkyTrust:** per dark hour, the scan nearest the top of the hour; cloud fraction = mean BCM
   over the good-quality pixels of a 5 × 5 box (≈ 12–15 km at this viewing angle) centred on the
   airport. Only these per-site numbers are stored (`data/raw/goes/{site}/{month}.csv`).
+- **Coverage (fetched 2026-09-30):** 8,547 dark hours (union over the five sites, nights
+  2024-01-01 → 2026-09-28), zero download errors. 116 hours (1.4 %) have no Clear Sky Mask file:
+  almost all in 2025-11-07 → 11-15 plus 2025-02-22. For 2025-11-10 the bucket has radiance files
+  (`ABI-L1b-RadC`) but almost no mask files all day, so it's a gap in the derived product, not a
+  satellite outage. Those nights get the `goes_missing` exclusion like any other gap.
+- **First look (hourly, all 2024–26 dark hours):** GOES cover correlates 0.72–0.83 with ERA5 and
+  0.44–0.72 with ASOS; FAT is the exception where ASOS matches GOES about as well as ERA5 does
+  (FAT's human observers report cirrus, §8). The nightly comparison is in DATA_QUALITY §7b.
