@@ -753,6 +753,12 @@ none says how accurate it is.
   here") is more honest and more useful than a yes/no icon.
 - **Design tokens:** colours live in one palette and are exposed as CSS variables, so a whole
   theme (like night vision) is a swap of one dictionary.
+- **Colours derived from `currentColor`:** borders, surfaces and secondary text are mixes of the
+  text colour (11%, 4%, 60%), so one stylesheet works in light and dark themes without knowing
+  which one is active.
+- **Restraint reads as quality:** the redesign removed things (gradients, glows, boxes, emoji) and
+  kept colour for meaning only. Research on why interfaces look "AI-generated" says the defaults
+  are the tell, so each choice was made deliberately.
 - **Verify the UI like code:** headless-browser screenshots at desktop and phone width caught
   bugs no unit test would (labels hiding each other, navigation off-screen on phones).
 

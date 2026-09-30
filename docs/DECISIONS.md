@@ -432,3 +432,26 @@ Hiten asked for the path that is easiest to understand and gives the most consis
 - **Night vision:** every custom element reads CSS variables, and the few Streamlit widget parts
   that use the theme's gold are recoloured, verified by counting gold elements in a headless
   browser (0).
+
+### 2026-09-30 · "Observatory" design system (replaces the Moonlight theme)
+- **Why:** Hiten found the navy-and-mint theme unprofessional and "AI-generated". Research backs
+  that up: the widely cited AI-UI tells are Inter everywhere, blue/indigo on dark navy, glowing
+  borders, gradients on every card, identical card grids and emoji decoration, several of which
+  the Moonlight theme had.
+- **References studied:** Vercel's Geist (disciplined monochrome, near-black ink on near-white,
+  hairline borders, colour only for interaction), Linear's 2025 refresh (fewer colours, neutral
+  structure, three theme variables), dark-UI guidance (no pure black, lighter surfaces for
+  elevation, desaturated accents), Apple Weather's list layout, and Emil Kowalski's published
+  animation standards.
+- **What changed:** soft graphite/paper themes that follow the viewer's system setting
+  (`[theme.dark]` / `[theme.light]`); Geist + Geist Mono; status as a small muted dot
+  (sage/ochre/clay), never a large fill; hairline-divided strips and list rows instead of boxed
+  cards; a sticky top bar with underline tabs; neutral info notes; expanders as an accordion.
+  Every custom colour derives from `currentColor`, so the same HTML is correct in light, dark and
+  night vision (Streamlit can't reliably tell the app which theme is showing on first load).
+- **Motion:** content rises in (transform + opacity only, `cubic-bezier(0.23, 1, 0.32, 1)`,
+  30–60 ms stagger), probability bars grow from the left, rows respond to hover on mouse devices
+  only, sections reveal on scroll where supported, and `prefers-reduced-motion` keeps only fades.
+- **Also fixed:** two containers shared the key `panel` (custom location + Tonight would have
+  raised a duplicate-key error); the pinned top bar took a quarter of a phone screen (now pinned
+  only on wider screens); inline code rendered green.
