@@ -104,12 +104,16 @@ def save(table: dict, labels_df: pd.DataFrame, table_path: Path = TABLE_PATH,
     labels_df.to_parquet(labels_path, index=False)
 
 
-def load_table(label: str = "primary", path: Path = TABLE_PATH) -> pd.DataFrame | None:
+def load_table(label: str = "primary", path: Path | None = None) -> pd.DataFrame | None:
     """Rates indexed by (site, month) in the same shape as baselines.climatology_table, or None
-    if the long-term table hasn't been built."""
+    if the long-term table hasn't been built or has no such label (GOES: no 20-year record, so
+    its skill is measured against its own training-years rate)."""
+    path = path or TABLE_PATH  # resolved at call time, so the location can be redirected
     if not path.exists():
         return None
-    tables = json.loads(path.read_text())["tables"][label]
+    tables = json.loads(path.read_text())["tables"].get(label)
+    if tables is None:
+        return None
     rows = [
         (site, int(m), v["rate"], v["n"])
         for site, months in tables.items()

@@ -15,6 +15,20 @@ FIXTURES = Path(__file__).parent / "fixtures"
 SYNTH_FIRST, SYNTH_LAST = dt.date(2025, 12, 1), dt.date(2026, 1, 31)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _no_real_climatology(tmp_path_factory):
+    """The repo's 20-year climatology table is built from real observations at the real sites.
+    Tests run on synthetic weather, so they must never pick it up by accident; a test that needs
+    a long-term table passes or patches one explicitly. Session scope so it is in place before
+    any module-scoped fixture trains or evaluates."""
+    from skytrust import climatology
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(climatology, "TABLE_PATH", tmp_path_factory.mktemp("clim") / "absent.json")
+    yield
+    mp.undo()
+
+
 @pytest.fixture(scope="session")
 def settings() -> Settings:
     return load_settings()
