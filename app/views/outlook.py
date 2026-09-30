@@ -17,7 +17,8 @@ def render(ctx: Context) -> None:
         return
     tz, pal = ctx.site.timezone, ctx.palette
     st.caption(
-        "Trust comes from the backtest: the blend's skill on the 2026 test year at that lead time. "
+        "Trust comes from the backtest: the blend's skill on the held-out 2026 test period at "
+        "that lead time. "
         "Forecasts further ahead are measurably less reliable."
     )
     for i, n in enumerate(ctx.forecast.nights):

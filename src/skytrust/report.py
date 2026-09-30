@@ -302,7 +302,7 @@ def data_caveats(v: MetricsView) -> list[str]:
     meta = v.m["meta"]
     weeks = int(v.leads.loc[v.leads["label"] == "primary", "n_weeks"].max())
     line = (
-        f"**One test year.** The test period is {meta['test_period'][0][:4]} only ({weeks} weeks "
+        f"**One test period.** Testing covers {test_period_name(meta)} only ({weeks} weeks "
         "of labeled nights), so intervals are wide-ish and a different year could rank close "
         "methods differently."
     )
@@ -315,6 +315,14 @@ def data_caveats(v: MetricsView) -> list[str]:
             f"{len(lower)} of {len(both)} sites" + (f" ({', '.join(lower)})." if lower else ".")
         )
     return [line]
+
+
+def test_period_name(meta: dict) -> str:
+    """'Jan–Aug 2026' from metrics.json's test period (so wording can't drift from the data)."""
+    start, end = (pd.Timestamp(d) for d in meta["test_period"])
+    if start.year == end.year:
+        return f"{start:%b}–{end:%b %Y}"
+    return f"{start:%b %Y}–{end:%b %Y}"
 
 
 def _fmt(value, kind: str) -> str:
@@ -804,9 +812,9 @@ def results_markdown(metrics: dict, figure_paths: dict[str, str]) -> str:
         "",
         md_table(breakdown_table(v, "primary", lead, "season")),
         "",
-        "Test seasons are partial (the test year starts in January and ends at the latest labeled "
-        "night). Subsets spanning fewer than `min_weeks_for_ci` weeks (config) get no CI, because "
-        "a bootstrap over so few weekly blocks is unreliable.",
+        f"Test seasons are partial (the test period is {test_period_name(v.m['meta'])}). "
+        "Subsets spanning fewer than `min_weeks_for_ci` weeks (config) get no CI, because a "
+        "bootstrap over so few weekly blocks is unreliable.",
         "",
         "## 6. Sensitivity to the truth label",
         "",
@@ -879,7 +887,9 @@ def readme_block(metrics: dict) -> str:
             "AUC ↑": _fmt(r.get("auc"), "num"),
         }
     table = pd.DataFrame(rows).T
-    table.index.name = f"Night-before forecast (lead {lead}), test year"
+    table.index.name = (
+        f"Night-before forecast (lead {lead}), test {test_period_name(metrics['meta'])}"
+    )
     note = (
         f"_Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` "
         f"(commit `{metrics['meta']['git_commit']}`). 95% CIs from a week-block bootstrap. "
@@ -949,11 +959,11 @@ def resume_bullets(metrics: dict) -> list[str]:
     verdict = blend_verdicts(v, "primary")
     n_leads = len(v.lead_list("primary"))
     wins = len(verdict["best_single"]["better"])
-    test_year = metrics["meta"]["test_period"][0][:4]
+    period = test_period_name(metrics["meta"])
     return [
         f"Built SkyTrust, an astronomy cloud forecast that backtests {n_models} weather models "
         f"against airport ceilometer observations and ERA5 reanalysis at {len(sites)} California "
-        f"sites; on a held-out {test_year} test year ({int(lead_info['n_eval']):,} site-nights), a "
+        f"sites; on a held-out {period} test period ({int(lead_info['n_eval']):,} site-nights), a "
         f"per-lead logistic-regression blend cut the night-before false-clear rate to "
         f"{blend['false_clear_rate']:.1%} vs {clim['false_clear_rate']:.1%} for climatology.",
         "Designed a leakage-safe evaluation (time-based split, date-grouped cross-validation, "

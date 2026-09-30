@@ -32,7 +32,7 @@ def reliability_card(night, site_id: str) -> None:
     c1.metric(
         f"False-clear rate at {site_id}",
         with_ci(site, "false_clear_rate"),
-        help="In the 2026 test year, of the nights the blend said 'go' at this lead, "
+        help="In the held-out 2026 test period, of the nights the blend said 'go' at this lead, "
         "the share that turned out not usable. 95% week-block bootstrap CI.",
     )
     c2.metric(

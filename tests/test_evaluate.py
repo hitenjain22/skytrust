@@ -277,3 +277,13 @@ def test_git_commit_dirty_check_ignores_generated_outputs(monkeypatch):
     pathspec = seen["status_args"][seen["status_args"].index("--") + 1 :]
     assert "src" in pathspec and "config" in pathspec
     assert "artifacts" not in pathspec and "docs" not in pathspec
+
+
+def test_test_period_name():
+    from skytrust import report
+
+    assert report.test_period_name({"test_period": ["2026-01-01", "2026-08-31"]}) == "Jan–Aug 2026"
+    assert (
+        report.test_period_name({"test_period": ["2025-11-01", "2026-02-28"]})
+        == "Nov 2025–Feb 2026"
+    )

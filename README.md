@@ -58,16 +58,16 @@ flowchart LR
 
 | Night-before forecast (lead 1), test year | Brier Skill Score ↑ | False-clear rate ↓ | AUC ↑ |
 |---|---|---|---|
-| Blend | 0.627 [0.569, 0.676] | 9.4% [7.0%, 12.2%] | 0.948 |
-| Equal-weight average (B5) | 0.596 [0.540, 0.645] | 13.2% [10.4%, 16.3%] | 0.937 |
-| ECMWF calibrated (B4) | 0.515 [0.444, 0.581] | 12.5% [9.5%, 15.7%] | 0.920 |
-| Climatology (B1) | 0.000 [0.000, 0.000] | 36.6% [30.0%, 43.6%] | 0.634 |
+| Blend | 0.640 [0.579, 0.697] | 9.8% [7.3%, 12.6%] | 0.950 |
+| Equal-weight average (B5) | 0.601 [0.543, 0.652] | 13.9% [11.1%, 16.9%] | 0.938 |
+| ECMWF calibrated (B4) | 0.532 [0.459, 0.602] | 12.8% [9.7%, 15.9%] | 0.924 |
+| Climatology (B1) | 0.000 [0.000, 0.000] | 38.2% [31.3%, 45.5%] | 0.632 |
 
-_Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` (commit `1384dc9`). 95% CIs from a week-block bootstrap. Full results: [docs/RESULTS.md](docs/RESULTS.md)._
+_Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` (commit `8cb61ac`). 95% CIs from a week-block bootstrap. Full results: [docs/RESULTS.md](docs/RESULTS.md)._
 
 <!-- RESULTS:END -->
 
-Measured on the 2026 test period (fixed end date, so these numbers are exactly reproducible), which none of the models saw during training. The blend beats
+Measured on a fixed, held-out test period (January–August 2026) that none of the models saw during training, so these numbers are exactly reproducible. The blend beats
 every single model at every lead time, but beats a plain average of the models at only some leads;
 [docs/RESULTS.md](docs/RESULTS.md) says exactly where, with confidence intervals for everything.
 
@@ -81,7 +81,7 @@ The short version is above; the app's **Methodology** page and [docs/RESULTS.md]
 have the details. Key caveats:
 - Airport ceilometers can't see cirrus; ERA5 is a model on a ~28 km grid and is made by ECMWF
   (so ECMWF may look better than it is under ERA5-based labels; results flag this).
-- One test year; point observations vs gridded forecasts; the live "tonight" forecast is fresher
+- One test period (Jan–Aug 2026); point observations vs gridded forecasts; the live "tonight" forecast is fresher
   than the 1-day-ahead backtest data, so tonight's probability is slightly conservative.
 
 Design decisions and their reasons are logged in [docs/DECISIONS.md](docs/DECISIONS.md);

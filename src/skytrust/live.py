@@ -420,7 +420,7 @@ def _night_lines(i: int, n: NightForecast, tz: str) -> list[str]:
     site_record = (n.track_record or {}).get("site")
     if site_record:
         lines.append(
-            f"  Track record here at lead {n.lead} (test year): false-clear "
+            f"  Track record here at lead {n.lead} (backtest): false-clear "
             f"{site_record['false_clear_rate']:.0%}, skill {site_record['bss']:.2f} vs climatology"
         )
     moon = "–" if n.moon_illum is None else f"{n.moon_illum:.0%} lit"
