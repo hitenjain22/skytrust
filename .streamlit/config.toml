@@ -10,3 +10,7 @@ headless = true
 
 [browser]
 gatherUsageStats = false
+
+[client]
+# Visitors see a clean app: no developer "Deploy" button or dev menu.
+toolbarMode = "viewer"

@@ -21,7 +21,12 @@ def _local(ts, tz: str):
 
 
 def _layout(
-    fig: go.Figure, pal: dict, title: str, height: int = 330, yaxis: dict | None = None
+    fig: go.Figure,
+    pal: dict,
+    title: str,
+    height: int = 330,
+    yaxis: dict | None = None,
+    time_axis: bool = False,
 ) -> go.Figure:
     fig.update_layout(
         title={"text": title, "font": {"size": 14}},
@@ -30,10 +35,12 @@ def _layout(
         paper_bgcolor=pal["paper"],
         plot_bgcolor=pal["bg"],
         font={"color": pal["text"]},
-        legend={"orientation": "h", "y": -0.2, "x": 0},
+        legend={"orientation": "h", "y": -0.18, "x": 0, "yanchor": "top"},
         hovermode="x unified",
     )
     fig.update_xaxes(gridcolor=pal["grid"])
+    if time_axis:
+        fig.update_xaxes(tickformat="%-I %p")  # "9 PM": one line, so the legend never collides
     fig.update_yaxes(gridcolor=pal["grid"], **(yaxis or {}))
     return fig
 
@@ -83,7 +90,7 @@ def hourly_cloud(hourly: pd.DataFrame, night, tz: str, threshold: float, pal: di
         annotation_text=f"clear ≤ {threshold:.0%}",
         annotation_position="bottom right",
     )
-    return _layout(fig, pal, "Cloud cover by model (%)", yaxis={"range": [0, 100]})
+    return _layout(fig, pal, "Cloud cover by model (%)", yaxis={"range": [0, 100]}, time_axis=True)
 
 
 def cloud_layers(hourly: pd.DataFrame, night, tz: str, pal: dict) -> go.Figure:
@@ -112,8 +119,28 @@ def cloud_layers(hourly: pd.DataFrame, night, tz: str, pal: dict) -> go.Figure:
         line_width=0,
     )
     return _layout(
-        fig, pal, "Cloud layers, median of models (%)", height=280, yaxis={"range": [0, 100]}
+        fig,
+        pal,
+        "Cloud layers, median of models (%)",
+        height=280,
+        yaxis={"range": [0, 100]},
+        time_axis=True,
     )
+
+
+def true_runs(times: pd.DatetimeIndex, flags) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+    """(start, end) of each stretch where `flags` is True. A stretch still open at the end
+    runs to the last time (e.g. the Moon is still up at the right edge of the chart)."""
+    runs, start = [], None
+    for t, flag in zip(times, flags, strict=True):
+        if flag and start is None:
+            start = t
+        elif not flag and start is not None:
+            runs.append((start, t))
+            start = None
+    if start is not None:
+        runs.append((start, times[-1]))
+    return runs
 
 
 def darkness_timeline(site, night, tz: str, pal: dict) -> go.Figure:
@@ -138,26 +165,20 @@ def darkness_timeline(site, night, tz: str, pal: dict) -> go.Figure:
         )
 
     bar("Dark", night.dusk_utc, night.dawn_utc, pal["accent"], "Astronomical darkness")
-    # Contiguous runs of "moon up" on the 10-minute grid.
-    run_start = None
-    for t, is_up in zip(list(grid) + [None], list(up) + [False], strict=True):
-        if is_up and run_start is None:
-            run_start = t
-        elif not is_up and run_start is not None:
-            bar("Moon up", run_start, t, pal["moon"], "Moon above horizon")
-            run_start = None
+    for t0, t1 in true_runs(grid, up):
+        bar("Moon up", t0, t1, pal["moon"], "Moon above horizon")
     if night.best_window:
         bw = night.best_window
         bar(
             "Best window",
             bw.start_utc,
-            bw.end_utc + pd.Timedelta(hours=1),
+            bw.until_utc,
             pal["Go"],
             f"{bw.hours} h clear",
         )
     fig.update_xaxes(type="date", range=[_local(start, tz), _local(end, tz)])
     fig.update_layout(barmode="overlay", bargap=0.35)
-    return _layout(fig, pal, "Darkness, Moon, and best window", height=200)
+    return _layout(fig, pal, "Darkness, Moon, and best window", height=200, time_axis=True)
 
 
 # ---------- Track Record ----------

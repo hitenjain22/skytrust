@@ -8,13 +8,20 @@ caught and shown as a message; the app itself must never crash.
 from __future__ import annotations
 
 import logging
+import sys
+from pathlib import Path
 
 import streamlit as st
 
-from skytrust import inference, live
-from skytrust.config import load_settings, load_sites
-from views import methodology, outlook, tonight, track_record
-from views.common import Context, footer, inject_night_vision_css, palette
+try:  # installed via `uv sync` locally; on a host that only installs dependencies, use src/
+    import skytrust  # noqa: F401
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from skytrust import inference, live  # noqa: E402
+from skytrust.config import load_settings, load_sites  # noqa: E402
+from views import methodology, outlook, tonight, track_record  # noqa: E402
+from views.common import Context, footer, inject_night_vision_css, palette  # noqa: E402
 
 log = logging.getLogger("skytrust.app")
 
@@ -64,12 +71,17 @@ def main() -> None:
     with st.sidebar:
         st.title("🔭 SkyTrust")
         st.caption("An astronomy cloud forecast that tells you how often it's been wrong.")
-        page = st.radio("Page", list(PAGES), key="page")
+        # Optional deep links: ?page=track-record&site=BIH
+        query = st.query_params
+        slugs = {name.lower().replace(" ", "-"): name for name in PAGES}
+        start_page = slugs.get(query.get("page", ""), "Tonight")
+        page = st.radio("Page", list(PAGES), index=list(PAGES).index(start_page), key="page")
         site_ids = [s.id for s in sites]
+        wanted_site = query.get("site", "SAC").upper()
         site_id = st.selectbox(
             "Site",
             site_ids,
-            index=site_ids.index("SAC") if "SAC" in site_ids else 0,
+            index=site_ids.index(wanted_site) if wanted_site in site_ids else 0,
             key="site",
             format_func=lambda sid: (
                 f"{sid} · {next(s.terrain_class for s in sites if s.id == sid)}"

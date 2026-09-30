@@ -105,3 +105,54 @@ def test_night_vision_and_site_switch(offline, monkeypatch):
     at.sidebar.selectbox(key="site").set_value("BIH").run()
     assert not at.exception
     assert any("Tonight at BIH" in h.value for h in at.header)
+
+
+def test_deep_link_query_params(offline, monkeypatch):
+    api_up(monkeypatch)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params["page"] = "track-record"
+    at.query_params["site"] = "bih"
+    at.run()
+    assert not at.exception
+    assert at.sidebar.radio(key="page").value == "Track Record"
+    assert at.sidebar.selectbox(key="site").value == "BIH"
+
+
+def test_timeline_when_moon_is_still_up_at_the_chart_edge():
+    """Regression: the moon-up run wasn't closed if the Moon was above the horizon at the end
+    of the window (found by screenshotting the real app on 2026-09-29)."""
+    import sys
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    sys.path.insert(0, str(REPO_ROOT / "app"))
+    from skytrust import astro
+    from skytrust.config import load_sites
+    from views import charts
+    from views.common import DAY
+
+    sac = next(s for s in load_sites() if s.id == "SAC")
+    night = SimpleNamespace(
+        dusk_utc=pd.Timestamp("2026-09-30 03:19", tz="UTC"),
+        dawn_utc=pd.Timestamp("2026-09-30 12:32", tz="UTC"),
+        best_window=None,
+    )
+    end = night.dawn_utc + pd.Timedelta(hours=1)
+    assert astro.moon_altitude(sac, pd.DatetimeIndex([end]))[0] > 0  # precondition: moon up at edge
+    fig = charts.darkness_timeline(sac, night, "America/Los_Angeles", DAY)
+    moon_bars = [t for t in fig.data if t.hovertext == "Moon above horizon"]
+    assert moon_bars and np.all(np.array([b.x[0] for b in moon_bars]) > 0)
+
+
+def test_true_runs_edge_cases():
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "app"))
+    from views.charts import true_runs
+
+    t = pd.date_range("2026-01-01", periods=5, freq="10min", tz="UTC")
+    assert true_runs(t, [False, True, True, False, False]) == [(t[1], t[3])]
+    assert true_runs(t, [True, True, False, True, True]) == [(t[0], t[2]), (t[3], t[4])]
+    assert true_runs(t, [False] * 5) == []
+    assert true_runs(t, [True] * 5) == [(t[0], t[4])]

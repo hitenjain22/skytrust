@@ -89,6 +89,8 @@ def test_forecast_has_seven_nights_with_valid_probabilities(forecast, settings):
         assert n.verdict == live.verdict_for(n.p_usable, settings)
         assert 4 <= n.dark_hours <= 13 and n.dusk_utc < n.dawn_utc
         assert n.models_used and not n.models_missing
+        if n.best_window:
+            assert n.best_window.until_utc <= n.dawn_utc
     assert forecast.source == "live" and forecast.warning is None
 
 
@@ -135,6 +137,10 @@ def test_best_window_is_longest_clear_run_of_median():
     median = np.array([0.1, 0.5, 0.0, 0.1, 0.2, np.nan, 0.0])
     bw = live.best_window(hours, median, 0.20)
     assert bw.hours == 3 and bw.start_utc == hours[2] and bw.end_utc == hours[4]
+    assert bw.until_utc == hours[4] + pd.Timedelta(hours=1)
+    # A window reaching the last dark hour ends at dawn, not an hour later (screenshot bug).
+    tail = live.best_window(hours, np.zeros(7), 0.20, dawn_utc=hours[-1] + pd.Timedelta(minutes=32))
+    assert tail.until_utc == hours[-1] + pd.Timedelta(minutes=32)
     assert live.best_window(hours, np.full(7, 0.9), 0.20) is None
 
 

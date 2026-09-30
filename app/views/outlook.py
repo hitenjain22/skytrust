@@ -31,8 +31,7 @@ def render(ctx: Context) -> None:
             if n.best_window:
                 bw = n.best_window
                 window = (
-                    f"{local_time(bw.start_utc, tz)}–"
-                    f"{local_time(bw.end_utc + pd.Timedelta(hours=1), tz)} ({bw.hours} h)"
+                    f"{local_time(bw.start_utc, tz)}–{local_time(bw.until_utc, tz)} ({bw.hours} h)"
                 )
             else:
                 window = "none clear"

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pandas as pd
 import streamlit as st
 
 from views import charts
@@ -72,7 +71,7 @@ def render(ctx: Context) -> None:
             bw = night.best_window
             st.markdown(
                 f"**Best window:** {local_time(bw.start_utc, tz)} → "
-                f"{local_time(bw.end_utc + pd.Timedelta(hours=1), tz)} ({bw.hours} h)"
+                f"{local_time(bw.until_utc, tz)} ({bw.hours} h)"
             )
         else:
             st.markdown("**Best window:** none. No dark hour is clear by the model median.")

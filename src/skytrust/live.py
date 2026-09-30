@@ -58,7 +58,10 @@ def default_cache_dir() -> Path:
 class BestWindow:
     start_utc: pd.Timestamp
     end_utc: pd.Timestamp  # the last clear hour (inclusive)
-    hours: int
+    hours: int  # number of clear hourly readings in the run
+    until_utc: (
+        pd.Timestamp
+    )  # when the window ends: an hour after the last clear reading, capped at dawn
 
 
 @dataclass
@@ -109,9 +112,13 @@ def verdict_for(p: float | None, settings: Settings) -> str:
 
 
 def best_window(
-    hours: pd.DatetimeIndex, median_cover: np.ndarray, threshold: float
+    hours: pd.DatetimeIndex,
+    median_cover: np.ndarray,
+    threshold: float,
+    dawn_utc: pd.Timestamp | None = None,
 ) -> BestWindow | None:
-    """Longest run of consecutive dark hours whose cross-model median cover is clear."""
+    """Longest run of consecutive dark hours whose cross-model median cover is clear. The
+    window is shown as lasting until an hour after its last clear reading, but never past dawn."""
     best_len, best_end, run = 0, -1, 0
     for i, value in enumerate(median_cover):
         run = run + 1 if (not np.isnan(value) and value <= threshold + 1e-9) else 0
@@ -119,7 +126,10 @@ def best_window(
             best_len, best_end = run, i
     if best_len == 0:
         return None
-    return BestWindow(hours[best_end - best_len + 1], hours[best_end], best_len)
+    until = hours[best_end] + pd.Timedelta(hours=1)
+    if dawn_utc is not None:
+        until = min(until, dawn_utc)
+    return BestWindow(hours[best_end - best_len + 1], hours[best_end], best_len, until)
 
 
 def trust_level(bss: float | None, settings: Settings) -> str:
@@ -246,7 +256,9 @@ def _forecast_night(
     )
 
     hours = pd.DatetimeIndex(ctx.night_hours.loc[ctx.night_hours["night_date"] == night, "hour"])
-    window = best_window(hours, ctx.median.reindex(hours).to_numpy(), ctx.settings.clear_threshold)
+    window = best_window(
+        hours, ctx.median.reindex(hours).to_numpy(), ctx.settings.clear_threshold, dawn
+    )
     spread = float(row["spread_frac_clear"].iloc[0])
     record = track_record(ctx.metrics, ctx.site.id, lead)
     ev = ctx.moon_events
@@ -394,7 +406,7 @@ def _night_lines(i: int, n: NightForecast, tz: str) -> list[str]:
     if n.best_window:
         bw = n.best_window
         lines.append(
-            f"  Best window: {_local(bw.start_utc, tz)} -> {_local(bw.end_utc, tz)} "
+            f"  Best window: {_local(bw.start_utc, tz)} -> {_local(bw.until_utc, tz)} "
             f"({bw.hours} h clear by the model median)"
         )
     else:
