@@ -40,7 +40,7 @@ Nothing needs secrets or API keys. Open-Meteo is free for non-commercial use.
   visitor sees a "wake up" button and waits a minute or so. That's normal for the free tier.
 - **Saved forecasts:** the "last good forecast" copy lives on the app's temporary disk, so it
   resets when the app restarts. If Open-Meteo is down right after a restart, the Tonight page shows a
-  friendly "unavailable" message while Track Record and Methodology keep working.
+  friendly "unavailable" message while Track Record and How It Works keep working.
 
 ## If something goes wrong
 

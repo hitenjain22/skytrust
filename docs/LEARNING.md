@@ -732,3 +732,31 @@ it never trained on.
 1. Your ground truth is noisy. How do you know your model's skill isn't just learning the noise?
 2. Why is raw agreement between two labels misleading, and what does kappa fix?
 3. What is parallax in satellite cloud detection, and when does it matter?
+
+---
+
+## `app/views/`: designing for a first-time stargazer
+
+**What:** The app was rebuilt around one question, "should I go out tonight?". Answer first,
+then the few facts behind it, then detail for anyone who wants it. A consistent visual system
+(colours, type, cards) is defined once in `theme.py` and reused everywhere, including a red
+night-vision mode.
+
+**Why:** A forecast is only useful if people read it correctly. Competing apps show a lot of data
+but leave the interpretation to the user (colour grids with no key, 24-hour times, jargon), and
+none says how accurate it is.
+
+**Key concepts:**
+- **Progressive disclosure:** show the decision first and hide complexity behind expanders, so
+  beginners aren't overwhelmed and experts lose nothing.
+- **Communicating uncertainty:** a probability plus a track record ("88% of 'go' calls held up
+  here") is more honest and more useful than a yes/no icon.
+- **Design tokens:** colours live in one palette and are exposed as CSS variables, so a whole
+  theme (like night vision) is a swap of one dictionary.
+- **Verify the UI like code:** headless-browser screenshots at desktop and phone width caught
+  bugs no unit test would (labels hiding each other, navigation off-screen on phones).
+
+**Interview questions:**
+1. How do you present a probabilistic forecast to people with no statistics background?
+2. What is progressive disclosure, and where did you use it?
+3. How did you test a visual design, not just the code behind it?

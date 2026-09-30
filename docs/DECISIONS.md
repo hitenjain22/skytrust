@@ -406,3 +406,29 @@ Hiten asked for the path that is easiest to understand and gives the most consis
   were committed, the live forecast crashed (`Index` has no `.clip`), which would have broken the
   app and the daily forward test. Fixed with a regression test on the recorded live payload.
 
+
+### 2026-09-30 · App redesign for beginners ("Moonlight" theme)
+- **Research:** reviews and forum threads on the most-used astronomy weather apps. Clear Outside
+  is called convoluted without a legend or scale and defaults to 24-hour time; Astrospheric is
+  quick to read but built around expert layers (seeing, transparency); Scope Nights is praised for
+  summarising everything into one rating. Reviewers routinely advise using several apps together
+  because none says how accurate it is.
+- **Principles taken from that:** answer first (verdict, probability, one plain sentence of why),
+  then the four facts that matter (darkness, best window, the Moon, how much to trust it), then
+  one hour-by-hour chart, with every expert chart kept but folded away. Every colour-coded chart
+  has a key; all times are 12-hour; place names instead of airport codes; site descriptions come
+  from `config/sites.yaml`, not adjectives nothing measures.
+- **Navigation:** top bar with a location picker and page switcher (it wraps onto two lines on a
+  phone; the old sidebar hid both behind a menu button). The URL tracks page, location and night
+  vision, so any view can be bookmarked; old page names still resolve.
+- **Moon:** phase angle (waxing/waning) and moon-up intervals now come from `astro`, drawn as a
+  phase icon and a band on the hourly chart. Moon advice is descriptive only; it never changes a
+  probability.
+- **Bugs found while doing it:** a cached forecast could keep showing last night as "tonight"
+  after dawn (pages now drop ended nights, and the cache also turns over each clock hour); the
+  best-window length was the number of clear hourly readings, not the real span (now shown as a
+  duration); map labels hid each other; a CSS background list that was shorter than its layers
+  striped the page. Each has a test.
+- **Night vision:** every custom element reads CSS variables, and the few Streamlit widget parts
+  that use the theme's gold are recoloured, verified by counting gold elements in a headless
+  browser (0).

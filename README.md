@@ -1,4 +1,4 @@
-# SkyTrust 🔭
+# SkyTrust 🌙
 
 **An astronomy cloud forecast that tells you how often it's been wrong.**
 
@@ -7,7 +7,7 @@
 **Live app: [skytrust.streamlit.app](https://skytrust.streamlit.app/)** · **Full results:** [docs/RESULTS.md](docs/RESULTS.md)
 
 <p align="center">
-  <img src="docs/screenshots/tonight.png" alt="Tonight page: probability of a usable night, verdict, best window, track record, and hourly cloud charts" width="68%">
+  <img src="docs/screenshots/tonight.png" alt="Tonight page: plain-English verdict with the chance of a usable night, darkness, best window, Moon phase, how much to trust it, and an hour-by-hour chart" width="68%">
   &nbsp;
   <img src="docs/screenshots/tonight_mobile.png" alt="The same page on a phone" width="24%">
 </p>
@@ -36,7 +36,7 @@ flowchart LR
         D --> F
         F --> G["P(usable night) + best window<br/>+ how reliable that is here"]
     end
-    subgraph Future["Future: 7-Night Outlook"]
+    subgraph Future["Future: the next 7 nights"]
         F --> H[Next 7 nights, with trust that<br/>drops as measured by lead time]
     end
 ```
@@ -87,7 +87,7 @@ is on the app's Track Record page. The log is append-only on the
 
 ## Methodology and caveats
 
-The short version is above; the app's **Methodology** page and [docs/RESULTS.md](docs/RESULTS.md)
+The short version is above; the app's **How It Works** page and [docs/RESULTS.md](docs/RESULTS.md)
 have the details. Key caveats:
 - Airport ceilometers can't see cirrus; ERA5 is a model on a ~28 km grid and is made by ECMWF
   (so ECMWF may look better than it is under ERA5-based labels; results flag this).
