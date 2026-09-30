@@ -20,7 +20,8 @@ def test_settings_load_with_spec_defaults(settings):
     assert settings.min_run_hours == 3
     assert settings.max_missing_frac == 0.25
     assert settings.sources["era5_model"] == "era5"
-    assert settings.raw["split"]["train_end"] < settings.raw["split"]["test_start"]
+    split = settings.raw["split"]
+    assert split["train_end"] < split["test_start"] <= split["test_end"]
 
 
 def test_bad_clear_threshold_rejected(tmp_path):

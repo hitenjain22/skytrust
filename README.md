@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/hitenjain22/skytrust/actions/workflows/ci.yml/badge.svg)](https://github.com/hitenjain22/skytrust/actions/workflows/ci.yml)
 
-**Live app:** _deploying soon: link will go here_ · **Full results:** [docs/RESULTS.md](docs/RESULTS.md)
+**Live app: [skytrust.streamlit.app](https://skytrust.streamlit.app/)** · **Full results:** [docs/RESULTS.md](docs/RESULTS.md)
 
 <p align="center">
   <img src="docs/screenshots/tonight.png" alt="Tonight page: probability of a usable night, verdict, best window, track record, and hourly cloud charts" width="68%">
@@ -67,7 +67,7 @@ _Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` (co
 
 <!-- RESULTS:END -->
 
-Measured on the 2026 test year, a period none of the models saw during training. The blend beats
+Measured on the 2026 test period (fixed end date, so these numbers are exactly reproducible), which none of the models saw during training. The blend beats
 every single model at every lead time, but beats a plain average of the models at only some leads;
 [docs/RESULTS.md](docs/RESULTS.md) says exactly where, with confidence intervals for everything.
 
@@ -109,6 +109,9 @@ Rebuild everything from raw data (about 1,000 downloads on the first run, then c
 ```bash
 make all           # fetch -> build-dataset -> train -> evaluate -> report
 ```
+
+The evaluation period is frozen (`split.test_end` in `config/settings.yaml`), so this reproduces
+the committed numbers on any day. To refresh the track record, move that date and run `make all`.
 
 Useful single steps: `python -m skytrust validate-sites | fetch --source {asos,era5,prevruns} |
 build-dataset | train | evaluate | report | tonight --site ID`.

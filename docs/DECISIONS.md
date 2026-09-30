@@ -250,7 +250,16 @@ Hiten asked for the path that is easiest to understand and gives the most consis
   Python 3.12; developer toolbar hidden for visitors; the app falls back to `src/` on the import
   path if the host installs dependencies but not the package. Steps in `docs/DEPLOY.md`.
 - **Deep links** `?page=track-record&site=BIH` make pages shareable (and screenshot-able).
-- **Open question for Hiten (split change needs approval):** the test period is "2026-01-01 →
-  latest labeled night", so re-running `make all` on a later day adds nights and shifts metrics
-  in the third decimal (verified 2026-09-29: blend BSS 0.627 → 0.629). Proposed: pin
-  `split.test_end` so results are exactly reproducible, and extend it deliberately when refreshing.
+- **Deployed:** https://skytrust.streamlit.app/ (verified as a logged-out visitor).
+
+### 2026-09-29 · Freeze the end of the test period at 2026-09-23 (changes SPEC 8.1; Hiten delegated the choice)
+- **Problem:** SPEC's test period was "2026-01-01 → latest labeled night", so re-running
+  `make all` on a later day added nights and shifted metrics (blend BSS 0.627 → 0.629 on
+  2026-09-29). Conclusions were unchanged, but README / RESUME_BULLETS / app numbers would drift.
+- **Alternatives:** (A) freeze `split.test_end`; (B) keep it rolling.
+- **Decision: A**, better for a portfolio (numbers on the resume always match the repo and app,
+  and anyone re-running gets identical results) and standard practice (evaluate on a fixed period,
+  refresh deliberately). Training data and the models are unaffected. Nights after the test end
+  are `split = "none"`, and the dataset build stops there by default.
+- **Refreshing later:** move `split.test_end`, run `make all`, commit. The git history then shows
+  exactly when and why the numbers changed.

@@ -22,7 +22,7 @@
 - **ERA5 label:** Open-Meteo archive, `models=era5`, cloud_cover/100. Reanalysis, ECMWF-related, ~6-day lag.
 - **Primary label:** per hour `max(asos, era5)`; > 25 % missing in either source → exclude night (log reason).
 - **Features:** Previous Runs `cloud_cover_previous_day{d}`; > 25 % missing → NaN.
-- **Split:** train 2024-01-01 → 2025-12-31, test 2026-01-01 → latest. Test set used once per final model.
+- **Split:** train 2024-01-01 → 2025-12-31, test 2026-01-01 → 2026-09-23 (`split.test_end`, frozen 2026-09-29). Test set used once per final model.
 
 ## Commands
 - `uv sync` · `uv run pytest` · `uv run ruff check . && uv run ruff format --check .`
@@ -31,3 +31,4 @@
 - Offline tests use the `fast_settings` fixture (light C grid/folds/resamples). Keep the suite < 30 s.
 - The shipped models are `artifacts/model_lead{d}.json`; load them only via `inference.load_artifact` + `inference.predict_proba` (numpy). Never pickle. The app/CLI import path must not load sklearn (tested).
 - App: `make app`; CLI: `make tonight SITE=BIH`. Quick tests: `pytest`; everything offline: `make test`.
+- Live app: https://skytrust.streamlit.app/ (redeploys on every push to main).

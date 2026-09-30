@@ -37,14 +37,17 @@ def night_rules(settings: Settings) -> NightRules:
 
 
 def assign_split(night_dates: pd.Series, settings: Settings) -> pd.Series:
-    """'train' / 'test' from the fixed time-based split (SPEC 8.1); anything else 'none'."""
+    """'train' / 'test' from the fixed time-based split (SPEC 8.1); anything else 'none'
+    (before training, or after the frozen end of the test period)."""
     split = settings.raw["split"]
     d = pd.to_datetime(night_dates)
+
+    def between(start, end) -> pd.Series:
+        return (d >= pd.Timestamp(start)) & (d <= pd.Timestamp(end))
+
     out = pd.Series("none", index=night_dates.index, dtype="string")
-    out[(d >= pd.Timestamp(split["train_start"])) & (d <= pd.Timestamp(split["train_end"]))] = (
-        "train"
-    )
-    out[d >= pd.Timestamp(split["test_start"])] = "test"
+    out[between(split["train_start"], split["train_end"])] = "train"
+    out[between(split["test_start"], split["test_end"])] = "test"
     return out
 
 
@@ -104,6 +107,14 @@ def cached_last_night(sites: tuple[Site, ...], settings: Settings, root: Path = 
     return min(ends).date() - dt.timedelta(days=1)
 
 
+def default_last_night(
+    sites: tuple[Site, ...], settings: Settings, root: Path = RAW_DIR
+) -> dt.date:
+    """The dataset stops at the frozen test end, so rebuilding on a later day gives the same
+    dataset (and the same results) even though the raw cache keeps growing."""
+    return min(cached_last_night(sites, settings, root), settings.raw["split"]["test_end"])
+
+
 def build_dataset(
     settings: Settings,
     sites: tuple[Site, ...],
@@ -112,7 +123,7 @@ def build_dataset(
     root: Path = RAW_DIR,
 ) -> pd.DataFrame:
     first_night = first_night or settings.history_start
-    last_night = last_night or cached_last_night(sites, settings, root)
+    last_night = last_night or default_last_night(sites, settings, root)
     parts = []
     for site in sites:
         log.info("building %s nights %s..%s", site.id, first_night, last_night)

@@ -976,6 +976,8 @@ def write_resume_bullets(metrics: dict, path: Path | None = None) -> Path:
         f"(commit `{metrics['meta']['git_commit']}`). Every number below comes from that file; "
         "edit the wording freely, but re-run the report instead of hand-editing numbers._",
         "",
+        "Links: live app https://skytrust.streamlit.app/ · code https://github.com/hitenjain22/skytrust",
+        "",
         *[f"- {b}" for b in resume_bullets(metrics)],
         "",
     ]

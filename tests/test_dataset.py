@@ -161,3 +161,17 @@ def test_cli_build_dataset(monkeypatch, built, tmp_path, capsys):
     assert cli.main(["build-dataset"]) == 0
     out = capsys.readouterr().out
     assert "site-nights" in out and "Test nights at lead 1" in out
+
+
+def test_nights_after_test_end_are_outside_the_split(settings):
+    """Frozen evaluation period (DECISIONS 2026-09-29): later nights are neither train nor test."""
+    end = settings.raw["split"]["test_end"]
+    dates = pd.Series([end, end + dt.timedelta(days=1)])
+    assert dataset.assign_split(dates, settings).tolist() == ["test", "none"]
+
+
+def test_default_dataset_end_is_capped_at_test_end(settings, monkeypatch):
+    monkeypatch.setattr(dataset, "cached_last_night", lambda *a, **k: dt.date(2030, 1, 1))
+    assert dataset.default_last_night(SYNTH_SITES, settings) == settings.raw["split"]["test_end"]
+    monkeypatch.setattr(dataset, "cached_last_night", lambda *a, **k: dt.date(2026, 3, 1))
+    assert dataset.default_last_night(SYNTH_SITES, settings) == dt.date(2026, 3, 1)
