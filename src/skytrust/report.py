@@ -546,6 +546,32 @@ def blend_verdicts(v: MetricsView, label: str = "primary") -> dict[str, dict[str
     return out
 
 
+def significant_wins(v: MetricsView, a: str, b: str, label: str = "primary") -> list[int]:
+    """Leads where A's Brier score is significantly lower than B's (paired CI excludes zero)."""
+    wins = []
+    for ld in v.lead_list(label):
+        d = v.diff(label, ld, a, b)
+        if d is not None and d["significant"] and d["brier_diff"] < 0:
+            wins.append(ld)
+    return wins
+
+
+def attribution_line(v: MetricsView) -> str:
+    """Where the blend's edge over a plain average comes from: calibration or learned weights."""
+    n = len(v.lead_list("primary"))
+    cal = significant_wins(v, "equal_weight_cal", "equal_weight")
+    weights = significant_wins(v, "blend", "equal_weight_cal")
+    if v.rec("primary", RESULTS_LEAD, "equal_weight_cal") is None:
+        return ""
+    return (
+        f"- **Where does the blend's edge over a plain average come from?** Calibrating the average "
+        f"with context (B6 vs B5) helps significantly at {len(cal)} of {n} leads; learning a separate "
+        f"weight for each model (blend vs B6) at only {len(weights)} of {n}. Most of the value is "
+        "averaging several models and calibrating the result. Forecasting research calls this the "
+        "*forecast combination puzzle*: simple averages are hard to beat."
+    )
+
+
 def blend_summary_lines(v: MetricsView) -> list[str]:
     """The honesty rule (SPEC 8.8): say plainly where the blend does and doesn't win."""
     lab, lead = "primary", RESULTS_LEAD
@@ -607,6 +633,9 @@ def blend_summary_lines(v: MetricsView) -> list[str]:
                 f"not beat {name}.**"
             )
         lines.append(sentence)
+    attribution = attribution_line(v)
+    if attribution:
+        lines.append(attribution)
     return lines
 
 
@@ -1092,6 +1121,17 @@ def resume_bullets(metrics: dict) -> list[str]:
     nbm_clause = (
         f" and NOAA's National Blend of Models at {len(nbm_wins)} of {n_leads}" if nbm_wins else ""
     )
+    value_clause = ""
+    got = {
+        c["method"]: dict(zip([round(a, 2) for a in c["alpha"]], c["value"], strict=True)).get(0.2)
+        for c in metrics.get("value_curves", [])
+        if c["label"] == "primary" and c["lead"] == lead
+    }
+    if got.get("blend") is not None and got.get("nbm_lr") is not None:
+        value_clause = (
+            f" In a cost-loss decision analysis it captured {got['blend']:.0%} of a perfect "
+            f"forecast's value vs {got['nbm_lr']:.0%} for NOAA's blend."
+        )
     return [
         f"Built SkyTrust, an astronomy cloud forecast that backtests {n_models} weather models "
         f"against airport ceilometer observations and ERA5 reanalysis at {len(sites)} California "
@@ -1102,7 +1142,7 @@ def resume_bullets(metrics: dict) -> list[str]:
         "archived fixed-lead forecasts to avoid look-ahead bias) with week-block bootstrap CIs; "
         f"the blend reached a Brier Skill Score of {blend['bss']:.2f} "
         f"(95% CI {blend['bss_lo']:.2f}–{blend['bss_hi']:.2f}) and beat the best single model at "
-        f"{wins} of {n_leads} lead times" + nbm_clause + ".",
+        f"{wins} of {n_leads} lead times" + nbm_clause + "." + value_clause,
         "Shipped a Streamlit app with live 7-night outlooks, per-site track records, and graceful "
         "API-failure fallback; models are exported to JSON and served with numpy, with CI running "
         "an offline test suite on every push.",
