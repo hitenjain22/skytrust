@@ -15,7 +15,7 @@ from astral import moon as astral_moon
 from astral.sun import dawn, dusk
 
 from skytrust import astro
-from skytrust.config import Site
+from skytrust.config import Site, load_sites
 
 LA = ZoneInfo("America/Los_Angeles")
 SAC = Site("SAC", "Sacramento Exec", 38.5069, -121.495, 8.0, "valley", "America/Los_Angeles")
@@ -122,3 +122,25 @@ def test_moon_events_alternate_rise_and_set():
     assert len(ev) >= 4
     assert set(ev["event"]) == {"rise", "set"}
     assert (ev["event"].to_numpy()[1:] != ev["event"].to_numpy()[:-1]).all()
+
+
+def test_moon_phase_angle_agrees_with_illumination_and_direction():
+    """Phase angle phi and lit fraction k are tied by k = (1 - cos phi) / 2, and the lit
+    fraction grows while phi < 180 (waxing). Checked across a whole month."""
+    times = pd.date_range("2026-10-01", periods=60, freq="12h", tz="UTC")
+    phi = astro.moon_phase_deg(times)
+    k = astro.moon_illumination(times)
+    assert np.allclose((1 - np.cos(np.radians(phi))) / 2, k, atol=0.02)
+    growing = np.diff(k) > 0
+    # skip samples within 10 degrees of full or new, where the next sample can cross the turn
+    away = (np.abs(phi[:-1] - 180) > 10) & (phi[:-1] > 10) & (phi[:-1] < 350)
+    assert (growing == (phi[:-1] < 180))[away].all()
+
+
+def test_moon_up_intervals_are_ordered_and_inside_the_window():
+    sac = next(s for s in load_sites() if s.id == "SAC")
+    t0, t1 = pd.Timestamp("2026-09-30 02:00", tz="UTC"), pd.Timestamp("2026-09-30 14:00", tz="UTC")
+    runs = astro.moon_up_intervals(sac, t0, t1)
+    assert runs and all(t0 <= a < b <= t1 for a, b in runs)
+    mid = runs[0][0] + (runs[0][1] - runs[0][0]) / 2
+    assert astro.moon_altitude(sac, pd.DatetimeIndex([mid]))[0] > 0

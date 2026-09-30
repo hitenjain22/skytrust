@@ -124,6 +124,9 @@ class NightForecast:
     model_features: dict = field(default_factory=dict)
     blend_version: str | None = None  # git commit recorded in the artifact that produced p_usable
     hourly_clear: pd.Series | None = None  # P(clear) per dark hour from the hourly model
+    moon_phase_deg: float | None = None  # at mid-darkness: 0 new, 180 full; < 180 waxing
+    # When the Moon is up, from an hour before dusk to an hour after dawn (10-minute steps)
+    moon_up: list[tuple[pd.Timestamp, pd.Timestamp]] = field(default_factory=list)
 
 
 @dataclass
@@ -382,6 +385,13 @@ def _forecast_night(
         model_features=per_model,
         blend_version=artifact.get("git_commit"),
         hourly_clear=hourly_probabilities(ctx, night, hours, dusk, dawn, lead),
+        moon_phase_deg=float(astro.moon_phase_deg(pd.DatetimeIndex([dusk + (dawn - dusk) / 2]))[0]),
+        moon_up=astro.moon_up_intervals(
+            ctx.site,
+            dusk - pd.Timedelta(hours=1),
+            dawn + pd.Timedelta(hours=1),
+            ctx.settings.raw["astro"]["moon_up_altitude_deg"],
+        ),
     )
 
 

@@ -121,6 +121,38 @@ def moon_illumination(times: pd.DatetimeIndex) -> np.ndarray:
     return np.atleast_1d(almanac.fraction_illuminated(eph, "moon", _to_skyfield(times)))
 
 
+def moon_phase_deg(times: pd.DatetimeIndex) -> np.ndarray:
+    """Moon phase angle in degrees (Moon minus Sun ecliptic longitude): 0 = new, 90 = first
+    quarter, 180 = full, 270 = last quarter. Below 180 the Moon is waxing (growing)."""
+    eph = _ephemeris()
+    return np.atleast_1d(almanac.moon_phase(eph, _to_skyfield(times)).degrees)
+
+
+def true_runs(times: pd.DatetimeIndex, flags) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+    """(start, end) of each stretch where `flags` is True. A stretch still open at the end
+    runs to the last time (e.g. the Moon is still up at the end of the window)."""
+    runs, start = [], None
+    for t, flag in zip(times, flags, strict=True):
+        if flag and start is None:
+            start = t
+        elif not flag and start is not None:
+            runs.append((start, t))
+            start = None
+    if start is not None:
+        runs.append((start, times[-1]))
+    return runs
+
+
+def moon_up_intervals(
+    site: Site, start_utc: pd.Timestamp, end_utc: pd.Timestamp, altitude_deg: float = 0.0
+) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+    """When the Moon is above `altitude_deg` between two instants, on a 10-minute grid."""
+    grid = pd.date_range(start_utc, end_utc, freq="10min")
+    if len(grid) == 0:
+        return []
+    return true_runs(grid, moon_altitude(site, grid) > altitude_deg)
+
+
 def moon_altitude(site: Site, times: pd.DatetimeIndex) -> np.ndarray:
     return _altitude_deg(site, "moon", _to_skyfield(times))
 
