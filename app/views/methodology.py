@@ -1,11 +1,66 @@
-"""Page 4: plain-English methodology, definitions (from config), caveats, attribution."""
+"""Page 4: how it works. A 30-second version and a glossary for beginners, then the full
+methodology (definitions from config), caveats and attribution."""
 
 from __future__ import annotations
 
 import streamlit as st
 
 from skytrust import report
+from views import components as ui
 from views.common import Context
+
+GLOSSARY = {
+    "Astronomical darkness": "When the Sun is more than 18° below the horizon, the last "
+    "twilight glow is gone. Faint targets need this.",
+    "Usable night": "At least three clear dark hours in a row: roughly what an imaging session "
+    "needs.",
+    "False clear": "The forecast said clear, you drove out, and it clouded over. The mistake "
+    "that costs astrophotographers the most, so SkyTrust counts it.",
+    "Probability": "70% means that on nights like this, about 7 in 10 turned out usable in "
+    "testing. SkyTrust checks that these percentages can be taken at face value.",
+    "Weather model": "A computer simulation of the atmosphere (GFS, ECMWF, ...). Different models "
+    "often disagree about clouds, which is why SkyTrust combines five.",
+    "Cirrus": "Thin, high ice cloud. Often invisible to the eye at night but it dims stars and "
+    "ruins long exposures.",
+    "Moon phase": "How much of the Moon is lit. Near full Moon the sky is too bright for faint "
+    "galaxies and nebulae; the Moon, planets and clusters are fine.",
+    "Lead time": "How many days ahead the forecast is. Accuracy drops the further ahead you look.",
+    "Skill score": "How much better than simply guessing the seasonal average (0 = no better, "
+    "1 = perfect).",
+}
+
+
+def thirty_seconds(ctx: Context) -> str:
+    n_models = len(ctx.settings.models)
+    split = ctx.settings.raw["split"]
+    steps = [
+        ("Ask several forecasts", f"SkyTrust reads {n_models} major weather models for your spot "
+         "(refreshed hourly): how cloudy each thinks every dark hour will be."),
+        ("Blend them the smart way", "A statistical model, trained on two years of what the "
+         "models said versus what the sky actually did, weighs them into one honest probability."),
+        ("Grade itself in public", f"It was tested on {split['test_start']:%B}–"
+         f"{split['test_end']:%B %Y}, nights it never saw, and keeps logging every forecast "
+         "before the night to score later."),
+    ]  # fmt: skip
+    cards = "".join(
+        ui.card(
+            f'<div class="sk-step-n">{i}</div><div style="font-weight:600;margin-bottom:6px">'
+            f'{ui.esc(t)}</div><div class="sk-muted" style="font-size:.9rem">{ui.esc(b)}</div>'
+        )
+        for i, (t, b) in enumerate(steps, 1)
+    )
+    return f'<div class="sk-steps">{cards}</div>'
+
+
+def sections(text: str) -> None:
+    """First section in full; every later "### " section folded into an expander, so the page
+    stays scannable while keeping all the detail."""
+    first, *rest = text.strip().split("\n### ")
+    st.markdown(first)
+    for part in rest:
+        title, _, body = part.partition("\n")
+        with st.expander(title.strip()):
+            st.markdown(body)
 
 
 def render(ctx: Context) -> None:
@@ -14,8 +69,16 @@ def render(ctx: Context) -> None:
     clim = ctx.settings.raw["climatology"]
     forward_start = ctx.settings.raw["forward"]["start_date"]
     models = ", ".join(f"{m.name}" for m in ctx.settings.models)
-    st.header("Methodology")
-    st.markdown(f"""
+    st.header("How SkyTrust works")
+    st.markdown(thirty_seconds(ctx), unsafe_allow_html=True)
+    st.subheader("Glossary")
+    cols = st.columns(3)
+    for i, (term, meaning) in enumerate(GLOSSARY.items()):
+        cols[i % 3].markdown(
+            f"**{term}**  \n<span class='sk-muted'>{meaning}</span>", unsafe_allow_html=True
+        )
+    st.subheader("The full methodology")
+    text = f"""
 ### The problem
 Astrophotographers routinely check five or six forecasts before driving out, and the most common
 complaint is the **false clear**: the forecast said clear, you set up, and it clouded over. No app
@@ -66,15 +129,16 @@ afterwards (the forward test on the Track Record page).
 - **95% intervals** resample whole calendar weeks, because neighbouring nights share weather.
 - **Verdicts:** Go ≥ {ctx.settings.raw["verdict"]["go"]:.0%}, Maybe ≥
   {ctx.settings.raw["verdict"]["maybe"]:.0%}, otherwise Skip.
-""")
-    st.markdown("### Caveats")
+"""
+    sections(text)
     caveats = list(report.CAVEATS)
     if ctx.metrics:
         caveats = report.data_caveats(report.MetricsView(ctx.metrics)) + caveats
-    for c in caveats:
-        st.markdown(f"- {c}")
+    with st.expander("Caveats: what this can't tell you"):
+        for c in caveats:
+            st.markdown(f"- {c}")
     st.markdown("""
-### Data and credits
+#### Data and credits
 Weather data by [Open-Meteo.com](https://open-meteo.com/), licensed CC BY 4.0. ASOS
 observations courtesy of the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/),
 Iowa State University. Satellite cloud mask and imagery: NOAA GOES-18 (public AWS bucket

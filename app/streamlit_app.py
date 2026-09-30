@@ -3,6 +3,10 @@
 The app only reads precomputed artifacts (the blend JSON models and metrics.json) plus the
 live Open-Meteo forecast. It never trains or backfills (SPEC 10). Any failure on a page is
 caught and shown as a message; the app itself must never crash.
+
+Navigation and the location picker live at the top of the page (not in a sidebar), so they're
+one tap away on a phone. The URL always reflects the current page and location, so any view can
+be bookmarked or shared.
 """
 
 from __future__ import annotations
@@ -20,18 +24,34 @@ except ModuleNotFoundError:
 
 from skytrust import inference, live  # noqa: E402
 from skytrust.config import load_settings, load_sites  # noqa: E402
-from views import methodology, outlook, tonight, track_record, where  # noqa: E402
-from views.common import Context, footer, inject_night_vision_css, palette  # noqa: E402
+from views import components as ui  # noqa: E402
+from views import methodology, outlook, theme, tonight, track_record, where  # noqa: E402
+from views.common import Context, footer, site_option_label  # noqa: E402
 
 log = logging.getLogger("skytrust.app")
 
 PAGES = {
     "Tonight": tonight.render,
-    "7-Night Outlook": outlook.render,
-    "Where Tonight": where.render,
+    "7 Nights": outlook.render,
+    "Where to Go": where.render,
     "Track Record": track_record.render,
-    "Methodology": methodology.render,
+    "How It Works": methodology.render,
 }
+ICONS = {
+    "Tonight": ":material/bedtime:",
+    "7 Nights": ":material/calendar_month:",
+    "Where to Go": ":material/explore:",
+    "Track Record": ":material/verified:",
+    "How It Works": ":material/menu_book:",
+}
+SLUGS = {name.lower().replace(" ", "-"): name for name in PAGES}
+# Old page names keep working in bookmarked links.
+SLUGS |= {
+    "7-night-outlook": "7 Nights",
+    "where-tonight": "Where to Go",
+    "methodology": "How It Works",
+}
+DEFAULT_CUSTOM = {"lat": 37.7306, "lon": -119.5738, "name": "Glacier Point"}
 
 
 @st.cache_resource(show_spinner=False)
@@ -46,12 +66,17 @@ def load_static():
     return settings, sites, metrics
 
 
-@st.cache_data(ttl=60 * 60, show_spinner="Fetching the latest forecasts…")
+@st.cache_data(ttl=60 * 60, show_spinner="Reading the latest forecasts…")
 def cached_forecast(
-    site_id: str, lat: float | None = None, lon: float | None = None, name: str = ""
+    site_id: str,
+    lat: float | None = None,
+    lon: float | None = None,
+    name: str = "",
+    hour: str = "",
 ):
-    """Live forecast, cached for 60 minutes per location. Exceptions are not cached, so a failed
-    fetch is retried on the next page load (with the last-good disk copy as fallback)."""
+    """Live forecast per location, refreshed every clock hour (`hour` is part of the cache key)
+    and at most 60 minutes old. Exceptions are not cached, so a failed fetch is retried on the
+    next page load (with the last-good disk copy as fallback)."""
     settings, sites, metrics = load_static()
     site = resolve_site(site_id, lat, lon, name)
     return live.get_forecast(site, settings, metrics)
@@ -81,8 +106,9 @@ def cached_forward_summary():
 def get_forecast(
     site_id: str, lat=None, lon=None, name: str = ""
 ) -> tuple[object | None, str | None]:
+    hour = live.utcnow().floor("h").isoformat()
     try:
-        return cached_forecast(site_id, lat, lon, name), None
+        return cached_forecast(site_id, lat, lon, name, hour), None
     except live.LiveUnavailableError as exc:
         return None, str(exc)
     except Exception as exc:  # never let a forecast problem take down the app
@@ -90,70 +116,108 @@ def get_forecast(
         return None, f"unexpected error: {exc}"
 
 
-def main() -> None:
-    st.set_page_config(page_title="SkyTrust", page_icon="🔭", layout="centered")
-    settings, sites, metrics = load_static()
+def top_bar(sites) -> tuple[str, str, float | None, float | None, str, bool]:
+    """Brand, night-vision switch, location picker, and page navigation."""
+    query = st.query_params
+    brand, switch = st.columns([4, 1.3], vertical_alignment="center")
+    brand.markdown(
+        ui.block(
+            '<div class="sk-brand">',
+            ui.moon_svg(200.0, 34),
+            '<div><div class="sk-brand-name">SkyTrust</div>',
+            '<div class="sk-brand-tag">Clear-sky forecasts for stargazers, with an honest '
+            "track record</div></div></div>",
+        ),
+        unsafe_allow_html=True,
+    )
+    if "night_vision" not in st.session_state:  # first load: honour ?nv=1 from a bookmark
+        st.session_state["night_vision"] = query.get("nv") == "1"
+    night_vision = switch.toggle(
+        "Night vision",
+        key="night_vision",
+        help="Dim red display that keeps your eyes dark-adapted at the telescope.",
+    )
 
-    with st.sidebar:
-        st.title("🔭 SkyTrust")
-        st.caption("An astronomy cloud forecast that tells you how often it's been wrong.")
-        # Optional deep links: ?page=track-record&site=BIH
-        query = st.query_params
-        slugs = {name.lower().replace(" ", "-"): name for name in PAGES}
-        start_page = slugs.get(query.get("page", ""), "Tonight")
-        page = st.radio("Page", list(PAGES), index=list(PAGES).index(start_page), key="page")
-        site_ids = [s.id for s in sites]
-        wanted_site = query.get("site", "SAC").upper()
-        options = [*site_ids, live.CUSTOM_ID]
-        if "lat" in query and "lon" in query:
-            wanted_site = live.CUSTOM_ID
-        site_id = st.selectbox(
-            "Site",
-            options,
-            index=options.index(wanted_site) if wanted_site in options else 0,
-            key="site",
-            format_func=lambda sid: (
-                "📍 Custom location"
-                if sid == live.CUSTOM_ID
-                else f"{sid} · {next(s.terrain_class for s in sites if s.id == sid)}"
-            ),
-        )
-        lat = lon = None
-        name = ""
-        if site_id == live.CUSTOM_ID:
-            (la0, la1), (lo0, lo1) = live.CUSTOM_BOUNDS["lat"], live.CUSTOM_BOUNDS["lon"]
-            lat = st.number_input(
-                "Latitude", la0, la1, float(query.get("lat", 37.7306)), 0.01, key="lat"
-            )
-            lon = st.number_input(
-                "Longitude", lo0, lo1, float(query.get("lon", -119.5738)), 0.01, key="lon"
-            )
-            name = st.text_input("Name", query.get("name", "Glacier Point"), key="name")
+    site_ids = [s.id for s in sites]
+    options = [*site_ids, live.CUSTOM_ID]
+    wanted = query.get("site", "SAC").upper()
+    if "lat" in query and "lon" in query:
+        wanted = live.CUSTOM_ID
+    labels = {s.id: site_option_label(s) for s in sites} | {live.CUSTOM_ID: "📍 Custom location…"}
+    where_col, nav_col = st.columns([1.25, 3], vertical_alignment="bottom")
+    site_id = where_col.selectbox(
+        "Location",
+        options,
+        index=options.index(wanted) if wanted in options else 0,
+        key="site",
+        format_func=labels.get,
+    )
+    start = SLUGS.get(query.get("page", ""), "Tonight")
+    page = nav_col.segmented_control(
+        "Page",
+        list(PAGES),
+        default=None if "page" in st.session_state else start,
+        required=True,
+        key="page",
+        format_func=lambda p: f"{ICONS[p]} {p}",
+        label_visibility="hidden",
+        width="stretch",
+        wrap=True,  # on a phone the five pages flow onto two lines instead of off-screen
+    )
+    lat = lon = None
+    name = ""
+    if site_id == live.CUSTOM_ID:
+        (la0, la1), (lo0, lo1) = live.CUSTOM_BOUNDS["lat"], live.CUSTOM_BOUNDS["lon"]
+        with st.container(border=True):
+            c1, c2, c3 = st.columns([1, 1, 1.4])
+            lat = c1.number_input(
+                "Latitude", la0, la1, float(query.get("lat", DEFAULT_CUSTOM["lat"])), 0.01,
+                key="lat",
+            )  # fmt: skip
+            lon = c2.number_input(
+                "Longitude", lo0, lo1, float(query.get("lon", DEFAULT_CUSTOM["lon"])), 0.01,
+                key="lon",
+            )  # fmt: skip
+            name = c3.text_input("Name", query.get("name", DEFAULT_CUSTOM["name"]), key="name")
             st.caption(
-                "Uses the site-agnostic blend; its reliability comes from the unseen-site test."
+                "Anywhere in the Pacific-time West. Uses the site-agnostic blend, whose accuracy "
+                "was measured at airports it had never seen."
             )
-        with st.expander("About"):
-            st.markdown(
-                "Built by **Hiten Jain** (UC Davis, statistics / operations research). Every "
-                "number is generated by code from real data and verified on a held-out period "
-                "plus a live forward test.  \n"
-                "[Code on GitHub](https://github.com/hitenjain22/skytrust) · "
-                "[Full results](https://github.com/hitenjain22/skytrust/blob/main/docs/RESULTS.md)"
-            )
-        night_vision = st.toggle(
-            "Night vision (red)",
-            key="night_vision",
-            help="Dim red display that preserves dark adaptation at the telescope.",
-        )
+    return page or "Tonight", site_id, lat, lon, name, night_vision
 
+
+def sync_url(page: str, site_id: str, lat, lon, name: str, night_vision: bool) -> None:
+    """Keep the address bar in step with what's shown, so the view can be shared or bookmarked
+    (including the red night-vision display, for opening straight into it at the telescope)."""
+    params = {"page": next(s for s, p in SLUGS.items() if p == page)}
+    if site_id == live.CUSTOM_ID and lat is not None:
+        params |= {"lat": f"{lat:.4f}", "lon": f"{lon:.4f}", "name": name}
+    else:
+        params["site"] = site_id.lower()
     if night_vision:
-        inject_night_vision_css()
+        params["nv"] = "1"
+    if dict(st.query_params) != params:
+        st.query_params.from_dict(params)
+
+
+def main() -> None:
+    st.set_page_config(
+        page_title="SkyTrust · clear-sky forecasts for stargazers",
+        page_icon="🌙",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
+    settings, sites, metrics = load_static()
+    page, site_id, lat, lon, name, night_vision = top_bar(sites)
+    pal = theme.palette(night_vision)
+    theme.inject(pal, night_vision)
     try:
         site = resolve_site(site_id, lat, lon, name)
     except ValueError as exc:  # out-of-bounds custom location
         st.error(str(exc))
         return
-    needs_live = page in ("Tonight", "7-Night Outlook")
+    sync_url(page, site_id, lat, lon, name, night_vision)
+    needs_live = page in ("Tonight", "7 Nights")
     forecast, error = get_forecast(site_id, lat, lon, name) if needs_live else (None, None)
     summary = cached_forward_summary() if page == "Track Record" else None
     ctx = Context(
@@ -163,9 +227,10 @@ def main() -> None:
         metrics,
         forecast,
         error,
-        palette(night_vision),
+        pal,
         summary,
         get_forecast,
+        live.utcnow(),
     )
     try:
         PAGES[page](ctx)

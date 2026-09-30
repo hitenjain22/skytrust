@@ -1,4 +1,5 @@
-"""Page 2: the next 7 nights, with a trust level that drops with lead time."""
+"""Page 2: the next 7 nights. A week strip of cards (like a weather app), then the hour-by-hour
+cloud grid (like a Clear Sky Chart, but with a colour key and 12-hour times)."""
 
 from __future__ import annotations
 
@@ -6,43 +7,94 @@ import pandas as pd
 import streamlit as st
 
 from views import charts
-from views.common import Context, local_time, pct, verdict_badge
-from views.tonight import unavailable
+from views import components as ui
+from views.common import Context, day_label, lead_phrase, short_time
+from views.tonight import show, unavailable
 
-TRUST_DOTS = {"High": "●●●", "Medium": "●●○", "Low": "●○○", "Unknown": "○○○"}
+TRUST_TEXT = {
+    "High": "high trust",
+    "Medium": "medium trust",
+    "Low": "low trust",
+    "Unknown": "trust unknown",
+}
+
+
+def day_card(ctx: Context, n, i: int) -> str:
+    tz, pal = ctx.site.timezone, ctx.palette
+    color = pal[n.verdict]
+    bw = n.best_window
+    window = (
+        f"{short_time(bw.start_utc, tz)}–{short_time(bw.until_utc, tz)}"
+        if bw
+        else "no clear window"
+    )
+    return ui.block(
+        f'<div class="sk-day" style="--c:{color}">',
+        f'<div class="sk-day-name">{day_label(n.night_date, i, ctx.now_utc, tz)}</div>',
+        f'<div class="sk-day-date">{pd.Timestamp(n.night_date):%b %-d}</div>',
+        f'<div style="margin:8px 0 2px">{ui.moon_svg(n.moon_phase_deg, 30)}</div>',
+        f'<div class="sk-day-p">{"–" if n.p_usable is None else f"{n.p_usable:.0%}"}</div>',
+        ui.pill(n.verdict.upper(), color),
+        f'<div class="sk-day-meta">{window}<br>{n.moon_illum or 0:.0%} Moon<br>',
+        f"{ui.trust_dots(n.trust)} {TRUST_TEXT.get(n.trust, '')}</div>",
+        "</div>",
+    )
 
 
 def render(ctx: Context) -> None:
-    st.header(f"7-night outlook at {ctx.site_label}")
+    st.header(f"The next 7 nights at {ctx.site_label}")
     if unavailable(ctx):
         return
-    tz, pal = ctx.site.timezone, ctx.palette
-    st.plotly_chart(charts.outlook_grid(ctx.forecast, tz, pal), width="stretch")
+    nights, tz, pal = ctx.nights, ctx.site.timezone, ctx.palette
     st.caption(
-        "Trust comes from the backtest: the blend's skill on the held-out 2026 test period at "
-        "that lead time. "
-        "Forecasts further ahead are measurably less reliable."
+        "Chance of a usable night (3+ clear dark hours in a row). Forecasts further ahead are "
+        "measurably less reliable: the dots show how well SkyTrust did at that range in testing."
     )
-    for i, n in enumerate(ctx.forecast.nights):
-        with st.container(border=True):
-            c1, c2, c3 = st.columns([1.3, 1, 1.4])
-            title = "Tonight" if i == 0 else f"{pd.Timestamp(n.night_date):%a %b %-d}"
-            c1.markdown(f"**{title}** · {n.lead} day{'s' if n.lead > 1 else ''} ahead")
-            c1.markdown(verdict_badge(n.verdict, pal), unsafe_allow_html=True)
-            prob = "–" if n.p_usable is None else f"{n.p_usable:.0%}"
-            c2.metric("P(usable)", prob)
-            if n.best_window:
-                bw = n.best_window
-                window = (
-                    f"{local_time(bw.start_utc, tz)}–{local_time(bw.until_utc, tz)} ({bw.hours} h)"
-                )
-            else:
-                window = "none clear"
+    cards = "".join(day_card(ctx, n, i) for i, n in enumerate(nights))
+    st.markdown(f'<div class="sk-week">{cards}</div>', unsafe_allow_html=True)
+
+    st.subheader("Cloud cover, hour by hour")
+    labels = [
+        f"{day_label(n.night_date, i, ctx.now_utc, tz)} · {pd.Timestamp(n.night_date):%-m/%-d}"
+        for i, n in enumerate(nights)
+    ]
+    show(charts.outlook_grid(nights, ctx.forecast.hourly, tz, pal, labels))
+    st.caption(
+        "Each cell is the typical (median) forecast cloud cover for that dark hour, in %. "
+        "Dark navy = clear, white = overcast; blank = not astronomically dark."
+    )
+
+    with st.expander("📋 Night-by-night details"):
+        rows = []
+        for i, n in enumerate(nights):
+            bw = n.best_window
             skill = (n.track_record or {}).get("overall", {}).get("bss") if n.track_record else None
-            skill_text = f" (skill {skill:.2f})" if skill is not None else ""
-            c3.markdown(
-                f"Best window: **{window}**  \n"
-                f"Moon-free dark hours: **{n.moon_free_hours}** ({pct(n.moon_illum)} moon)  \n"
-                f"Trust: **{TRUST_DOTS[n.trust]} {n.trust}**{skill_text}  \n"
-                f"{n.agreement}"
+            rows.append(
+                {
+                    "night": f"{day_label(n.night_date, i, ctx.now_utc, tz)} "
+                    f"{pd.Timestamp(n.night_date):%b %-d}",
+                    "forecast range": lead_phrase(n.lead),
+                    "chance usable": None if n.p_usable is None else round(100 * n.p_usable),
+                    "verdict": n.verdict,
+                    "dark": f"{short_time(n.dusk_utc, tz)}–{short_time(n.dawn_utc, tz)}",
+                    "best window": (
+                        f"{short_time(bw.start_utc, tz)}–{short_time(bw.until_utc, tz)}"
+                        if bw
+                        else "–"
+                    ),
+                    "Moon": f"{ui.phase_name(n.moon_phase_deg)} ({n.moon_illum or 0:.0%})",
+                    "moon-free dark h": n.moon_free_hours,
+                    "models": n.agreement,
+                    "trust": f"{n.trust}" + (f" (skill {skill:.2f})" if skill is not None else ""),
+                }
             )
+        st.dataframe(
+            pd.DataFrame(rows),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "chance usable": st.column_config.ProgressColumn(
+                    "chance usable", format="%d%%", min_value=0, max_value=100
+                )
+            },
+        )

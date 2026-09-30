@@ -1,16 +1,80 @@
-"""Page 3: the backtest. Everything here is read from artifacts/metrics.json."""
+"""Page 3: how often has it been wrong? A plain-English report card first, then the live
+forward test, then the full backtest for the data-curious. Every number is read from
+artifacts/metrics.json (or the forward-test summary); nothing is typed by hand."""
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from skytrust import report
 from views import charts, forward_panel
+from views import components as ui
 from views.common import Context
+from views.tonight import show
+
+
+def _share(rec: pd.Series | None) -> str:
+    return (
+        "–"
+        if rec is None or pd.isna(rec.get("false_clear_rate"))
+        else f"{1 - rec['false_clear_rate']:.0%}"
+    )
+
+
+def report_card(v: report.MetricsView) -> str:
+    lead = v.lead_list("primary")[0]
+    blend, clim = v.rec("primary", lead, "blend"), v.rec("primary", lead, "climatology")
+    cards = []
+    if blend is not None:
+        ci = ""
+        if not pd.isna(blend.get("false_clear_rate_lo")):
+            lo, hi = 1 - blend["false_clear_rate_hi"], 1 - blend["false_clear_rate_lo"]
+            ci = f"95% range {lo:.0%}–{hi:.0%}. "
+        cards.append(
+            ui.stat(
+                _share(blend),
+                "of the nights SkyTrust said “go” (1 day ahead) really were usable.",
+                f"{ci}Guessing from the season alone: {_share(clim)}.",
+            )
+        )
+    leads = v.lead_list("primary")
+    wins = [
+        ld for ld in leads
+        if (d := v.diff("primary", ld, "blend", "nbm_lr")) is not None
+        and d["significant"] and d["brier_diff"] < 0
+    ]  # fmt: skip
+    if any(v.diff("primary", ld, "blend", "nbm_lr") is not None for ld in leads):
+        cards.append(
+            ui.stat(
+                f"{len(wins)} of {len(leads)}",
+                f"forecast ranges ({leads[0]}–{leads[-1]} days ahead) where it beat NOAA’s own "
+                "National Blend of Models, with 95% confidence.",
+                "Same test nights for both, scored with the Brier score.",
+            )
+        )
+    sat = v.rec("goes", lead, "blend_primary")
+    if sat is not None:
+        cards.append(
+            ui.stat(
+                _share(sat),
+                "of its “go” calls were confirmed by the GOES-18 weather satellite.",
+                "An independent check the model never trained on.",
+            )
+        )
+    elif blend is not None:
+        cards.append(
+            ui.stat(
+                f"{blend['bss']:.2f}",
+                "skill score vs the seasonal average (0 = no better, 1 = perfect).",
+                "Brier Skill Score, 1 day ahead.",
+            )
+        )
+    return f'<div class="sk-stats">{"".join(cards)}</div>'
 
 
 def render(ctx: Context) -> None:
-    st.header("Track record: how often has it been wrong?")
+    st.header("How often has it been wrong?")
     if not ctx.metrics:
         st.warning("No backtest metrics found (artifacts/metrics.json).")
         return
@@ -18,12 +82,21 @@ def render(ctx: Context) -> None:
     meta = ctx.metrics["meta"]
     st.caption(
         f"Trained on {meta['train_period'][0]} → {meta['train_period'][1]}; tested once on "
-        f"{meta['test_period'][0]} → {meta['test_period'][1]}, a period the models never saw. "
+        f"{meta['test_period'][0]} → {meta['test_period'][1]}, nights the model never saw. "
         "95% confidence intervals resample whole weeks."
     )
-    forward_panel.render(ctx.forward_summary)
-    st.divider()
-    st.subheader("Backtest")
+    st.markdown(report_card(v), unsafe_allow_html=True)
+    show(charts.go_accuracy_by_lead(v.records, ctx.palette))
+    st.caption(
+        "Accuracy fades the further ahead you look, which is why the 7-night view shows a trust "
+        "level for each night. Error bars: 95% confidence intervals."
+    )
+
+    with st.container(border=True):
+        forward_panel.render(ctx.forward_summary)
+
+    st.subheader("The full backtest")
+    st.caption("For the data-curious: every method, every truth source, every forecast range.")
     c1, c2 = st.columns(2)
     names = {"primary": "Primary", "asos": "ASOS only", "era5": "ERA5 only", "goes": "Satellite"}
     label = c1.radio(
@@ -41,32 +114,34 @@ def render(ctx: Context) -> None:
     leads = v.lead_list(label)
     lead = c2.select_slider("Days ahead (lead)", options=leads, value=leads[0], key="lead")
 
-    st.subheader("Takeaways")
-    for line in report.takeaways(v, label, lead):
-        st.markdown(f"- {line}")
+    with st.container(border=True):
+        st.markdown("**Takeaways**")
+        for line in report.takeaways(v, label, lead):
+            st.markdown(f"- {line}")
 
-    st.plotly_chart(charts.false_clear_bars(v.records, label, lead, ctx.palette), width="stretch")
+    pal = ctx.palette
     best = v.best_single(label, lead)
     shown = [m for m in ["climatology", best, "equal_weight", "nbm_lr", "blend"] if m]
-    st.plotly_chart(
-        charts.reliability(ctx.metrics["reliability"], shown, label, lead, ctx.palette),
-        width="stretch",
-    )
-    st.plotly_chart(charts.skill_by_lead(v.records, label, ctx.palette), width="stretch")
-    if ctx.metrics.get("value_curves"):
-        st.plotly_chart(
-            charts.value_curves(ctx.metrics["value_curves"], shown, label, lead, ctx.palette),
-            width="stretch",
-        )
-        st.caption(
-            "Relative value: if a good night is worth 5× your setup effort (α = 0.2), this is "
-            "the share of a perfect forecast's benefit you'd get by going out when P ≥ α."
-        )
+    tab1, tab2, tab3, tab4 = st.tabs(["False clears", "Calibration", "Skill by range", "Value"])
+    with tab1:
+        show(charts.false_clear_bars(v.records, label, lead, pal))
+    with tab2:
+        show(charts.reliability(ctx.metrics["reliability"], shown, label, lead, pal))
+        st.caption("Points on the diagonal mean the probabilities can be taken at face value.")
+    with tab3:
+        show(charts.skill_by_lead(v.records, label, pal))
+    with tab4:
+        if ctx.metrics.get("value_curves"):
+            show(charts.value_curves(ctx.metrics["value_curves"], shown, label, lead, pal))
+            st.caption(
+                "Relative value: if a good night is worth 5× your setup effort (α = 0.2), this is "
+                "the share of a perfect forecast's benefit you'd get by going out when P ≥ α."
+            )
 
-    st.subheader("By site and season")
-    st.dataframe(report.breakdown_table(v, label, lead, "site"), width="stretch")
-    st.dataframe(report.breakdown_table(v, label, lead, "season"), width="stretch")
-    st.caption("Subsets spanning fewer than 8 weeks get no confidence interval.")
+    with st.expander("By site and season"):
+        st.dataframe(report.breakdown_table(v, label, lead, "site"), width="stretch")
+        st.dataframe(report.breakdown_table(v, label, lead, "season"), width="stretch")
+        st.caption("Subsets spanning fewer than 8 weeks get no confidence interval.")
     if label in ("primary", "era5") and best == "ecmwf_lr":
         st.info(
             "ECMWF is the best single model here. ERA5 is produced by ECMWF, so part of that "

@@ -1,9 +1,20 @@
 [theme]
 base = "dark"
-primaryColor = "#4ea1ff"
-backgroundColor = "#0b0f19"
-secondaryBackgroundColor = "#151b2c"
-textColor = "#e6e6e6"
+# "Moonlight": deep night-sky navy, moonlight gold for actions, lunar blue for links.
+primaryColor = "#E8C872"
+backgroundColor = "#070B18"
+secondaryBackgroundColor = "#111831"
+textColor = "#E6E8F2"
+linkColor = "#9DB9FF"
+borderColor = "#24305A"
+showWidgetBorder = true
+baseRadius = "0.75rem"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFont = "Fraunces:https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap, serif"
+metricValueFontWeight = 600
+
+[theme.sidebar]
+backgroundColor = "#0A1024"
 
 [server]
 headless = true

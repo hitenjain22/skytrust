@@ -20,7 +20,7 @@ from skytrust.data.http import SourceUnavailableError
 pytestmark = pytest.mark.slow
 
 APP = str(REPO_ROOT / "app" / "streamlit_app.py")
-PAGES = ["Tonight", "7-Night Outlook", "Track Record", "Methodology"]
+PAGES = ["Tonight", "7 Nights", "Where to Go", "Track Record", "How It Works"]
 NOW = pd.Timestamp("2026-09-25 01:00", tz="UTC")
 
 
@@ -77,7 +77,7 @@ def test_api_down_without_saved_copy_never_crashes(page, offline, monkeypatch):
     api_down(monkeypatch)
     at = visit(page)
     assert not at.exception
-    if page in ("Tonight", "7-Night Outlook"):
+    if page in ("Tonight", "7 Nights"):
         assert any("unavailable" in w.value for w in at.warning)
 
 
@@ -106,10 +106,11 @@ def test_track_record_label_toggle(offline, monkeypatch):
 def test_night_vision_and_site_switch(offline, monkeypatch):
     api_up(monkeypatch)
     at = visit("Tonight")
-    at.sidebar.toggle(key="night_vision").set_value(True).run()
-    at.sidebar.selectbox(key="site").set_value("BIH").run()
+    at.toggle(key="night_vision").set_value(True).run()
+    at.selectbox(key="site").set_value("BIH").run()
     assert not at.exception
-    assert any("Tonight at BIH" in h.value for h in at.header)
+    html = " ".join(m.value for m in at.markdown)
+    assert "Bishop" in html and "#FF3B30" in html  # the red night-vision palette is applied
 
 
 def test_deep_link_query_params(offline, monkeypatch):
@@ -119,42 +120,35 @@ def test_deep_link_query_params(offline, monkeypatch):
     at.query_params["site"] = "bih"
     at.run()
     assert not at.exception
-    assert at.sidebar.radio(key="page").value == "Track Record"
-    assert at.sidebar.selectbox(key="site").value == "BIH"
+    assert at.session_state["page"] == "Track Record"
+    assert at.selectbox(key="site").value == "BIH"
 
 
-def test_timeline_when_moon_is_still_up_at_the_chart_edge():
+def test_old_page_links_still_work(offline, monkeypatch):
+    api_up(monkeypatch)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params["page"] = "methodology"  # renamed to "How It Works"
+    at.run()
+    assert not at.exception
+    assert at.session_state["page"] == "How It Works"
+
+
+def test_moon_band_when_moon_is_still_up_at_the_chart_edge():
     """Regression: the moon-up run wasn't closed if the Moon was above the horizon at the end
     of the window (found by screenshotting the real app on 2026-09-29)."""
-    import sys
-    from types import SimpleNamespace
-
-    import numpy as np
-
-    sys.path.insert(0, str(REPO_ROOT / "app"))
     from skytrust import astro
     from skytrust.config import load_sites
-    from views import charts
-    from views.common import DAY
 
     sac = next(s for s in load_sites() if s.id == "SAC")
-    night = SimpleNamespace(
-        dusk_utc=pd.Timestamp("2026-09-30 03:19", tz="UTC"),
-        dawn_utc=pd.Timestamp("2026-09-30 12:32", tz="UTC"),
-        best_window=None,
-    )
-    end = night.dawn_utc + pd.Timedelta(hours=1)
+    start = pd.Timestamp("2026-09-30 02:19", tz="UTC")
+    end = pd.Timestamp("2026-09-30 13:32", tz="UTC")
     assert astro.moon_altitude(sac, pd.DatetimeIndex([end]))[0] > 0  # precondition: moon up at edge
-    fig = charts.darkness_timeline(sac, night, "America/Los_Angeles", DAY)
-    moon_bars = [t for t in fig.data if t.hovertext == "Moon above horizon"]
-    assert moon_bars and np.all(np.array([b.x[0] for b in moon_bars]) > 0)
+    runs = astro.moon_up_intervals(sac, start, end)
+    assert runs and runs[-1][1] >= end - pd.Timedelta(minutes=10)
 
 
 def test_true_runs_edge_cases():
-    import sys
-
-    sys.path.insert(0, str(REPO_ROOT / "app"))
-    from views.charts import true_runs
+    from skytrust.astro import true_runs
 
     t = pd.date_range("2026-01-01", periods=5, freq="10min", tz="UTC")
     assert true_runs(t, [False, True, True, False, False]) == [(t[1], t[3])]
@@ -237,8 +231,8 @@ def test_custom_location_via_deep_link(offline, monkeypatch):
     )
     at.run()
     assert not at.exception, at.exception
-    assert any("Tonight at Glacier Point" in h.value for h in at.header)
-    assert any("never seen" in c.value for c in at.caption)
+    html = " ".join(m.value for m in at.markdown)
+    assert "Glacier Point" in html and "never seen" in html
 
 
 def test_custom_location_out_of_bounds_is_friendly(offline, monkeypatch):
@@ -246,13 +240,13 @@ def test_custom_location_out_of_bounds_is_friendly(offline, monkeypatch):
     at = AppTest.from_file(APP, default_timeout=60)
     at.query_params.update({"page": "tonight", "lat": "37.7", "lon": "-119.6"})
     at.run()
-    at.sidebar.number_input(key="lat").set_value(48.9).run()
+    at.number_input(key="lat").set_value(48.9).run()
     assert not at.exception
 
 
 def test_where_tonight_ranks_every_site(offline, monkeypatch):
     api_up(monkeypatch)
-    at = visit("Where Tonight")
+    at = visit("Where to Go")
     assert not at.exception, at.exception
     assert any("Where should I go tonight?" in h.value for h in at.header)
     assert len(at.dataframe) == 1 and len(at.dataframe[0].value) == 5
