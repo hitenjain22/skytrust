@@ -219,7 +219,7 @@ def build_parser() -> argparse.ArgumentParser:
     vs.add_argument("--refresh", action="store_true", help="bypass the disk cache")
     vs.set_defaults(func=cmd_validate_sites)
     fe = sub.add_parser("fetch", help="Download raw data into the disk cache (idempotent)")
-    fe.add_argument("--source", required=True, choices=["asos", "era5", "prevruns"])
+    fe.add_argument("--source", required=True, choices=["asos", "era5", "prevruns", "goes"])
     fe.add_argument("--site", help="one site ID (default: all in config/sites.yaml)")
     fe.add_argument("--start", type=_date, help="first night, YYYY-MM-DD (default: history_start)")
     fe.add_argument("--end", type=_date, help="last night, YYYY-MM-DD (default: today - 2 days)")

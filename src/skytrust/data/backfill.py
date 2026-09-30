@@ -6,6 +6,7 @@ source is fetched through last_night + 1 day (ERA5 is additionally capped by its
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import logging
 from dataclasses import dataclass, field
@@ -16,7 +17,7 @@ from skytrust.data.http import BadResponseError, HttpClient, SourceUnavailableEr
 
 log = logging.getLogger(__name__)
 
-SOURCES = ("asos", "era5", "prevruns")
+SOURCES = ("asos", "era5", "prevruns", "goes")
 
 
 @dataclass
@@ -64,6 +65,8 @@ def fetch_source(
                     client, src["iem_asos_url"], site.id, first_night, last_night,
                     src["iem_report_types"], refresh,
                 )  # fmt: skip
+            elif source == "goes":
+                continue  # handled once for all sites below (one scan serves every site)
             elif source == "era5":
                 openmeteo.fetch_era5(
                     client,
@@ -84,5 +87,16 @@ def fetch_source(
             # One site failing shouldn't throw away the others; re-running resumes from cache.
             log.error("%s %s failed: %s", source, site.id, exc)
             summary.failures.append(f"{site.id}: {exc}")
+    if source == "goes":
+        from skytrust.data import goes
+
+        hours = goes.dark_hours_union(
+            sites, first_night, last_night, settings.raw["definitions"]["sun_altitude_deg"]
+        )
+        # AWS S3, not a small free API: short polite delay and 4 parallel downloads are fine.
+        s3 = HttpClient(dataclasses.replace(settings.http, polite_delay_s=0.05))
+        goes.fetch_hours(s3, hours, sites, workers=4)
+        summary.network_requests = s3.n_requests
+        return summary
     summary.network_requests = client.n_requests - before
     return summary
