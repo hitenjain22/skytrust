@@ -55,7 +55,7 @@ http:
   max_attempts: 5
   backoff_base_s: 2.0
   polite_delay_s: 1.0
-  user_agent: "SkyTrust/0.1 (student portfolio project; https://github.com/hitenjain/skytrust)"
+  user_agent: "SkyTrust/0.1 (student portfolio project; https://github.com/hitenjain22/skytrust)"
 
 site_validation:
   # Candidate sites (SPEC 5). Coordinates/elevation are NOT typed here; they come from IEM.
