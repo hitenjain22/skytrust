@@ -557,19 +557,28 @@ def significant_wins(v: MetricsView, a: str, b: str, label: str = "primary") -> 
 
 
 def attribution_line(v: MetricsView) -> str:
-    """Where the blend's edge over a plain average comes from: calibration or learned weights."""
-    n = len(v.lead_list("primary"))
-    cal = significant_wins(v, "equal_weight_cal", "equal_weight")
-    weights = significant_wins(v, "blend", "equal_weight_cal")
+    """Where the blend's skill comes from, measured step by step (each step = paired test)."""
     if v.rec("primary", RESULTS_LEAD, "equal_weight_cal") is None:
         return ""
-    return (
-        f"- **Where does the blend's edge over a plain average come from?** Calibrating the average "
-        f"with context (B6 vs B5) helps significantly at {len(cal)} of {n} leads; learning a separate "
-        f"weight for each model (blend vs B6) at only {len(weights)} of {n}. Most of the value is "
-        "averaging several models and calibrating the result. Forecasting research calls this the "
-        "*forecast combination puzzle*: simple averages are hard to beat."
+    n = len(v.lead_list("primary"))
+    averaging = [
+        ld for ld in v.lead_list("primary")
+        if ld in significant_wins(v, "equal_weight", v.best_single("primary", ld) or "")
+    ]  # fmt: skip
+    calibration = significant_wins(v, "equal_weight_cal", "equal_weight")
+    weights = significant_wins(v, "blend", "equal_weight_cal")
+    line = (
+        f"- **Where does the skill come from?** Measured step by step: averaging the models beats "
+        f"the best single model significantly at {len(averaging)} of {n} leads; calibrating that "
+        f"average with site/season context (B6 vs B5) at {len(calibration)} of {n}; learning a "
+        f"separate weight per model (blend vs B6) at {len(weights)} of {n}."
     )
+    if len(averaging) > max(len(calibration), len(weights)):
+        line += (
+            " Most of the value is simply combining several models, the *forecast combination "
+            "puzzle*: a plain average is hard to beat with learned weights."
+        )
+    return line
 
 
 def blend_summary_lines(v: MetricsView) -> list[str]:
