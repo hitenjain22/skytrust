@@ -639,3 +639,28 @@ it differs by user, which is why the app has a risk slider.
 1. Your blend barely beats a calibrated average. Why keep it, and why report that?
 2. What does the Brier decomposition tell you that the Brier score doesn't?
 3. Explain relative economic value to a non-statistician. Why does it depend on the user?
+
+---
+
+## Long-term climatology, robustness grid, walk-forward
+
+**Long-term climatology.** A skill score is only as good as its reference. Two years of history
+gives ~60 nights per site-month, which is a noisy baseline that's easy to beat. Labelling 20
+years (2004–2023) with the same code gives a stable, standard reference (weather services use
+30-year normals). The 20-year history download also surfaced a real data bug: a stray carriage
+return inside one 2008 Truckee report, plus a snow depth written as `9"`, which looks like a CSV
+quote. Real data is messy; the parser now handles it and a test pins it down.
+
+**Robustness grid.** "Clear ≤ 20 %, 3 hours" are sensible but arbitrary. Re-running the entire
+pipeline for 9 combinations shows whether the conclusions depend on that choice. If they only held
+for one threshold, that would be a red flag (and a sign of cherry-picking).
+
+**Walk-forward evaluation.** The standard in operational forecasting and quant finance: pretend
+it's January 2025, train on the past, forecast the month; step forward a month and repeat. Every
+prediction is out-of-sample, and the month-by-month scores reveal whether skill is stable or just
+good on average.
+
+**Interview questions:**
+1. Why does the reference climatology matter for a skill score?
+2. How do you show your conclusions aren't an artifact of your chosen thresholds?
+3. What's the difference between a frozen-model test and a walk-forward evaluation, and why do both?

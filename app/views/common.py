@@ -22,19 +22,21 @@ DAY = {
     "No data": "#7f8c8d",
     "dark": "rgba(78,161,255,0.12)",
     "moon": "#f5f0c8",
+    # Paul Tol's colour-blind-safe palettes (lighter variants for the dark background).
     "models": {
-        "gfs": "#17becf",
-        "hrrr": "#ff7f0e",
-        "ecmwf": "#2ca02c",
-        "gem": "#8c564b",
-        "icon": "#9467bd",
+        "gfs": "#88CCEE",
+        "hrrr": "#DDCC77",
+        "ecmwf": "#44AA99",
+        "gem": "#999933",
+        "icon": "#CC6677",
         "median": "#ffffff",
     },
     "methods": {
-        "blend": "#d62728",
+        "blend": "#EE6677",
         "equal_weight": "#4ea1ff",
-        "climatology": "#7f7f7f",
-        "nbm_lr": "#e377c2",
+        "climatology": "#8C8C8C",
+        "nbm_lr": "#EE3377",
+        "equal_weight_cal": "#33BBEE",
     },
 }
 # Astronomers use dim red light to keep their eyes dark-adapted.

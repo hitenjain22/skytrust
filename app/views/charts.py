@@ -289,13 +289,64 @@ def value_curves(
     for c in curves:
         if c["label"] != label or c["lead"] != lead or c["method"] not in methods:
             continue
-        fig.add_trace(go.Scatter(
-            x=c["alpha"], y=[None if v is None else v * 100 for v in c["value"]], mode="lines",
-            name=display_name(c["method"]),
-            line={"width": 3 if c["method"] in pal["methods"] else 1.5,
-                  "color": pal["methods"].get(c["method"])},
-        ))  # fmt: skip
+        fig.add_trace(
+            go.Scatter(
+                x=c["alpha"],
+                y=[None if v is None else v * 100 for v in c["value"]],
+                mode="lines",
+                name=display_name(c["method"]),
+                line={
+                    "width": 3 if c["method"] in pal["methods"] else 1.5,
+                    "color": pal["methods"].get(c["method"]),
+                },
+            )
+        )
     fig.add_hline(y=0, line_color=pal["muted"])
     fig.update_xaxes(title="Setup effort ÷ value of a good night (α)")
-    return _layout(fig, pal, f"Decision value, lead {lead}: % of a perfect forecast's benefit",
-                   height=360, yaxis={"range": [-20, 100], "title": "%"})  # fmt: skip
+    return _layout(
+        fig,
+        pal,
+        f"Decision value, lead {lead}: % of a perfect forecast's benefit",
+        height=360,
+        yaxis={"range": [-20, 100], "title": "%"},
+    )
+
+
+def outlook_grid(forecast, tz: str, pal: dict) -> go.Figure:
+    """Clear-Sky-Chart-style grid: one row per night, one column per local hour (7 PM-6 AM),
+    colour = median forecast cloud cover across models (dark blue = clear, white = overcast).
+    Hours outside astronomical darkness are left blank."""
+    slots = [19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6]
+    med = forecast.hourly.pivot_table(index="time", columns="model", values="cloud_cover").median(
+        axis=1
+    )
+    z, text, labels = [], [], []
+    for n in forecast.nights:
+        dark = pd.date_range(n.dusk_utc.ceil("h"), n.dawn_utc.floor("h"), freq="h")
+        local = {t.tz_convert(tz).hour: t for t in dark}
+        row = [
+            med.get(local[h]) * 100 if h in local and local[h] in med.index else None for h in slots
+        ]
+        z.append(row)
+        text.append(["" if v is None else f"{v:.0f}%" for v in row])
+        prob = "–" if n.p_usable is None else f"{n.p_usable:.0%}"
+        labels.append(f"{pd.Timestamp(n.night_date):%a %-d} · {prob}")
+    fig = go.Figure(
+        go.Heatmap(
+            z=z,
+            x=[f"{(h % 12) or 12}{'a' if h < 12 else 'p'}" for h in slots],
+            y=labels,
+            text=text,
+            texttemplate="%{text}",
+            textfont={"size": 9},
+            colorscale=[[0, "#08306b"], [0.2, "#2171b5"], [0.5, "#9ecae1"], [1, "#ffffff"]],
+            zmin=0,
+            zmax=100,
+            colorbar={"title": "cloud %", "thickness": 10},
+            hoverongaps=False,
+        )
+    )
+    fig.update_yaxes(autorange="reversed")
+    return _layout(
+        fig, pal, "Median forecast cloud cover by dark hour (P(usable) after the date)", height=330
+    )

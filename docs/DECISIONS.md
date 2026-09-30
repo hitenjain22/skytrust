@@ -315,3 +315,28 @@ Hiten asked for the path that is easiest to understand and gives the most consis
 - **Relative economic value** (Richardson 2000) over cost/loss ratios α = 0.05…0.95, with the
   decision rule "go when P ≥ α" (what a user of a calibrated forecast would do), plus per-threshold
   false-clear / miss rates stored in metrics.json for the app's risk slider.
+
+### 2026-09-30 · Long-term climatology (2004-2023) as the skill reference
+- **Problem:** the reference used 2 training years (~60 nights per site-month); a noisy reference
+  can flatter every skill score. Forecast verification normally uses a long climatology.
+- **Decision:** label every 2004-2023 night at every site with the same label code (ASOS + ERA5
+  history, 20 station-years and 240 ERA5 months per site), keep station-years with ≥ 80 % labeled
+  nights (station outages would otherwise skew months), and use P(usable) per (site, month) as B1.
+  The 2-year version stays as B1b for comparison. A code guard refuses a reference period that
+  reaches the training period. Needed the DE421 excerpt extended back to 2003 (3 MB, committed).
+- **Found while fetching:** a 2008 Truckee METAR contains a stray carriage return inside a remark
+  (`RMK FIRST 4\r 24HR MAX…`), which crashed pandas' C parser, and remarks use `"` as an inch mark
+  (`NO SN 9"`). Parser fixed (CR → space, quoting off; IEM's `onlycomma` never quotes); cached files
+  parse identically; regression test added.
+
+### 2026-09-30 · Robustness grid over the cloud definitions
+- Clear threshold ∈ {10, 20, 30 %} × minimum run ∈ {2, 3, 4 h}: each cell re-runs labels,
+  features, blend training, baselines and paired bootstraps. Each cell is scored against its own
+  training-years climatology (the long-term one was built with the default definition), so every
+  cell is internally consistent. Astronomy/raw inputs are computed once and reused.
+
+### 2026-09-30 · Walk-forward (rolling-origin) evaluation from 2025-01
+- Every month, every model (blend, B6, calibrated NBM) is refit, including C, on all nights
+  before that month and forecasts that month; the long-term climatology is the fixed reference.
+  Gives out-of-sample evidence for 2025 too and a month-by-month stability check. It complements,
+  not replaces, the frozen-model test (which evaluates the exact shipped model).

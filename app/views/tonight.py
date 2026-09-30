@@ -46,6 +46,9 @@ def reliability_card(night, site_id: str) -> None:
     )
 
 
+GOES_IMAGE = "https://cdn.star.nesdis.noaa.gov/GOES18/ABI/SECTOR/psw/GEOCOLOR/600x600.jpg"
+GOES_LOOP = "https://www.star.nesdis.noaa.gov/GOES/sector.php?sat=G18&sector=psw"
+
 RISK_SETTINGS = {
     "Adventurous: go at 30%+": 0.3,
     "Balanced: go at 50%+": 0.5,
@@ -131,6 +134,11 @@ def render(ctx: Context) -> None:
         width="stretch",
     )
     st.plotly_chart(charts.cloud_layers(fc.hourly, night, tz, pal), width="stretch")
+    with st.expander("Latest satellite view (GOES-West, Pacific Southwest)"):
+        st.image(GOES_IMAGE, caption="NOAA/NESDIS STAR GeoColor; refreshes every few minutes.")
+        st.markdown(
+            f"[Open the animated loop]({GOES_LOOP}) to see which way the clouds are moving."
+        )
     st.caption(
         f"Forecast fetched {local_time(fc.fetched_at_utc, tz, '%b %-d, %-I:%M %p')} local "
         f"({fc.source}). Tonight's live forecast is fresher than the lead-1 data the model was "

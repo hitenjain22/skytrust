@@ -17,27 +17,33 @@ from skytrust.report import display_name  # noqa: E402
 FIG_DIR = REPO_ROOT / "docs" / "figures"
 # PNGs carry no timestamp/version metadata, so re-running `report` doesn't churn git diffs.
 SAVE_KW = {"dpi": 130, "bbox_inches": "tight", "metadata": {"Software": None}}
+# Colour-blind-safe palettes (Paul Tol "vibrant" for the headline methods, "muted" for the
+# individual models), readable in both protanopia and deuteranopia.
 EMPHASIS = {
-    "blend": "#d62728",
-    "equal_weight": "#1f77b4",
-    "climatology": "#7f7f7f",
-    "nbm_lr": "#e377c2",  # NOAA's National Blend of Models, calibrated: the benchmark to beat
+    "blend": "#CC3311",  # vibrant red
+    "equal_weight": "#0077BB",  # vibrant blue
+    "climatology": "#8C8C8C",
+    "nbm_lr": "#EE3377",  # vibrant magenta: NOAA's blend, the benchmark to beat
 }
-# Fixed colour per forecast model so the same model looks the same in every figure, and no
-# model can be drawn in an emphasis colour.
 MODEL_COLORS = {
-    "gfs": "#17becf",
-    "hrrr": "#ff7f0e",
-    "ecmwf": "#2ca02c",
-    "gem": "#8c564b",
-    "icon": "#9467bd",
+    "gfs": "#88CCEE",
+    "hrrr": "#DDCC77",
+    "ecmwf": "#117733",
+    "gem": "#999933",
+    "icon": "#AA4499",
+    "equal_weight_cal": "#33BBEE",
+    "nbm": "#882255",
+    "climatology_train": "#BBBBBB",
+    "blend_nbm": "#EE7733",
 }
 
 
 def color_for(method: str) -> str:
     if method in EMPHASIS:
         return EMPHASIS[method]
-    return MODEL_COLORS.get(method.rsplit("_", 1)[0], "#bcbd22")
+    if method in MODEL_COLORS:
+        return MODEL_COLORS[method]
+    return MODEL_COLORS.get(method.rsplit("_", 1)[0], "#666666")
 
 
 def _save(fig, path: Path) -> Path:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from views import charts
 from views.common import Context, local_time, pct, verdict_badge
 from views.tonight import unavailable
 
@@ -16,6 +17,7 @@ def render(ctx: Context) -> None:
     if unavailable(ctx):
         return
     tz, pal = ctx.site.timezone, ctx.palette
+    st.plotly_chart(charts.outlook_grid(ctx.forecast, tz, pal), width="stretch")
     st.caption(
         "Trust comes from the backtest: the blend's skill on the held-out 2026 test period at "
         "that lead time. "
