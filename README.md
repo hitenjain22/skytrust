@@ -56,7 +56,7 @@ flowchart LR
 
 <!-- RESULTS:START -->
 
-| Night-before forecast (lead 1), test year | Brier Skill Score ↑ | False-clear rate ↓ | AUC ↑ |
+| Night-before forecast (lead 1), test Jan–Aug 2026 | Brier Skill Score ↑ | False-clear rate ↓ | AUC ↑ |
 |---|---|---|---|
 | Blend | 0.640 [0.579, 0.697] | 9.8% [7.3%, 12.6%] | 0.950 |
 | Equal-weight average (B5) | 0.601 [0.543, 0.652] | 13.9% [11.1%, 16.9%] | 0.938 |
