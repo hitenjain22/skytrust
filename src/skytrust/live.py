@@ -38,8 +38,38 @@ N_NIGHTS = 7
 LAYERS = ["cloud_cover", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high"]
 
 
+CUSTOM_ID = "CUSTOM"
+# Custom locations must be in the Pacific-time West (the time zone the app displays) and near
+# the region the models were validated on.
+CUSTOM_BOUNDS = {"lat": (32.0, 49.0), "lon": (-125.0, -114.0)}
+ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
+
+
 class LiveUnavailableError(Exception):
     """No live forecast and no saved copy to fall back on."""
+
+
+def custom_site(
+    lat: float, lon: float, name: str, settings: Settings, client: HttpClient | None = None
+) -> Site:
+    """A user-chosen location. Elevation comes from Open-Meteo's terrain model (90 m DEM) so
+    forecasts are downscaled the same way as for the airports."""
+    (la0, la1), (lo0, lo1) = CUSTOM_BOUNDS["lat"], CUSTOM_BOUNDS["lon"]
+    if not (la0 <= lat <= la1 and lo0 <= lon <= lo1):
+        raise ValueError(f"custom locations must be within lat {la0}-{la1}, lon {lo0}-{lo1}")
+    client = client or HttpClient(settings.http)
+    try:
+        elevation = float(
+            client.get_json(ELEVATION_URL, {"latitude": lat, "longitude": lon})["elevation"][0]
+        )
+    except (SourceUnavailableError, BadResponseError, KeyError, IndexError):
+        elevation = float("nan")  # the forecast API then uses its own terrain lookup
+    return Site(f"{CUSTOM_ID}_{lat:.3f}_{lon:.3f}", name or "Custom location", lat, lon, elevation,
+                "custom", "America/Los_Angeles")  # fmt: skip
+
+
+def is_custom(site: Site) -> bool:
+    return site.id.startswith(CUSTOM_ID)
 
 
 def utcnow() -> pd.Timestamp:
@@ -241,13 +271,16 @@ class _Context:
     night_hours: pd.DataFrame
     nights_astro: pd.DataFrame
     moon_events: pd.DataFrame
+    variant: str = "primary"  # "geo" = site-agnostic blend for custom locations
 
 
 def _forecast_night(
     ctx: _Context, night: dt.date, dusk: pd.Timestamp, dawn: pd.Timestamp
 ) -> NightForecast:
     lead = assign_lead(dusk, ctx.now_utc)
-    artifact = inference.load_artifact(inference.artifact_path("primary", lead, ctx.artifacts_dir))
+    artifact = inference.load_artifact(
+        inference.artifact_path(ctx.variant, lead, ctx.artifacts_dir)
+    )
     per_model = _model_features(ctx.summaries, artifact["models"], night)
     used = [m for m, f in per_model.items() if not np.isnan(f["frac_clear"])]
     dark = int(ctx.nights_astro.loc[night, "dark_hours"])
@@ -263,7 +296,11 @@ def _forecast_night(
         hours, ctx.median.reindex(hours).to_numpy(), ctx.settings.clear_threshold, dawn
     )
     spread = float(row["spread_frac_clear"].iloc[0])
-    record = track_record(ctx.metrics, ctx.site.id, lead)
+    record = (
+        track_record(ctx.metrics, ctx.site.id, lead)
+        if ctx.variant == "primary"
+        else inference.unseen_site_record(lead)
+    )
     ev = ctx.moon_events
     near = (ev["time_utc"] >= dusk - pd.Timedelta(hours=6)) & (
         ev["time_utc"] <= dawn + pd.Timedelta(hours=6)
@@ -330,8 +367,9 @@ def build_forecast(
         for short, g in hourly.groupby("model", sort=False)
     }
     median = hourly.pivot_table(index="time", columns="model", values="cloud_cover").median(axis=1)
+    variant = "geo" if is_custom(site) else "primary"
     ctx = _Context(site, settings, now_utc, artifacts_dir, metrics, summaries, median,
-                   night_hours, nights_astro.loc[windows.index], moon_events)  # fmt: skip
+                   night_hours, nights_astro.loc[windows.index], moon_events, variant)  # fmt: skip
     nights = [_forecast_night(ctx, n, w["dusk_utc"], w["dawn_utc"]) for n, w in windows.iterrows()]
     return LiveForecast(site, fetched_at, source, warning, nights, hourly)
 

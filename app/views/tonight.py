@@ -27,6 +27,15 @@ def reliability_card(night, site_id: str) -> None:
     if not record:
         st.caption("No backtest metrics available.")
         return
+    if record.get("kind") == "unseen":
+        o = record["overall"]
+        st.caption(
+            "No local track record here. At airports the model had **never seen** "
+            f"(leave-one-site-out test, lead {night.lead}), its false-clear rate was "
+            f"{with_ci(o, 'false_clear_rate')} and its skill vs climatology "
+            f"{with_ci(o, 'bss', 'num')}."
+        )
+        return
     site, overall = record.get("site"), record["overall"]
     c1, c2 = st.columns(2)
     c1.metric(
@@ -85,7 +94,7 @@ def risk_panel(ctx: Context, night) -> None:
 
 
 def render(ctx: Context) -> None:
-    st.header(f"Tonight at {ctx.site.id}")
+    st.header(f"Tonight at {ctx.site_label}")
     if unavailable(ctx):
         return
     fc, tz, pal = ctx.forecast, ctx.site.timezone, ctx.palette

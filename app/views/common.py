@@ -81,6 +81,11 @@ class Context:
     forecast_error: str | None
     palette: dict
     forward_summary: dict | None = None
+    forecast_for: object = None  # callable(site_id) -> (forecast, error), for multi-site pages
+
+    @property
+    def site_label(self) -> str:
+        return self.site.name if self.site.id.startswith("CUSTOM") else self.site.id
 
 
 def palette(night_vision: bool) -> dict:

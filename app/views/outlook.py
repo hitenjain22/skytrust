@@ -13,7 +13,7 @@ TRUST_DOTS = {"High": "●●●", "Medium": "●●○", "Low": "●○○", "U
 
 
 def render(ctx: Context) -> None:
-    st.header(f"7-night outlook at {ctx.site.id}")
+    st.header(f"7-night outlook at {ctx.site_label}")
     if unavailable(ctx):
         return
     tz, pal = ctx.site.timezone, ctx.palette

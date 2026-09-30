@@ -140,12 +140,10 @@ def _fetch_chunk(
 
 def location_params(site: Site) -> dict[str, Any]:
     # Station coordinates + elevation, so forecasts are downscaled to the station (SPEC 5).
-    return {
-        "latitude": site.lat,
-        "longitude": site.lon,
-        "elevation": site.elevation_m,
-        "timezone": "UTC",
-    }
+    params = {"latitude": site.lat, "longitude": site.lon, "timezone": "UTC"}
+    if site.elevation_m is not None and not np.isnan(site.elevation_m):
+        params["elevation"] = site.elevation_m
+    return params
 
 
 def fetch_prevruns(

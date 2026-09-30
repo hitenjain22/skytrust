@@ -134,3 +134,17 @@ def load_forward_summary(url: str | None, local: Path | None = None) -> dict | N
         return resp.json() if resp.status_code == 200 else None
     except (requests.RequestException, ValueError):
         return None
+
+
+SPATIAL_PATH = ARTIFACTS / "spatial.json"
+
+
+def unseen_site_record(lead: int, path: Path = SPATIAL_PATH) -> dict | None:
+    """Skill of the site-agnostic blend at locations it had never seen (leave-one-site-out
+    test), used as the honest 'expected reliability' for custom locations."""
+    if not path.exists():
+        return None
+    entry = next((e for e in json.loads(path.read_text())["leads"] if e["lead"] == lead), None)
+    if entry is None:
+        return None
+    return {"overall": entry["methods"]["geo_unseen"], "site": None, "kind": "unseen"}
