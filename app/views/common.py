@@ -14,7 +14,7 @@ import streamlit as st
 
 from skytrust.config import Settings, Site
 from views.components import esc, pill
-from views.theme import DAY, MOON, NIGHT, palette  # noqa: F401  (re-exported)
+from views.theme import DAY, MOON, palette  # noqa: F401  (re-exported)
 
 # The airport codes mean nothing to most people; these are the places they're near.
 PLACES = {
@@ -45,6 +45,16 @@ class Context:
     forward_summary: dict | None = None
     forecast_for: object = None  # callable(site_id) -> (forecast, error), for multi-site pages
     now_utc: pd.Timestamp | None = None
+    light: object = None  # lightpollution.Grid, or None if the artifact is missing
+
+    def light_at(self, site: Site | None = None) -> dict | None:
+        """Light-pollution report for a site (default: the selected one)."""
+        from skytrust import lightpollution
+
+        site = site or self.site
+        if self.light is None:
+            return None
+        return lightpollution.site_report(self.light, site.lat, site.lon, self.settings)
 
     @property
     def site_label(self) -> str:
@@ -219,8 +229,63 @@ def footer() -> None:
         "Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0). "
         "ASOS observations courtesy of the "
         "[Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/), "
-        "Iowa State University. Satellite: NOAA GOES-18. "
+        "Iowa State University. Satellite: NOAA GOES-18. Light pollution: Falchi et al. (2016), "
+        "[World Atlas of Artificial Night Sky Brightness]"
+        "(https://doi.org/10.5880/GFZ.1.4.2016.001) "
+        "(CC BY-NC 4.0). "
         "SkyTrust is a student portfolio project by Hiten Jain, not an official forecast. "
         "[Code](https://github.com/hitenjain22/skytrust) · "
         "[Full results](https://github.com/hitenjain22/skytrust/blob/main/docs/RESULTS.md)"
     )
+
+
+# ---------- light pollution in plain English ----------
+
+
+def brightness_phrase(ratio: float) -> str:
+    """'39% brighter than a natural sky' or '18x the natural sky brightness'."""
+    if ratio < 0.01:
+        return "as dark as a natural sky"
+    if ratio < 1:
+        return f"{ratio:.0%} brighter than a natural sky"
+    return f"{1 + ratio:.0f}× the natural sky brightness"
+
+
+def maps_link(lat: float, lon: float) -> str:
+    return f"https://www.google.com/maps/search/?api=1&query={lat:.4f},{lon:.4f}"
+
+
+def dark_clear_hours(night) -> float | None:
+    """Expected hours tonight that are dark, clear and moonless: the sum over dark hours of the
+    hourly model's P(clear), counting only hours with the Moon below the horizon."""
+    p = getattr(night, "hourly_clear", None)
+    if p is None or p.empty:
+        return None
+    up = moon_up_in_dark(night)
+    down = [not any(a <= t < b for a, b in up) for t in p.index]
+    return float((p.to_numpy() * down).sum())
+
+
+def conditions(night, light: dict | None, settings: Settings) -> list[tuple[str, bool | None, str]]:
+    """The three things a deep-sky night needs, each met or not: (name, met, detail)."""
+    go_at = settings.raw["verdict"]["go"]
+    dark_bortle = settings.raw["light_pollution"]["dark_bortle"]
+    min_run = settings.min_run_hours
+    p = night.p_usable
+    clear = (
+        "Clear",
+        None if p is None else p >= go_at,
+        "no forecast" if p is None else f"{p:.0%} chance of a usable night",
+    )
+    if light:
+        b = light["here"]["bortle"]
+        num = 8.5 if b == "8–9" else float(b)
+        dark = ("Dark site", num <= dark_bortle, f"Bortle {b}")
+    else:
+        dark = ("Dark site", None, "no light-pollution data")
+    moon = (
+        "Moon down",
+        night.moon_free_hours >= min_run,
+        f"{night.moon_free_hours} moon-free dark hour{'s' if night.moon_free_hours != 1 else ''}",
+    )
+    return [clear, dark, moon]

@@ -111,8 +111,9 @@ def stat(label: str, value: str, sub: str = "", big: bool = False, icon: str = "
     )
 
 
-def strip(items: list[str], three: bool = False) -> str:
-    return f'<div class="sk-strip{" three" if three else ""} sk-rise sk-d2">{"".join(items)}</div>'
+def strip(items: list[str], three: bool = False, five: bool = False) -> str:
+    cls = " three" if three else " five" if five else ""
+    return f'<div class="sk-strip{cls} sk-rise sk-d2">{"".join(items)}</div>'
 
 
 def row(cells: list[str], cols: str) -> str:

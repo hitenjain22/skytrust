@@ -12,6 +12,7 @@ from views.common import (
     VERDICTS,
     Context,
     agreement_text,
+    brightness_phrase,
     duration,
     esc,
     moon_advice,
@@ -119,7 +120,17 @@ def fact_strip(ctx: Context, night) -> str:
         )
     else:
         trust = ui.stat("Track record", "–", esc(agreement_text(night)[1]))
-    return ui.strip([dark, best, moon, trust])
+    items = [dark, best, moon]
+    report = ctx.light_at()
+    if report:
+        h = report["here"]
+        near = report.get("nearest_dark")
+        sub = brightness_phrase(h["ratio"]).capitalize()
+        if near and near["distance_km"] >= 1.5 and h["bortle"] not in ("1", "2", "3"):
+            sub += f" · Bortle 3 or darker {near['distance_km']:.0f} km {near['direction']}"
+        items.append(ui.stat("Light pollution", f"Bortle {esc(h['bortle'])}", sub))
+    items.append(trust)
+    return ui.strip(items, five=len(items) == 5)
 
 
 def reliability_details(night, site_label: str) -> None:

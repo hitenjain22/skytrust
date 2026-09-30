@@ -28,12 +28,13 @@ def night_row(ctx: Context, n, i: int) -> str:
         f'<span class="sk-hide-sm">{TRUST_TEXT.get(n.trust, "")}</span>'
     )
     p = "–" if n.p_usable is None else f"{n.p_usable:.0%}"
+    day = day_label(n.night_date, i, ctx.now_utc, tz)
     return ui.row(
         [
-            f'<div><div class="sk-row-title">{day_label(n.night_date, i, ctx.now_utc, tz)}</div>'
+            f'<div class="sk-main"><div class="sk-row-title">{day}</div>'
             f'<div class="sk-row-sub">{sub}</div></div>',
             ui.moon_svg(n.moon_phase_deg, 20),
-            ui.bar(n.p_usable, pal[n.verdict]),
+            f'<div class="sk-grow">{ui.bar(n.p_usable, pal[n.verdict])}</div>',
             f'<div class="sk-row-p">{p}</div>',
             f'<div style="text-align:right">{ui.status(n.verdict.upper(), pal[n.verdict])}</div>',
         ],

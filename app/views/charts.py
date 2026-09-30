@@ -499,3 +499,104 @@ def value_curves(
         height=360,
         yaxis={"range": [-20, 100], "title": "%"},
     )
+
+
+# ---------- light pollution ----------
+
+# Representative overlay colours (from lightpollution.OVERLAY_RGBA) for the map key.
+GLOW_KEY = [
+    ("pristine to slightly degraded (clear)", "rgba(0,0,0,0.0)"),
+    ("degraded near the horizon", "rgba(130,104,70,0.6)"),
+    ("polluted (up to ~2x natural)", "rgba(196,150,80,0.75)"),
+    ("Milky Way hidden", "rgba(238,202,128,0.85)"),
+    ("city sky", "rgba(252,244,222,0.95)"),
+]
+
+
+def light_map(
+    grid,
+    overlay_png: bytes,
+    markers: pd.DataFrame,
+    pal: dict,
+    center: tuple[float, float] = (38.0, -120.0),
+    zoom: float = 5.3,
+    height: int = 460,
+    spots: pd.DataFrame | None = None,
+) -> go.Figure:
+    """The atlas as a warm glow over a dark base map (light pollution is a night-time view, so
+    the base stays dark in both themes), with site markers and optional darker-sky spots.
+
+    `markers` columns: lat, lon, label, color, position. `spots` columns: lat, lon, label."""
+    import base64
+
+    src = "data:image/png;base64," + base64.b64encode(overlay_png).decode()
+    corners = [
+        [grid.west, grid.north], [grid.east, grid.north],
+        [grid.east, grid.south], [grid.west, grid.south],
+    ]  # fmt: skip
+    fig = go.Figure()
+    if spots is not None and len(spots):
+        fig.add_trace(
+            go.Scattermap(
+                lat=spots["lat"], lon=spots["lon"], mode="markers+text", text=spots["label"],
+                textposition="bottom center",
+                textfont={"color": "#CFCFD4", "size": 11, "family": FONT},
+                marker={"size": 9, "color": "#CFCFD4", "symbol": "circle", "opacity": 0.9},
+                hovertemplate="%{text}<extra></extra>",
+            )
+        )  # fmt: skip
+    for _, r in markers.iterrows():
+        fig.add_trace(
+            go.Scattermap(
+                lat=[r["lat"]], lon=[r["lon"]], mode="markers+text", text=[r["label"]],
+                textposition=r["position"],
+                textfont={"color": "#E6E6EA", "size": 12, "family": FONT},
+                marker={"size": 13, "color": r["color"], "opacity": 0.95},
+                hovertemplate="%{text}<extra></extra>",
+            )
+        )  # fmt: skip
+    fig.update_layout(
+        map={
+            "style": "carto-darkmatter",
+            "center": {"lat": center[0], "lon": center[1]},
+            "zoom": zoom,
+            # keep the view inside the mapped region, so its edge never shows
+            "bounds": {
+                "west": grid.west,
+                "east": grid.east,
+                "south": grid.south,
+                "north": grid.north,
+            },
+            "layers": [
+                {
+                    "sourcetype": "image",
+                    "source": src,
+                    "coordinates": corners,
+                    "below": "traces",
+                    "opacity": 0.95,
+                }
+            ],
+        },  # fmt: skip
+        height=height,
+        margin={"l": 0, "r": 0, "t": 0, "b": 0},
+        paper_bgcolor=pal["paper"],
+        showlegend=False,
+    )
+    return fig
+
+
+def bortle_bar(shares: dict[str, float]) -> str:
+    """Stacked horizontal bar (HTML) of the area share in each Bortle band."""
+    tones = {"1–3": 0.14, "4–4.5": 0.38, "5–6": 0.62, "7–9": 0.9}
+    segs = "".join(
+        f'<span title="Bortle {k}: {v:.0%}" style="width:{v * 100:.2f}%;'
+        f'background:color-mix(in srgb, currentColor {tones[k] * 100:.0f}%, transparent)"></span>'
+        for k, v in shares.items()
+        if v > 0
+    )
+    labels = "".join(
+        f'<span><span class="sk-swatch" style="--c:color-mix(in srgb, currentColor '
+        f'{tones[k] * 100:.0f}%, transparent)"></span>Bortle {k} · {v:.0%}</span>'
+        for k, v in shares.items()
+    )
+    return f'<div class="sk-stack">{segs}</div><div class="sk-legend">{labels}</div>'

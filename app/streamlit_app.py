@@ -22,7 +22,7 @@ try:  # installed via `uv sync` locally; on a host that only installs dependenci
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from skytrust import inference, live  # noqa: E402
+from skytrust import inference, lightpollution, live  # noqa: E402
 from skytrust.config import load_settings, load_sites  # noqa: E402
 from views import components as ui  # noqa: E402
 from views import methodology, outlook, theme, tonight, track_record, where  # noqa: E402
@@ -57,6 +57,12 @@ def load_static():
     except (FileNotFoundError, ValueError):
         metrics = None
     return settings, sites, metrics
+
+
+@st.cache_resource(show_spinner=False)
+def load_light_pollution():
+    """The regional light-pollution grid (artifacts/light_pollution.npz): read once per server."""
+    return lightpollution.load()
 
 
 @st.cache_data(ttl=60 * 60, show_spinner="Reading the latest forecasts…")
@@ -109,12 +115,10 @@ def get_forecast(
         return None, f"unexpected error: {exc}"
 
 
-def top_bar(sites) -> tuple[str, str, float | None, float | None, str, bool]:
-    """One sticky row: brand, page navigation, location, night vision. On a phone the columns
+def top_bar(sites) -> tuple[str, str, float | None, float | None, str]:
+    """One sticky row: brand, page navigation, location. On a phone the columns
     stack and the navigation wraps, so everything stays one tap away."""
     query = st.query_params
-    if "night_vision" not in st.session_state:  # first load: honour ?nv=1 from a bookmark
-        st.session_state["night_vision"] = query.get("nv") == "1"
     site_ids = [s.id for s in sites]
     options = [*site_ids, live.CUSTOM_ID]
     wanted = query.get("site", "SAC").upper()
@@ -124,9 +128,7 @@ def top_bar(sites) -> tuple[str, str, float | None, float | None, str, bool]:
     start = SLUGS.get(query.get("page", ""), "Tonight")
 
     with st.container(key="topbar"):
-        brand, nav, where, switch = st.columns(
-            [1.05, 3.4, 1.35, 0.75], vertical_alignment="center", gap="small"
-        )
+        brand, nav, where = st.columns([1.0, 3.6, 1.4], vertical_alignment="center", gap="small")
         brand.markdown(
             ui.block(
                 '<div class="sk-brand">',
@@ -153,12 +155,6 @@ def top_bar(sites) -> tuple[str, str, float | None, float | None, str, bool]:
             format_func=labels.get,
             label_visibility="collapsed",
         )
-        night_vision = switch.toggle(
-            ":material/dark_mode:",
-            key="night_vision",
-            help="Night vision: a dim red display that keeps your eyes dark-adapted at the "
-            "telescope.",
-        )
     lat = lon = None
     name = ""
     if site_id == live.CUSTOM_ID:
@@ -178,19 +174,16 @@ def top_bar(sites) -> tuple[str, str, float | None, float | None, str, bool]:
                 "Anywhere in the Pacific-time West. Uses the site-agnostic blend, whose accuracy "
                 "was measured at airports it had never seen."
             )
-    return page or "Tonight", site_id, lat, lon, name, night_vision
+    return page or "Tonight", site_id, lat, lon, name
 
 
-def sync_url(page: str, site_id: str, lat, lon, name: str, night_vision: bool) -> None:
-    """Keep the address bar in step with what's shown, so the view can be shared or bookmarked
-    (including the red night-vision display, for opening straight into it at the telescope)."""
+def sync_url(page: str, site_id: str, lat, lon, name: str) -> None:
+    """Keep the address bar in step with what's shown, so the view can be shared or bookmarked."""
     params = {"page": next(s for s, p in SLUGS.items() if p == page)}
     if site_id == live.CUSTOM_ID and lat is not None:
         params |= {"lat": f"{lat:.4f}", "lon": f"{lon:.4f}", "name": name}
     else:
         params["site"] = site_id.lower()
-    if night_vision:
-        params["nv"] = "1"
     if dict(st.query_params) != params:
         st.query_params.from_dict(params)
 
@@ -203,15 +196,15 @@ def main() -> None:
         initial_sidebar_state="collapsed",
     )
     settings, sites, metrics = load_static()
-    page, site_id, lat, lon, name, night_vision = top_bar(sites)
-    pal = theme.palette(night_vision)
-    theme.inject(pal, night_vision)
+    page, site_id, lat, lon, name = top_bar(sites)
+    pal = theme.palette()
+    theme.inject(pal)
     try:
         site = resolve_site(site_id, lat, lon, name)
     except ValueError as exc:  # out-of-bounds custom location
         st.error(str(exc))
         return
-    sync_url(page, site_id, lat, lon, name, night_vision)
+    sync_url(page, site_id, lat, lon, name)
     needs_live = page in ("Tonight", "7 Nights")
     forecast, error = get_forecast(site_id, lat, lon, name) if needs_live else (None, None)
     summary = cached_forward_summary() if page == "Track Record" else None
@@ -226,6 +219,7 @@ def main() -> None:
         summary,
         get_forecast,
         live.utcnow(),
+        load_light_pollution(),
     )
     try:
         PAGES[page](ctx)

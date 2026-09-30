@@ -7,8 +7,8 @@ motion guidelines):
   clay), never a large fill. One quiet accent (champagne) marks SkyTrust's own series in charts.
 - Soft ends: graphite and paper instead of pure black and white.
 - Every custom colour is derived from `currentColor` (borders 11%, surfaces 4%, secondary text
-  60%), so the same HTML is correct in the light theme, the dark theme and night vision without
-  Python needing to know which one the browser is showing.
+  60%), so the same HTML is correct in the light and the dark theme without Python needing to
+  know which one the browser is showing.
 - Motion: transform/opacity only, strong ease-out, 30-80 ms stagger, under ~300 ms for UI;
   hover effects only on precise pointers; reduced motion keeps only gentle fades.
 """
@@ -56,59 +56,24 @@ MONO = {
     "heat": [[0, "#2A2C31"], [0.35, "#4B4E56"], [0.7, "#8E9099"], [1, "#DADBE0"]],
 }
 
-# Astronomers use dim red light to keep their eyes dark-adapted.
-NIGHT = {
-    "paper": "rgba(0,0,0,0)",
-    "text": "#FF3B30",
-    "muted": "#A3261F",
-    "grid": "rgba(255,59,48,0.15)",
-    "border": "#3A0000",
-    "surface": "#0A0000",
-    "ink": "#FF3B30",
-    "accent": "#FF3B30",
-    "accent2": "#C0392B",
-    "Go": "#FF5A4F",
-    "Maybe": "#C0392B",
-    "Skip": "#7F1D1D",
-    "No data": "#5A1A1A",
-    "dark": "rgba(255,59,48,0.10)",
-    "moon": "#FF8A80",
-    "models": {
-        k: c
-        for k, c in zip(
-            ["gfs", "hrrr", "ecmwf", "gem", "icon"],
-            ["#FF6B60", "#E04B40", "#C0392B", "#A93226", "#8B1E1E"],
-            strict=True,
-        )
-    }
-    | {"median": "#FF3B30"},
-    "layers": {"low": "#FF6B60", "mid": "#C0392B", "high": "#8B1E1E"},
-    "methods": {
-        "blend": "#FF3B30",
-        "equal_weight": "#C0392B",
-        "climatology": "#6B1A1A",
-        "nbm_lr": "#A93226",
-    },
-    "heat": [[0, "#000000"], [0.5, "#5A0F0A"], [1, "#FF3B30"]],
-}
-
 # Older names kept for callers and tests.
 MOON = DAY = MONO
 
 
-def palette(night_vision: bool) -> dict:
-    return NIGHT if night_vision else MONO
+def palette() -> dict:
+    return MONO
 
 
-def css(pal: dict, night_vision: bool) -> str:
+def css(pal: dict) -> str:
     status = "".join(f"--sk-{k.lower().replace(' ', '-')}:{pal[k]};" for k in
                      ["Go", "Maybe", "Skip", "No data", "accent"])  # fmt: skip
     return f"""
 <style>
 :root {{ {status} --sk-ease: {EASE}; }}
 /* ---------- canvas ---------- */
-[data-testid="stHeader"] {{ background: transparent; pointer-events: none; }}
-[data-testid="stHeader"] * {{ pointer-events: auto; }}
+/* Streamlit's header is a full-width strip over the top of the page: it sat on the tab row and
+   swallowed clicks. The theme follows the system setting, so its menu isn't needed. */
+[data-testid="stHeader"] {{ display: none; }}
 [data-testid="stDecoration"] {{ display: none; }}
 [data-testid="stMainBlockContainer"], .block-container {{
   max-width: 1080px; padding-top: 1.25rem; padding-bottom: 4rem;
@@ -119,14 +84,19 @@ h1, h2, h3, h4 {{ letter-spacing: -0.025em; }}
 .sk-mono {{ font-family: "Geist Mono", ui-monospace, monospace; font-feature-settings: "tnum"; }}
 .sk-eyebrow {{ font-family: "Geist Mono", ui-monospace, monospace; font-size: .72rem; font-weight: 500;
   letter-spacing: .08em; text-transform: uppercase; color: color-mix(in srgb, currentColor 55%, transparent); }}
-/* ---------- sticky top bar ---------- */
+/* ---------- sticky top bar ----------
+   Streamlit wraps each container in a wrapper only as tall as the container, and sticky only
+   works inside its parent, so the wrapper (whose parent is the whole page column) is what sticks. */
+[data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {{ position: sticky; top: 0; z-index: 50; }}
 .st-key-topbar {{
-  position: sticky; top: 0; z-index: 50; padding: 10px 0 8px; margin-bottom: 10px;
+  position: relative; padding: 10px 0 8px; margin-bottom: 10px;
   backdrop-filter: saturate(1.3) blur(14px); -webkit-backdrop-filter: saturate(1.3) blur(14px);
-  background: rgba(20,20,22,.82);
-  border-bottom: 1px solid color-mix(in srgb, currentColor 9%, transparent);
+  --sk-bar-solid: rgba(20,20,22,.96); background: rgba(20,20,22,.72);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 7%, transparent);
 }}
-@media (prefers-color-scheme: light) {{ .st-key-topbar {{ background: rgba(246,246,244,.82); }} }}
+@media (prefers-color-scheme: light) {{
+  .st-key-topbar {{ --sk-bar-solid: rgba(246,246,244,.96); background: rgba(246,246,244,.72); }}
+}}
 .sk-brand {{ display:flex; align-items:center; gap:10px; font-weight: 600; font-size: 1.02rem;
   letter-spacing: -0.02em; white-space: nowrap; }}
 .sk-brand small {{ font-weight: 400; color: color-mix(in srgb, currentColor 50%, transparent); font-size: .8rem;
@@ -134,8 +104,9 @@ h1, h2, h3, h4 {{ letter-spacing: -0.025em; }}
 /* navigation: text tabs with an underline, not pills */
 .st-key-topbar [data-testid="stButtonGroup"] button {{
   border: 0 !important; background: transparent !important; border-radius: 0 !important;
-  color: color-mix(in srgb, currentColor 58%, transparent) !important; padding: 6px 2px !important;
-  margin: 0 10px 0 0; box-shadow: inset 0 -1px 0 transparent;
+  color: color-mix(in srgb, currentColor 58%, transparent) !important;
+  min-height: 40px; padding: 8px 12px !important; margin: 0; cursor: pointer;
+  box-shadow: inset 0 -1px 0 transparent;
   transition: color 150ms ease, box-shadow 200ms var(--sk-ease), transform 160ms var(--sk-ease);
 }}
 .st-key-topbar [data-testid="stButtonGroup"] button[aria-checked="true"] {{
@@ -197,6 +168,12 @@ h1, h2, h3, h4 {{ letter-spacing: -0.025em; }}
   color: color-mix(in srgb, currentColor 45%, transparent); }}
 .sk-dots {{ font-family: "Geist Mono", ui-monospace, monospace; letter-spacing: 1px; font-size: .78rem;
   color: color-mix(in srgb, currentColor 60%, transparent); white-space: nowrap; }}
+.sk-conds {{ display:flex; flex-wrap: wrap; gap: 4px 12px; justify-content: flex-end; font-size: .8rem;
+  font-weight: 500; white-space: nowrap; }}
+.sk-stack {{ display:flex; height: 8px; border-radius: 8px; overflow: hidden; margin: 10px 0 8px;
+  background: color-mix(in srgb, currentColor 6%, transparent); }}
+.sk-stack > span {{ display:block; height: 100%; transform-origin: left; animation: sk-grow 700ms var(--sk-ease) both; }}
+.sk-strip.five {{ grid-template-columns: repeat(5, minmax(0,1fr)); }}
 /* ---------- editorial steps + glossary ---------- */
 .sk-steps {{ display:grid; grid-template-columns: repeat(3, minmax(0,1fr));
   border-top: 1px solid color-mix(in srgb, currentColor 11%, transparent); }}
@@ -213,7 +190,7 @@ h1, h2, h3, h4 {{ letter-spacing: -0.025em; }}
 .sk-legend {{ display:flex; flex-wrap: wrap; gap: 6px 18px; font-size: .74rem; margin: 2px 0 8px;
   font-family: "Geist Mono", ui-monospace, monospace; color: color-mix(in srgb, currentColor 58%, transparent); }}
 .sk-swatch {{ display:inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px;
-  vertical-align: -1px; background: var(--c); }}
+  vertical-align: -1px; background: var(--c); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent); }}
 /* ---------- Streamlit elements, quieted ---------- */
 [data-testid="stExpander"] details {{ border: 0; border-top: 1px solid color-mix(in srgb, currentColor 11%, transparent);
   border-radius: 0; background: transparent; }}
@@ -241,19 +218,54 @@ code {{ color: inherit !important; background: color-mix(in srgb, currentColor 7
 .sk-row:nth-child(4) {{ animation-delay: 120ms; }} .sk-row:nth-child(5) {{ animation-delay: 160ms; }}
 .sk-row:nth-child(6) {{ animation-delay: 200ms; }} .sk-row:nth-child(7) {{ animation-delay: 240ms; }}
 [data-testid="stPlotlyChart"], [data-testid="stDataFrame"] {{ animation: sk-fade 500ms ease both 150ms; }}
-/* sections further down reveal as they scroll into view, where the browser supports it */
-@supports (animation-timeline: view()) {{
-  .sk-reveal {{ animation: sk-rise linear both; animation-timeline: view(); animation-range: entry 0% entry 60%; }}
+/* ---------- scroll motion (CSS scroll timelines; ~83% of browsers, the rest just show content)
+   Patterns from Apple / Linear / Vercel: sections fade up as they enter, the hero drifts up and
+   fades as it leaves, the top bar firms up once you scroll, and a hairline tracks progress. */
+[data-testid="stMain"] {{ scroll-behavior: smooth; }}
+@keyframes sk-enter {{ from {{ opacity: 0; transform: translateY(24px); }} to {{ opacity: 1; transform: none; }} }}
+@keyframes sk-leave {{ to {{ opacity: .25; transform: translateY(-18px) scale(.985); }} }}
+@keyframes sk-firm {{ to {{ background: var(--sk-bar-solid); border-bottom-color: color-mix(in srgb, currentColor 14%, transparent);
+  box-shadow: 0 8px 24px -18px rgba(0,0,0,.45); }} }}
+@keyframes sk-progress {{ from {{ transform: scaleX(0); }} to {{ transform: scaleX(1); }} }}
+.st-key-topbar::after {{ content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: currentColor; opacity: .45; transform: scaleX(0); transform-origin: left; }}
+@media (prefers-reduced-motion: no-preference) {{
+  @supports (animation-timeline: view()) {{
+    [data-testid="stMainBlockContainer"] [data-testid="stElementContainer"]:not(.st-key-topbar *),
+    .sk-reveal, .sk-row {{
+      animation: sk-enter linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 32%;
+      animation-delay: 0s;
+    }}
+    .sk-hero {{
+      animation: sk-leave linear both;
+      animation-timeline: view();
+      animation-range: exit 10% exit 100%;
+    }}
+    .st-key-topbar {{
+      animation: sk-firm linear both;
+      animation-timeline: scroll(nearest block);
+      animation-range: 0 140px;
+    }}
+    .st-key-topbar::after {{
+      animation: sk-progress linear both;
+      animation-timeline: scroll(nearest block);
+    }}
+  }}
 }}
 @media (prefers-reduced-motion: reduce) {{
   .sk-rise, .sk-row, .sk-reveal, [data-testid="stPlotlyChart"], [data-testid="stDataFrame"] {{
     animation: sk-fade 200ms ease both !important; }}
-  .sk-meter > span, .sk-bar > span {{ animation: none; }}
+  .sk-meter > span, .sk-bar > span, .sk-stack > span {{ animation: none; }}
+  [data-testid="stMain"] {{ scroll-behavior: auto; }}
 }}
 /* ---------- small screens ---------- */
 @media (max-width: 860px) {{
   /* the bar stacks into several rows on a phone; pinned, it would eat a quarter of the screen */
-  .st-key-topbar {{ position: static; backdrop-filter: none; -webkit-backdrop-filter: none; }}
+  [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {{ position: static; }}
+  .st-key-topbar {{ backdrop-filter: none; -webkit-backdrop-filter: none; }}
+  .st-key-topbar::after {{ display: none; }}
   .sk-hero {{ grid-template-columns: 1fr; gap: 10px; }}
   .sk-strip, .sk-strip.three {{ grid-template-columns: repeat(2, minmax(0,1fr)); }}
   .sk-stat:nth-child(3) {{ padding-left: 0; border-left: 0; }}
@@ -263,26 +275,17 @@ code {{ color: inherit !important; background: color-mix(in srgb, currentColor 7
   .sk-gloss {{ grid-template-columns: 1fr; }}
   .sk-hide-sm {{ display: none; }}
 }}
-{_night_overrides() if night_vision else ""}
+@media (max-width: 640px) {{
+  /* list rows: a rigid grid would crush the name column; wrap instead (name first, details below) */
+  .sk-row {{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }}
+  .sk-row > * {{ flex: 0 0 auto; }}
+  .sk-row > .sk-main {{ flex: 1 1 60%; min-width: 0; }}
+  .sk-row > .sk-grow {{ flex: 1 1 38%; min-width: 90px; }}
+  .sk-conds {{ justify-content: flex-start; }}
+}}
 </style>
 """
 
 
-def _night_overrides() -> str:
-    """Red-only display: recolour Streamlit's own widgets too."""
-    return """
-.stApp, [data-testid="stSidebar"] { background: #000 !important; }
-.st-key-topbar { background: rgba(0,0,0,.85) !important; }
-.stApp *, [data-testid="stSidebar"] * { color: #ff3b30 !important; border-color: #3a0000 !important; }
-/* Streamlit paints a few widget parts in the theme's primary colour; make those red too. */
-[data-testid="stCheckbox"] label > div:first-of-type { background-color: #7f1d1d !important; }
-[data-testid="stCheckbox"] label > div:first-of-type > div { background-color: #ff3b30 !important; }
-[data-testid="stSlider"] [role="group"] div { background-image: none !important; }
-[data-testid="stSlider"] [role="group"] div[role="slider"],
-[data-testid="stSlider"] [role="group"] > div > div { background-color: #ff3b30 !important; }
-img { filter: grayscale(1) sepia(1) saturate(6) hue-rotate(-50deg) brightness(.6); }
-"""
-
-
-def inject(pal: dict, night_vision: bool) -> None:
-    st.markdown(css(pal, night_vision), unsafe_allow_html=True)
+def inject(pal: dict) -> None:
+    st.markdown(css(pal), unsafe_allow_html=True)

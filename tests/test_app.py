@@ -103,14 +103,13 @@ def test_track_record_label_toggle(offline, monkeypatch):
     assert any("GOES satellite" in m.value for m in at.markdown)
 
 
-def test_night_vision_and_site_switch(offline, monkeypatch):
+def test_site_switch(offline, monkeypatch):
     api_up(monkeypatch)
     at = visit("Tonight")
-    at.toggle(key="night_vision").set_value(True).run()
     at.selectbox(key="site").set_value("BIH").run()
     assert not at.exception
     html = " ".join(m.value for m in at.markdown)
-    assert "Bishop" in html and "#FF3B30" in html  # the red night-vision palette is applied
+    assert "Bishop" in html and "Bortle" in html  # light pollution shows on Tonight
 
 
 def test_deep_link_query_params(offline, monkeypatch):
@@ -250,3 +249,7 @@ def test_where_tonight_ranks_every_site(offline, monkeypatch):
     assert not at.exception, at.exception
     assert any("Where should I go tonight?" in h.value for h in at.header)
     assert len(at.dataframe) == 1 and len(at.dataframe[0].value) == 5
+    html = " ".join(m.value for m in at.markdown)
+    assert "Darkest within 50 km" in html and "Nearest Bortle 1–3 sky" in html
+    assert "Dark site" in html and "Moon down" in html  # the three conditions
+    assert any("Light pollution at Sacramento" in h.value for h in at.subheader)

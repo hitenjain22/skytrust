@@ -116,12 +116,11 @@ def test_nights_that_have_ended_are_dropped():
 def test_stylesheet_follows_the_active_theme_and_respects_reduced_motion():
     """Colours derive from currentColor (so light, dark and night vision all work) and motion
     has a reduced-motion fallback."""
-    css = theme.css(theme.MONO, False)
+    css = theme.css(theme.MONO)
     assert css.count("currentColor") > 20
     assert "prefers-reduced-motion: reduce" in css and "cubic-bezier(0.23, 1, 0.32, 1)" in css
     assert "@media (hover: hover) and (pointer: fine)" in css  # hover effects only with a mouse
-    night = theme.css(theme.NIGHT, True)
-    assert "#ff3b30" in night.lower() and "Streamlit paints" in night
+    assert "animation-timeline: view()" in css and "@supports (animation-timeline: view())" in css
 
 
 def test_place_names_are_friendly_and_details_come_from_config():

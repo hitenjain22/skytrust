@@ -27,6 +27,12 @@ GLOSSARY = {
     "Lead time": "How many days ahead the forecast is. Accuracy drops the further ahead you look.",
     "Skill score": "How much better than simply guessing the seasonal average (0 = no better, "
     "1 = perfect).",
+    "Light pollution": "Artificial light scattered in the atmosphere that brightens the night "
+    "sky. Often matters more for faint targets than a thin cloud.",
+    "Bortle scale": "A 1–9 scale of sky darkness: 1 is a pristine desert sky where the Milky Way "
+    "casts shadows, 9 an inner-city sky.",
+    "Sky quality (SQM)": "Sky brightness in magnitudes per square arcsecond, measured with a sky "
+    "quality meter. Higher is darker; about 22.0 is a natural sky.",
 }
 
 
@@ -105,6 +111,14 @@ clear fraction, longest clear run, and mean cover, plus how much the models disa
 **logistic regression per lead time** combines them with site, month, and night length into one
 calibrated probability.
 
+### Light pollution
+Sky darkness comes from the *World Atlas of Artificial Night Sky Brightness* (Falchi et al.,
+2016, Science Advances), a peer-reviewed model of the artificial glow of the zenith sky on a
+~1 km grid, checked against sky quality meter readings to ±0.15 mag/arcsec². The Where to Go
+page combines it with tonight's cloud forecast and the Moon, and finds the darkest skies near
+any location. The satellite data are from 2014–2015, so skies near growing towns may now be
+brighter than shown.
+
 ### Avoiding look-ahead bias
 The backtest uses Open-Meteo's **Previous Runs** archive: the value each model predicted about
 24·d hours before each hour. The "historical forecast" archive stitches together the freshest runs,
@@ -139,6 +153,8 @@ afterwards (the forward test on the Track Record page).
 Weather data by [Open-Meteo.com](https://open-meteo.com/), licensed CC BY 4.0. ASOS
 observations courtesy of the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/),
 Iowa State University. Satellite cloud mask and imagery: NOAA GOES-18 (public AWS bucket
-`noaa-goes18`; NOAA/NESDIS STAR). Astronomy by [Skyfield](https://rhodesmill.org/skyfield/)
+`noaa-goes18`; NOAA/NESDIS STAR). Light pollution: Falchi, F. et al. (2016), *The new world atlas
+of artificial night sky brightness*, Science Advances 2:e1600377, and the dataset
+doi:10.5880/GFZ.1.4.2016.001 (CC BY-NC 4.0). Astronomy by [Skyfield](https://rhodesmill.org/skyfield/)
 with JPL's DE421 ephemeris.
 """)
