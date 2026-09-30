@@ -455,3 +455,26 @@ Hiten asked for the path that is easiest to understand and gives the most consis
 - **Also fixed:** two containers shared the key `panel` (custom location + Tonight would have
   raised a duplicate-key error); the pinned top bar took a quarter of a phone screen (now pinned
   only on wider screens); inline code rendered green.
+
+### 2026-09-30 · Light pollution, night vision removed, scroll motion, tab fix
+- **Light pollution source:** Falchi et al. (2016) World Atlas over (a) the 2024 re-calculation,
+  published only as rendered colour tiles (no values to compute with), and (b) NASA Black Marble
+  radiance, which measures upward light rather than sky glow and needs a login. The atlas is
+  peer-reviewed, gives sky brightness directly, and states its accuracy (±0.15 mag vs SQM).
+- **No new dependency:** the GeoTIFF is uncompressed and tiled, so a 60-line numpy reader
+  (tested on a synthetic tiled TIFF) replaces rasterio/tifffile.
+- **"Three conditions" (clear, dark site, Moon down):** each is a threshold already in config
+  (verdict go ≥ 70%, dark site = Bortle ≤ 4, moon-free dark hours ≥ the 3-hour usable run).
+  Sites are ranked by conditions met, then P(usable), then sky darkness. No combined score was
+  invented, so each factor stays visible and explainable.
+- **Darkest nearby:** the nearest spot within 0.15 mag (the model's error) of the darkest in the
+  radius, not the single darkest cell: differences below the model's accuracy aren't meaningful,
+  and nearer matters to someone driving.
+- **Night vision removed** at Hiten's request (not used); the palette/CSS/URL flag and tests went
+  with it.
+- **Tabs:** Streamlit's header toolbar spanned the tab row and captured clicks; the header is
+  hidden (the theme follows the system, so its menu isn't needed) and tabs are 40 px targets.
+- **Sticky bar bug:** it was never sticky (its wrapper was only as tall as the bar); the wrapper
+  is made sticky with `:has()`.
+- **Scroll motion:** CSS scroll-driven animations (Chrome/Edge/Safari; Firefox shows content
+  without motion), guarded by `@supports` and `prefers-reduced-motion`.

@@ -52,6 +52,11 @@ flowchart LR
 - **The blend** is a logistic regression per lead time over every model's forecast, how much the
   models disagree, and site/season context. It's trained on 2024-25 and tested once on 2026.
 
+**Where to go:** tonight's forecast is combined with light pollution (the peer-reviewed World
+Atlas of Artificial Night Sky Brightness, ±0.15 mag/arcsec²) and the Moon. For any location the app
+shows its sky quality and Bortle class, the darkest skies within 25/50/100 km, and how much of the
+surrounding area is dark.
+
 ## Headline results
 
 <!-- RESULTS:START -->
@@ -162,6 +167,9 @@ Out of scope for v1, and natural extensions:
 Weather data by [Open-Meteo.com](https://open-meteo.com/), licensed
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). ASOS observations courtesy of the
 [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/), Iowa State University.
+Satellite cloud mask from NOAA GOES-18. Light pollution from the World Atlas of Artificial Night
+Sky Brightness: Falchi et al. (2016), [Science Advances 2:e1600377](https://doi.org/10.1126/sciadv.1600377),
+data [doi:10.5880/GFZ.1.4.2016.001](https://doi.org/10.5880/GFZ.1.4.2016.001) (CC BY-NC 4.0).
 Astronomy computed with [Skyfield](https://rhodesmill.org/skyfield/) and JPL's DE421 ephemeris.
 
 ---

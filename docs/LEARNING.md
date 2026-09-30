@@ -766,3 +766,30 @@ none says how accurate it is.
 1. How do you present a probabilistic forecast to people with no statistics background?
 2. What is progressive disclosure, and where did you use it?
 3. How did you test a visual design, not just the code behind it?
+
+---
+
+## `skytrust/lightpollution.py`: how dark is the sky, really?
+
+**What:** Reads the World Atlas of Artificial Night Sky Brightness (a peer-reviewed global model)
+for the Pacific West, converts it to the units astronomers use (sky quality in mag/arcsec² and
+the Bortle scale), and answers: how dark is it here, where's the nearest darker sky, and how much
+of the area around me is dark? The app combines it with the cloud forecast and the Moon.
+
+**Why:** Clouds are only one of three things a deep-sky night needs. A perfectly clear night in a
+city is still a poor night for galaxies.
+
+**Key concepts:**
+- **Logarithmic scales:** magnitudes are logarithmic (5 magnitudes = 100× brightness), so doubling
+  the sky brightness costs 0.75 mag.
+- **Reading binary formats:** a GeoTIFF is just a header of tags plus tiles of numbers; knowing the
+  layout lets you read 220 tiles out of 46,000 instead of loading 3 GB.
+- **Precision you can defend:** results are reported with the model's stated error (±0.15 mag),
+  and "darkest nearby" ignores differences smaller than that error.
+- **Licensing:** data licenses change; the reasoning for redistributing a derived subset
+  (CC BY-NC 4.0, non-commercial, attributed) is written down.
+
+**Interview questions:**
+1. How do you combine clouds, Moon and light pollution into advice without inventing a score?
+2. Why report the darkest spot *within the model's error* rather than the single darkest cell?
+3. How would you check that a raster you cropped is georeferenced correctly?

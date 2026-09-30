@@ -232,3 +232,32 @@ Checked against real files (2025-01-10, 2025-06-15, 2026-02-03) before any code 
 - **First look (hourly, all 2024–26 dark hours):** GOES cover correlates 0.72–0.83 with ERA5 and
   0.44–0.72 with ASOS; FAT is the exception where ASOS matches GOES about as well as ERA5 does
   (FAT's human observers report cirrus, §8). The nightly comparison is in DATA_QUALITY §7b.
+
+---
+
+## 11. Light pollution: World Atlas of Artificial Night Sky Brightness, added 2026-09-30
+
+- **Source:** Falchi F., Cinzano P., Duriscoe D., Kyba C. C. M., Elvidge C. D., Baugh K.,
+  Portnov B. A., Rybnikova N. A., Furgoni R. (2016), *The new world atlas of artificial night sky
+  brightness*, Science Advances 2(6):e1600377; dataset doi:10.5880/GFZ.1.4.2016.001. Both must be
+  cited (dataset README).
+- **Download:** `World_Atlas_2015.zip` (653 MB) from the GFZ data page, containing
+  `World_Atlas_2015.tif` (3.01 GB). Checked 2026-09-30 by reading the TIFF header: little-endian
+  classic TIFF, 43200 × 17406, uncompressed float32 in 128 × 128 tiles, tie point (−180°,
+  85.054°), pixel 0.00833333° (30″), values = **artificial** zenith brightness in mcd/m². Tile
+  offsets are not 4-byte aligned (read bytes per tile).
+- **License:** the 2016 README says further distribution is "generally prohibited" and that policy
+  changes are announced on the data access page; that page (checked 2026-09-30) lists
+  **CC BY-NC 4.0**, which permits non-commercial redistribution with attribution. SkyTrust is a
+  non-commercial student project; the committed file is a derived regional subset
+  (`artifacts/light_pollution.npz`), credited on every page.
+- **Conversions (from the paper):** natural background 22.0 mag/arcsec² = 174 µcd/m², so
+  SQM = 22.0 − 2.5·log₁₀((artificial + 174)/174); colour levels are artificial/natural ratios
+  doubling from 0.01; model vs SQM measurements σ = 0.15 mag/arcsec². Bortle classes use the SQM
+  ranges tabulated in the Bortle scale article (Wikipedia); the scale itself is visual.
+- **Checks on the cropped grid:** Las Vegas Strip 16.24 mag/arcsec² (200× natural), downtown Los
+  Angeles 17.33, San Francisco 18.15, Seattle 17.71; Death Valley 21.98, Great Basin NP 22.00
+  (certified dark-sky parks), Pacific Ocean off Big Sur 21.98. Sites: SAC 18.85 (Bortle 6), FAT
+  18.78 (6), AUN 20.52 (4.5), TRK 21.48 (3), BIH 21.64 (2).
+- **Caveats:** VIIRS data from 2014–2015 (skies have brightened since); zenith only; ~1 km grid;
+  "darkest nearby" is straight-line distance and ignores roads, access and terrain.
