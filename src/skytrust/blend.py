@@ -126,12 +126,19 @@ def git_commit() -> str | None:
     return _git_commit()
 
 
-def fit_blend(train: pd.DataFrame, label: str, lead: int, settings: Settings) -> dict:
-    """Fit one lead's blend on training rows and return its JSON-ready artifact."""
+def fit_blend(
+    train: pd.DataFrame, label: str, lead: int, settings: Settings, use_site: bool = True
+) -> dict:
+    """Fit one lead's blend on training rows and return its JSON-ready artifact.
+
+    `use_site=False` gives the site-agnostic ("geo") blend: no site identity among the inputs,
+    so it can be applied to any location. Its transfer to unseen places is measured by the
+    leave-one-site-out test (spatial.py).
+    """
     label_col = LABELS[label]
     rows = training_rows(train, label_col, lead)
     feature_cols = blend_feature_columns(settings, lead)
-    site_ids = sorted(rows["site"].unique())
+    site_ids = sorted(rows["site"].unique()) if use_site else []
     X = design_matrix(rows, feature_cols, site_ids)
     y = rows[label_col].astype(bool).to_numpy().astype(int)
     tuned = fit_tuned_logistic(X, pd.Series(y), rows["night_date"], settings, impute=True)
@@ -150,6 +157,7 @@ def fit_blend(train: pd.DataFrame, label: str, lead: int, settings: Settings) ->
         "schema_version": SCHEMA_VERSION,
         "label": label,
         "lead": lead,
+        "variant": "site" if use_site else "geo",
         "models": [m.short for m in models_at_lead(settings, lead)],
         "model_feature_columns": feature_cols,
         "site_ids": site_ids,
@@ -206,4 +214,11 @@ def train_all(df: pd.DataFrame, settings: Settings, root: Path = ARTIFACTS) -> l
                 artifact["calibration"]["oof_ece"],
                 "applied" if artifact["calibration"]["applied"] else "not needed",
             )  # fmt: skip
+    # Site-agnostic blends for custom locations (primary label only).
+    for lead in settings.raw["leads"]:
+        artifact = fit_blend(train, "primary", lead, settings, use_site=False)
+        path = artifact_path("geo", lead, root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(artifact, indent=1))
+        paths.append(path)
     return paths

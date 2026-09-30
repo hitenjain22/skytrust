@@ -149,7 +149,11 @@ def test_bad_schema_version_rejected(tmp_path):
 def test_end_to_end_offline_pipeline(trained, synthetic_built, fast_settings, tmp_path):
     """SPEC 12.2: dataset (built from the fake raw cache) -> train -> evaluate -> report."""
     artifacts, paths, metrics = trained
-    assert len(paths) == len(LABELS) * len(fast_settings.raw["leads"])
+    # label x lead blends, plus one site-agnostic ("geo") blend per lead for custom locations
+    assert len(paths) == (len(LABELS) + 1) * len(fast_settings.raw["leads"])
+    geo = blend.load_artifact(artifacts / "geo" / "model_geo_lead1.json")
+    assert geo["variant"] == "geo" and geo["site_ids"] == []
+    assert not any(c.startswith("site_") for c in geo["inputs"])
     assert (artifacts / "model_lead1.json").exists()
     assert (artifacts / "sensitivity" / "model_asos_lead1.json").exists()
 
@@ -208,3 +212,33 @@ def test_attribution_and_decision_sections(trained):
     assert list(table.columns) == [f"α = {a}" for a in report.VALUE_ALPHAS]
     assert "Blend" in table.index
     assert "Blend" in report.decomposition_table(v, "primary", 1).index
+
+
+def test_leave_one_site_out(trained, synthetic_built, fast_settings):
+    from skytrust import spatial
+
+    artifacts, _, _ = trained
+    preds = spatial.loso_predictions(synthetic_built[0], fast_settings, artifacts, leads=[1])
+    assert set(preds["site"]) == {"SAC", "BIH"}
+    assert preds[["geo_unseen", "blend_site", "equal_weight"]].stack().between(0, 1).all()
+    summary = spatial.summarize(preds, fast_settings)
+    lead1 = summary["leads"][0]
+    assert {"geo_unseen", "blend_site", "equal_weight"} <= set(lead1["methods"])
+    assert set(lead1["per_site"]) == {"SAC", "BIH"} and "significant" in lead1["geo_minus_site"]
+
+
+def test_loso_never_trains_on_the_held_out_site(
+    trained, synthetic_built, fast_settings, monkeypatch
+):
+    from skytrust import spatial
+
+    seen = []
+    real = blend.fit_blend
+
+    def spy(train, label, lead, settings, use_site=True):
+        seen.append(set(train["site"]))
+        return real(train, label, lead, settings, use_site)
+
+    monkeypatch.setattr(spatial.blend, "fit_blend", spy)
+    spatial.loso_predictions(synthetic_built[0], fast_settings, trained[0], leads=[1])
+    assert seen == [{"SAC"}, {"BIH"}]  # BIH held out first (alphabetical), so trained on SAC

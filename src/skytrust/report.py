@@ -936,6 +936,56 @@ def walkforward_section(wf: dict | None, figure_paths: dict[str, str]) -> list[s
     ]
 
 
+def spatial_section(sp: dict | None) -> list[str]:
+    if not sp:
+        return []
+    names = {
+        "geo_unseen": "Geo blend, site never seen",
+        "blend_site": "Shipped blend (site-aware)",
+        "equal_weight": "Equal-weight average (B5)",
+    }
+    rows = {}
+    for e in sp["leads"]:
+        row = {name: with_ci(pd.Series(e["methods"][m]), "bss") for m, name in names.items()}
+        d = e["geo_minus_site"]
+        row["geo − site-aware (Brier)"] = f"{d['brier_diff']:+.4f} [{d['lo']:+.4f}, {d['hi']:+.4f}]"
+        rows[f"L{e['lead']}"] = row
+    table = pd.DataFrame(rows).T
+    table.index.name = "BSS by lead"
+    lead1 = next((e for e in sp["leads"] if e["lead"] == RESULTS_LEAD), None)
+    sentence = ""
+    if lead1:
+        worse = [
+            s
+            for s, v in lead1["per_site"].items()
+            if v["brier_geo_unseen"] > v["brier_equal_weight"]
+        ]
+        sentence = (
+            f"At lead {RESULTS_LEAD}, a blend that has never seen the site scores BSS "
+            f"{with_ci(pd.Series(lead1['methods']['geo_unseen']), 'bss')} versus "
+            f"{with_ci(pd.Series(lead1['methods']['blend_site']), 'bss')} for the site-aware "
+            "blend; "
+            + (
+                f"it trails the untrained equal-weight average at {', '.join(worse)}."
+                if worse
+                else "it beats the untrained equal-weight average at every held-out site."
+            )
+            + " This is the evidence behind the app's custom-location forecasts."
+        )
+    return [
+        "## 12. Unseen locations (leave-one-site-out)",
+        "",
+        "Each site in turn is held out: a site-agnostic blend (no site identity in its inputs) is "
+        "trained on the other sites' training years only, then scored on the held-out site's test "
+        "period, on the same nights as the shipped site-aware blend.",
+        "",
+        md_table(table),
+        "",
+        sentence,
+        "",
+    ]
+
+
 def decision_section(v: MetricsView, figure_paths: dict[str, str]) -> list[str]:
     lead = RESULTS_LEAD
     best = v.best_single("primary", lead)
@@ -1036,6 +1086,12 @@ def ecmwf_flags(v: MetricsView) -> list[str]:
     return flags
 
 
+def spatial_results() -> dict | None:
+    from skytrust import spatial
+
+    return spatial.load()
+
+
 def walkforward_results() -> dict | None:
     from skytrust import walkforward
 
@@ -1131,6 +1187,7 @@ def results_markdown(metrics: dict, figure_paths: dict[str, str]) -> str:
         *decision_section(v, figure_paths),
         *robustness_section(sensitivity_results()),
         *walkforward_section(walkforward_results(), figure_paths),
+        *spatial_section(spatial_results()),
         "## Caveats",
         "",
         *[f"- {c}" for c in data_caveats(v) + CAVEATS],

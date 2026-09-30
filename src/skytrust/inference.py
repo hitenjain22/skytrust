@@ -28,10 +28,12 @@ def load_metrics(path: Path = METRICS_PATH) -> dict:
 
 
 def artifact_path(label: str, lead: int, root: Path = ARTIFACTS) -> Path:
-    """Primary-label models are the shipped ones (SPEC 8.7 path); the ASOS/ERA5 versions exist
-    only for the label-sensitivity analysis."""
+    """Primary-label models are the shipped ones (SPEC 8.7 path); "geo" = site-agnostic blends
+    for custom locations; the ASOS/ERA5 versions exist only for the label-sensitivity analysis."""
     if label == "primary":
         return root / f"model_lead{lead}.json"
+    if label == "geo":  # site-agnostic blend for custom locations
+        return root / "geo" / f"model_geo_lead{lead}.json"
     return root / "sensitivity" / f"model_{label}_lead{lead}.json"
 
 

@@ -152,6 +152,14 @@ def cmd_walkforward(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_spatial(args: argparse.Namespace) -> int:
+    from skytrust import dataset, spatial
+
+    path = spatial.save(spatial.run(dataset.load_dataset(), load_settings()))
+    print(f"Wrote {path}")
+    return 0
+
+
 def cmd_forward_log(args: argparse.Namespace) -> int:
     from pathlib import Path
 
@@ -220,6 +228,8 @@ def build_parser() -> argparse.ArgumentParser:
     se.set_defaults(func=cmd_sensitivity)
     wf = sub.add_parser("walkforward", help="Monthly refit-and-forecast evaluation from 2025")
     wf.set_defaults(func=cmd_walkforward)
+    sp = sub.add_parser("spatial", help="Leave-one-site-out test of the site-agnostic blend")
+    sp.set_defaults(func=cmd_spatial)
     tr = sub.add_parser("train", help="Fit the blend per label x lead (train years only) -> JSON")
     tr.set_defaults(func=cmd_train)
     tn = sub.add_parser("tonight", help="Tonight + 7-night outlook for one site (live)")
