@@ -290,7 +290,8 @@ def hourly_probabilities(
     rows["mean_cover"] = rows[cols].mean(axis=1)
     rows["spread_cover"] = rows[cols].std(axis=1, ddof=0).where(rows[cols].notna().sum(axis=1) >= 2)
     span = (dawn - dusk).total_seconds()
-    rows["night_position"] = ((hours - dusk).total_seconds() / span).clip(0, 1)
+    elapsed = (hours - dusk).total_seconds().to_numpy()
+    rows["night_position"] = np.clip(elapsed / span, 0, 1)
     rows = rows.assign(site=ctx.site.id, month=pd.Timestamp(night).month, dark_hours=0.0)
     if rows["mean_cover"].isna().all():
         return None

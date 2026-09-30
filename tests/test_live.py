@@ -260,3 +260,12 @@ def test_custom_site_forecast_uses_geo_blend_and_unseen_record(settings):
     n = fc.nights[0]
     assert n.p_usable is not None and 0 <= n.p_usable <= 1
     assert n.track_record is None or n.track_record.get("kind") == "unseen"
+
+
+def test_hourly_clear_probabilities_come_from_the_shipped_hourly_model(forecast):
+    """Regression: with the hourly artifacts present, the night-position arithmetic crashed
+    (a pandas Index has no .clip), taking the whole live forecast down with it."""
+    night = forecast.nights[0]
+    assert night.hourly_clear is not None
+    assert len(night.hourly_clear) == night.dark_hours
+    assert night.hourly_clear.between(0, 1).all()
