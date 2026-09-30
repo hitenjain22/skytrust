@@ -1,4 +1,4 @@
-.PHONY: setup lint format test test-fast test-network tonight validate-sites data dataset train report app all
+.PHONY: setup lint format test test-fast test-network tonight validate-sites data climatology dataset train sensitivity walkforward report app all
 
 # All commands run inside the uv-managed virtual environment.
 RUN = uv run
@@ -32,11 +32,22 @@ data:
 	$(RUN) python -m skytrust fetch --source era5
 	$(RUN) python -m skytrust fetch --source prevruns
 
+climatology:  ## 20-year reference climatology (history cached after the first run)
+	$(RUN) python -m skytrust fetch --source asos --start 2004-01-01 --end 2023-12-31
+	$(RUN) python -m skytrust fetch --source era5 --start 2004-01-01 --end 2023-12-31
+	$(RUN) python -m skytrust build-climatology
+
 dataset:
 	$(RUN) python -m skytrust build-dataset
 
 train:
 	$(RUN) python -m skytrust train
+
+sensitivity:  ## robustness grid over cloud definitions (~15 min)
+	$(RUN) python -m skytrust sensitivity
+
+walkforward:  ## monthly refit-and-forecast evaluation (~10 min)
+	$(RUN) python -m skytrust walkforward
 
 report:
 	$(RUN) python -m skytrust evaluate
@@ -48,4 +59,4 @@ app:
 tonight:
 	$(RUN) python -m skytrust tonight --site $(or $(SITE),SAC)
 
-all: data dataset train report
+all: data climatology dataset train sensitivity walkforward report

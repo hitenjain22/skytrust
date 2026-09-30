@@ -1,6 +1,6 @@
 """Astronomy: dark windows (astronomical dusk -> dawn), dark hours, and the Moon.
 
-Uses Skyfield with a committed excerpt of JPL's DE421 ephemeris covering 2023-2030, so
+Uses Skyfield with a committed excerpt of JPL's DE421 ephemeris covering 2003-2030, so
 nothing here touches the network (tests, CI, and the deployed app all work offline).
 """
 
@@ -20,7 +20,7 @@ from skytrust.config import REPO_ROOT, Site
 
 log = logging.getLogger(__name__)
 
-EPHEMERIS_PATH = REPO_ROOT / "data" / "ephemeris" / "de421_2023_2030.bsp"
+EPHEMERIS_PATH = REPO_ROOT / "data" / "ephemeris" / "de421_2003_2030.bsp"
 SEARCH_STEP_DAYS = 1 / 24  # sample hourly; twilight crossings are ~>1 h apart, so none are missed
 
 

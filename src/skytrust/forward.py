@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from skytrust import astro, evaluate, labels, live
+from skytrust import astro, climatology, evaluate, labels, live
 from skytrust.baselines import climatology_table, predict_climatology
 from skytrust.config import Settings, Site
 from skytrust.data import iem, openmeteo
@@ -367,8 +367,10 @@ def verify(
         verified = ready.merge(lab, on=["site", "night_date"], how="left")
         train = load_dataset().query("split == 'train'")
         verified["month"] = pd.to_datetime(verified["night_date"]).dt.month
+        long_clim = climatology.load_table("primary")
         verified["p_climatology"] = predict_climatology(
-            climatology_table(train, "usable_primary"), verified
+            long_clim if long_clim is not None else climatology_table(train, "usable_primary"),
+            verified,
         )
         verified.to_csv(out_dir / VERIFIED_FILE, index=False)
         try:

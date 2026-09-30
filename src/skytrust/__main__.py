@@ -126,6 +126,32 @@ def cmd_tonight(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build_climatology(args: argparse.Namespace) -> int:
+    from skytrust import climatology
+
+    table, labels_df = climatology.build(load_settings(), load_sites())
+    climatology.save(table, labels_df)
+    years = {site: f"{len(y)} yrs" for site, y in table["years_used"].items()}
+    print(f"Wrote {climatology.TABLE_PATH} ({table['period'][0]}..{table['period'][1]}; {years})")
+    return 0
+
+
+def cmd_sensitivity(args: argparse.Namespace) -> int:
+    from skytrust import sensitivity
+
+    path = sensitivity.save(sensitivity.run(load_settings(), load_sites()))
+    print(f"Wrote {path}")
+    return 0
+
+
+def cmd_walkforward(args: argparse.Namespace) -> int:
+    from skytrust import dataset, walkforward
+
+    path = walkforward.save(walkforward.run(dataset.load_dataset(), load_settings()))
+    print(f"Wrote {path}")
+    return 0
+
+
 def cmd_forward_log(args: argparse.Namespace) -> int:
     from pathlib import Path
 
@@ -188,6 +214,12 @@ def build_parser() -> argparse.ArgumentParser:
     bd.set_defaults(func=cmd_build_dataset)
     ev = sub.add_parser("evaluate", help="Score every method on the test set -> metrics.json")
     ev.set_defaults(func=cmd_evaluate)
+    cl = sub.add_parser("build-climatology", help="20-year reference climatology (2004-2023)")
+    cl.set_defaults(func=cmd_build_climatology)
+    se = sub.add_parser("sensitivity", help="Re-run everything for 9 cloud definitions")
+    se.set_defaults(func=cmd_sensitivity)
+    wf = sub.add_parser("walkforward", help="Monthly refit-and-forecast evaluation from 2025")
+    wf.set_defaults(func=cmd_walkforward)
     tr = sub.add_parser("train", help="Fit the blend per label x lead (train years only) -> JSON")
     tr.set_defaults(func=cmd_train)
     tn = sub.add_parser("tonight", help="Tonight + 7-night outlook for one site (live)")

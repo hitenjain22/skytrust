@@ -349,6 +349,19 @@ def git_commit() -> str | None:
         return None
 
 
+def climatology_reference(settings: Settings) -> dict:
+    """Which climatology the skill scores are measured against (recorded in metrics.json)."""
+    from skytrust import climatology
+
+    if not settings.raw.get("climatology", {}).get("use_long_term", True):
+        return {"source": "training_years"}
+    if not climatology.TABLE_PATH.exists():
+        return {"source": "training_years"}
+    table = json.loads(climatology.TABLE_PATH.read_text())
+    return {"source": "long_term", "period": table["period"],
+            "years_per_site": {s: len(y) for s, y in table["years_used"].items()}}  # fmt: skip
+
+
 def base_rates_by_split(df: pd.DataFrame) -> dict:
     """Primary-label base rate per site in train vs test (context for reading test metrics)."""
     nights = df.drop_duplicates(["site", "night_date"])
@@ -459,6 +472,7 @@ def run_evaluation(df: pd.DataFrame, settings: Settings, artifacts_dir: Path | N
         "seed": base_seed,
         "prob_clip_for_log_loss": PROB_CLIP,
         "primary_base_rate_by_split": base_rates_by_split(df),
+        "climatology_reference": climatology_reference(settings),
         "models": [{"short": m.short, "id": m.id, "leads": list(m.leads)} for m in settings.models],
     }
     return out

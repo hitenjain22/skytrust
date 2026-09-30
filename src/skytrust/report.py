@@ -25,6 +25,7 @@ MIN_TEST_NIGHTS_LEAD1 = 300  # SPEC 17: flag if fewer labeled test nights at lea
 def display_name(method: str) -> str:
     fixed = {
         "climatology": "Climatology (B1)",
+        "climatology_train": "Climatology, training years (B1b)",
         "persistence": "Persistence (B2)",
         "equal_weight": "Equal-weight average (B5)",
         "equal_weight_cal": "Equal-weight, calibrated (B6)",
@@ -302,6 +303,17 @@ CAVEATS = [
 ]
 
 
+def reference_phrase(meta: dict) -> str:
+    ref = meta.get("climatology_reference") or {}
+    if ref.get("source") == "long_term":
+        years = ref["years_per_site"].values()
+        return (
+            f"Skill is measured against a long-term climatology ({ref['period'][0][:4]}–"
+            f"{ref['period'][1][:4]}, {min(years)}–{max(years)} usable years per site)."
+        )
+    return "Skill is measured against the training-years climatology."
+
+
 def data_caveats(v: MetricsView) -> list[str]:
     """Caveats whose numbers come from metrics.json."""
     meta = v.m["meta"]
@@ -359,8 +371,13 @@ class MetricsView:
 
     def rec(self, label, lead, method, subset_type="overall", subset="all") -> pd.Series | None:
         r = self.records
-        hit = r[(r["label"] == label) & (r["lead"] == lead) & (r["method"] == method)
-                & (r["subset_type"] == subset_type) & (r["subset"] == subset)]  # fmt: skip
+        hit = r[
+            (r["label"] == label)
+            & (r["lead"] == lead)
+            & (r["method"] == method)
+            & (r["subset_type"] == subset_type)
+            & (r["subset"] == subset)
+        ]
         return None if hit.empty else hit.iloc[0]
 
     def best_single(self, label, lead) -> str | None:
@@ -499,8 +516,8 @@ def model_info_table(v: MetricsView, label: str) -> pd.DataFrame:
     rows = []
     for _, lead_row in v.leads[v.leads["label"] == label].iterrows():
         for method, info in (lead_row["model_info"] or {}).items():
-            if method == "blend":
-                continue  # the blend has its own section
+            if method == "blend" or "C" not in info:
+                continue  # the blend has its own section; only tuned models belong here
             rows.append(
                 {
                     "lead": int(lead_row["lead"]),
@@ -562,9 +579,10 @@ def attribution_line(v: MetricsView) -> str:
         return ""
     n = len(v.lead_list("primary"))
     averaging = [
-        ld for ld in v.lead_list("primary")
+        ld
+        for ld in v.lead_list("primary")
         if ld in significant_wins(v, "equal_weight", v.best_single("primary", ld) or "")
-    ]  # fmt: skip
+    ]
     calibration = significant_wins(v, "equal_weight_cal", "equal_weight")
     weights = significant_wins(v, "blend", "equal_weight_cal")
     line = (
@@ -805,6 +823,119 @@ def blend_section(v: MetricsView) -> list[str]:
     ]
 
 
+def robustness_table(sens: dict, lead: int) -> pd.DataFrame:
+    def verdict(d: dict | None) -> str:
+        if not d:
+            return "–"
+        return "better" if d["significant"] and d["brier_diff"] < 0 else "not significant"
+
+    rows = {}
+    for cell in sens["cells"]:
+        e = next((x for x in cell["leads"] if x["lead"] == lead), None)
+        if e is None:
+            continue
+        name = f"clear ≤ {cell['clear_threshold']:.0%}, run ≥ {cell['min_run_hours']} h"
+        rows[name + (" ★" if cell["is_default"] else "")] = {
+            "base rate": _fmt(e["base_rate"], "pct"),
+            "blend BSS": with_ci(pd.Series(e), "bss"),
+            "false-clear": _fmt(e.get("false_clear_rate"), "pct"),
+            "vs best single": verdict(e.get("vs_best_single")),
+            "vs NOAA NBM": verdict(e.get("vs_nbm_lr")),
+            "vs equal-weight": verdict(e.get("vs_equal_weight")),
+        }
+    out = pd.DataFrame(rows).T
+    out.index.name = f"definition (lead {lead}; ★ = default)"
+    return out
+
+
+def robustness_counts(sens: dict, lead: int, key: str) -> tuple[int, int]:
+    hits = total = 0
+    for cell in sens["cells"]:
+        e = next((x for x in cell["leads"] if x["lead"] == lead), None)
+        d = e and e.get(key)
+        if d:
+            total += 1
+            hits += int(d["significant"] and d["brier_diff"] < 0)
+    return hits, total
+
+
+def robustness_section(sens: dict | None) -> list[str]:
+    if not sens:
+        return []
+    lead = RESULTS_LEAD
+    best_hits, n = robustness_counts(sens, lead, "vs_best_single")
+    nbm_hits, n2 = robustness_counts(sens, lead, "vs_nbm_lr")
+    return [
+        "## 10. Robustness to the definitions",
+        "",
+        "The whole pipeline (labels, features, blend, baselines) re-run for every combination of "
+        "the clear-sky threshold and the minimum clear run, each cell scored against its own "
+        "training-years climatology.",
+        "",
+        md_table(robustness_table(sens, lead)),
+        "",
+        f"At lead {lead}, the blend beats the best single model (CI excluding zero) under "
+        f"{best_hits} of {n} definitions, and NOAA's calibrated NBM under {nbm_hits} of {n2}.",
+        "",
+    ]
+
+
+def walkforward_section(wf: dict | None, figure_paths: dict[str, str]) -> list[str]:
+    if not wf:
+        return []
+    names = {
+        "blend": "Blend",
+        "nbm_lr": "NOAA NBM calibrated",
+        "equal_weight_cal": "Equal-weight, calibrated (B6)",
+        "equal_weight": "Equal-weight average (B5)",
+    }
+    rows = {}
+    for e in wf["pooled"]:
+        row = {"nights": e["n"], "months": e["months"]}
+        for m, name in names.items():
+            if m in e["methods"]:
+                row[f"BSS {name}"] = with_ci(pd.Series(e["methods"][m]), "bss")
+        for d in e["differences"]:
+            if d["b"] in ("nbm_lr", "equal_weight_cal"):
+                verdict = (
+                    "better" if d["significant"] and d["brier_diff"] < 0 else "not significant"
+                )
+                row[f"blend vs {names[d['b']]}"] = verdict
+        rows[f"L{e['lead']}"] = row
+    table = pd.DataFrame(rows).T
+    table.index.name = "lead"
+    lead1 = [m for m in wf["monthly"] if m["lead"] == RESULTS_LEAD and "bss_blend" in m]
+    sentence = ""
+    if lead1:
+        worst = min(lead1, key=lambda m: m["bss_blend"])
+        beats = sum(
+            1 for m in lead1 if m.get("bss_nbm_lr") is not None and m["bss_blend"] > m["bss_nbm_lr"]
+        )
+        with_nbm = sum(1 for m in lead1 if m.get("bss_nbm_lr") is not None)
+        sentence = (
+            f"At lead {RESULTS_LEAD}, the blend's monthly skill stays positive in "
+            f"{sum(m['bss_blend'] > 0 for m in lead1)} of {len(lead1)} months (lowest: "
+            f"{worst['bss_blend']:.2f} in {worst['period']}), and it scores above NOAA's "
+            f"calibrated NBM in {beats} of {with_nbm} months."
+        )
+    return [
+        "## 11. Walk-forward evaluation (stability over time)",
+        "",
+        f"Operational simulation from {wf['start'][:7]} to {wf['end'][:7]}: every month, every "
+        f"model is refit on all earlier nights only ({wf['protocol']}), then forecasts that month. "
+        "All predictions are out-of-sample, and 2025 becomes additional evidence.",
+        "",
+        f"![Walk-forward monthly skill]({figure_paths['walkforward']})"
+        if "walkforward" in figure_paths
+        else "",
+        "",
+        md_table(table),
+        "",
+        sentence,
+        "",
+    ]
+
+
 def decision_section(v: MetricsView, figure_paths: dict[str, str]) -> list[str]:
     lead = RESULTS_LEAD
     best = v.best_single("primary", lead)
@@ -905,6 +1036,18 @@ def ecmwf_flags(v: MetricsView) -> list[str]:
     return flags
 
 
+def walkforward_results() -> dict | None:
+    from skytrust import walkforward
+
+    return walkforward.load()
+
+
+def sensitivity_results() -> dict | None:
+    from skytrust import sensitivity
+
+    return sensitivity.load()
+
+
 def results_markdown(metrics: dict, figure_paths: dict[str, str]) -> str:
     v = MetricsView(metrics)
     meta = metrics["meta"]
@@ -919,7 +1062,7 @@ def results_markdown(metrics: dict, figure_paths: dict[str, str]) -> str:
         "",
         f"**Setup.** Train on nights {meta['train_period'][0]} → {meta['train_period'][1]}; "
         f"test on {meta['test_period'][0]} → {meta['test_period'][1]} "
-        "(never used for fitting or tuning). "
+        "(never used for fitting or tuning). " + reference_phrase(meta) + " "
         f"Each method is scored on the same test nights per lead (at lead {lead}: "
         f"{int(n_eval['n_eval'])} site-nights over {int(n_eval['n_weeks'])} weeks). 95% CIs from a "
         f"block bootstrap that resamples whole {meta['bootstrap_block']}s "
@@ -986,6 +1129,8 @@ def results_markdown(metrics: dict, figure_paths: dict[str, str]) -> str:
         "",
         *blend_section(v),
         *decision_section(v, figure_paths),
+        *robustness_section(sensitivity_results()),
+        *walkforward_section(walkforward_results(), figure_paths),
         "## Caveats",
         "",
         *[f"- {c}" for c in data_caveats(v) + CAVEATS],
@@ -1010,21 +1155,32 @@ def write_results(metrics: dict, docs: Path = DOCS) -> Path:
             "primary",
             RESULTS_LEAD,
             fig_dir / "reliability_primary_lead1.png",
-        ),  # fmt: skip
+        ),
         "site_skill": figures.site_skill(
             records,
             [m for m in shown if m and m != "climatology"],
             "primary",
             RESULTS_LEAD,
             fig_dir / "site_skill_primary_lead1.png",
-        ),  # fmt: skip
+        ),
     }
     if metrics.get("value_curves"):
         value_methods = ["blend", "nbm_lr", "equal_weight_cal", "equal_weight", best, "climatology"]
         paths["value"] = figures.value_curves(
-            metrics["value_curves"], [m for m in value_methods if m], "primary", RESULTS_LEAD,
+            metrics["value_curves"],
+            [m for m in value_methods if m],
+            "primary",
+            RESULTS_LEAD,
             fig_dir / "value_primary_lead1.png",
-        )  # fmt: skip
+        )
+    wf = walkforward_results()
+    if wf:
+        paths["walkforward"] = figures.monthly_skill(
+            wf["monthly"],
+            RESULTS_LEAD,
+            ["blend", "nbm_lr", "equal_weight_cal", "equal_weight"],
+            fig_dir / "walkforward_primary_lead1.png",
+        )
     rel = {k: str(p.relative_to(docs)) for k, p in paths.items()}
     path = docs / "RESULTS.md"
     path.write_text(results_markdown(metrics, rel))

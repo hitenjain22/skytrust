@@ -25,8 +25,13 @@ EMPHASIS = {
 }
 # Fixed colour per forecast model so the same model looks the same in every figure, and no
 # model can be drawn in an emphasis colour.
-MODEL_COLORS = {"gfs": "#17becf", "hrrr": "#ff7f0e", "ecmwf": "#2ca02c", "gem": "#8c564b",
-                "icon": "#9467bd"}  # fmt: skip
+MODEL_COLORS = {
+    "gfs": "#17becf",
+    "hrrr": "#ff7f0e",
+    "ecmwf": "#2ca02c",
+    "gem": "#8c564b",
+    "icon": "#9467bd",
+}
 
 
 def color_for(method: str) -> str:
@@ -56,9 +61,16 @@ def lead_curves(records: pd.DataFrame, label: str, path: Path) -> Path:
             g = g.sort_values("lead")
             emphasised = method in EMPHASIS
             color = color_for(method)
-            ax.plot(g["lead"], g[metric], marker="o", ms=3.5, lw=2.4 if emphasised else 1.1,
-                    color=color, alpha=1 if emphasised else 0.8,
-                    label=display_name(method))  # fmt: skip
+            ax.plot(
+                g["lead"],
+                g[metric],
+                marker="o",
+                ms=3.5,
+                lw=2.4 if emphasised else 1.1,
+                color=color,
+                alpha=1 if emphasised else 0.8,
+                label=display_name(method),
+            )
             if emphasised and method != "climatology":
                 ax.fill_between(
                     g["lead"], g[f"{metric}_lo"], g[f"{metric}_hi"], color=color, alpha=0.15
@@ -111,8 +123,12 @@ def reliability(
 def site_skill(
     records: pd.DataFrame, methods: list[str], label: str, lead: int, path: Path
 ) -> Path:
-    s = records[(records["label"] == label) & (records["lead"] == lead)
-                & (records["subset_type"] == "site") & records["method"].isin(methods)]  # fmt: skip
+    s = records[
+        (records["label"] == label)
+        & (records["lead"] == lead)
+        & (records["subset_type"] == "site")
+        & records["method"].isin(methods)
+    ]
     sites = sorted(s["subset"].unique())
     fig, ax = plt.subplots(figsize=(7, 3.8))
     width = 0.8 / len(methods)
@@ -120,8 +136,15 @@ def site_skill(
         g = s[s["method"] == method].set_index("subset").reindex(sites)
         x = [j + (i - (len(methods) - 1) / 2) * width for j in range(len(sites))]
         err = [g["bss"] - g["bss_lo"], g["bss_hi"] - g["bss"]]
-        ax.bar(x, g["bss"], width=width, yerr=err, capsize=3, color=color_for(method),
-               label=display_name(method))  # fmt: skip
+        ax.bar(
+            x,
+            g["bss"],
+            width=width,
+            yerr=err,
+            capsize=3,
+            color=color_for(method),
+            label=display_name(method),
+        )
     ax.set_xticks(range(len(sites)), sites)
     ax.axhline(0, color="black", lw=0.8)
     ax.set_ylabel("Brier Skill Score (95% CI)")
@@ -140,8 +163,13 @@ def value_curves(curves: list[dict], methods: list[str], label: str, lead: int, 
             continue
         v = np.array([np.nan if x is None else x for x in c["value"]], dtype=float)
         emphasised = c["method"] in EMPHASIS
-        ax.plot(c["alpha"], v, lw=2.4 if emphasised else 1.2, color=color_for(c["method"]),
-                label=display_name(c["method"]))  # fmt: skip
+        ax.plot(
+            c["alpha"],
+            v,
+            lw=2.4 if emphasised else 1.2,
+            color=color_for(c["method"]),
+            label=display_name(c["method"]),
+        )
     ax.axhline(0, color="black", lw=0.8)
     ax.set_ylim(-0.2, 1)
     ax.set_xlabel("Cost/loss ratio α = setup effort ÷ value of a good night")
@@ -149,4 +177,32 @@ def value_curves(curves: list[dict], methods: list[str], label: str, lead: int, 
     ax.set_title(f"Decision value, lead {lead} ({label} label, test set)", fontsize=10)
     ax.grid(alpha=0.3)
     ax.legend(fontsize=8)
+    return _save(fig, path)
+
+
+def monthly_skill(monthly: list[dict], lead: int, methods: list[str], path: Path) -> Path:
+    """Walk-forward: each month's BSS vs the long-term climatology, one line per method."""
+    df = pd.DataFrame([m for m in monthly if m["lead"] == lead])
+    fig, ax = plt.subplots(figsize=(10, 4))
+    x = pd.PeriodIndex(df["period"], freq="M").to_timestamp()
+    for m in methods:
+        col = f"bss_{m}"
+        if col in df:
+            emphasised = m in EMPHASIS
+            ax.plot(
+                x,
+                df[col],
+                marker="o",
+                ms=3,
+                lw=2.2 if emphasised else 1.1,
+                color=color_for(m),
+                label=display_name(m),
+            )
+    ax.axhline(0, color="black", lw=0.8)
+    ax.set_ylabel("Brier Skill Score (month)")
+    ax.set_title(
+        f"Walk-forward: monthly skill, lead {lead} (refit each month on the past only)", fontsize=10
+    )
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8, ncol=4, loc="lower center", bbox_to_anchor=(0.5, -0.35))
     return _save(fig, path)

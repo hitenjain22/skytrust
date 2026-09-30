@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from skytrust import climatology
 from skytrust.config import ModelSpec, Settings
 from skytrust.modeling import (
     TunedModel,
@@ -227,10 +228,20 @@ def run_baselines(df: pd.DataFrame, label: str, lead: int, settings: Settings) -
     methods: dict[str, MethodPrediction] = {}
 
     site_ids = sorted(train["site"].unique())
-    clim = climatology_table(train, label_col)
+    # B1: the long-term (20-year) climatology is the reference for every skill score; the
+    # training-years version (B1b) is kept for comparison. Falls back if not built yet.
+    train_clim = climatology_table(train, label_col)
+    use_long = settings.raw.get("climatology", {}).get("use_long_term", True)
+    long_clim = climatology.load_table(label) if use_long else None
     methods["climatology"] = MethodPrediction(
-        "climatology", "prob", "climatology", predict_climatology(clim, rows)
-    )
+        "climatology", "prob", "climatology",
+        predict_climatology(long_clim if long_clim is not None else train_clim, rows),
+        {"source": "long_term" if long_clim is not None else "training_years"},
+    )  # fmt: skip
+    if long_clim is not None:
+        methods["climatology_train"] = MethodPrediction(
+            "climatology_train", "prob", "climatology", predict_climatology(train_clim, rows)
+        )
     methods["persistence"] = MethodPrediction(
         "persistence", "hard", "persistence", persist.astype(float).to_numpy()
     )

@@ -58,10 +58,13 @@ def build_site_dataset(
     last_night: dt.date,
     observed: dict[str, pd.Series],
     forecasts: dict[str, pd.DataFrame],
+    astro_tables: tuple[pd.DataFrame, pd.DataFrame] | None = None,
 ) -> pd.DataFrame:
-    """Pure function: all inputs are in memory, so it's testable without the cache."""
+    """Pure function: all inputs are in memory, so it's testable without the cache.
+    `astro_tables` (from astro.night_table) can be passed in to reuse them across runs that only
+    change the cloud definitions (the sensitivity grid)."""
     rules = night_rules(settings)
-    nights_astro, night_hours = astro.night_table(
+    nights_astro, night_hours = astro_tables or astro.night_table(
         site,
         first_night,
         last_night,

@@ -109,6 +109,16 @@ forward:
   verify_after_days: 9                         # ERA5 lag (~6 days) + margin before scoring a night
   summary_url: https://raw.githubusercontent.com/hitenjain22/skytrust/forward-data/summary.json
 
+climatology:
+  # Long-term reference for skill scores (WMO practice), entirely before training and test.
+  start: 2004-01-01
+  end: 2023-12-31
+  min_year_coverage: 0.8        # keep a station-year only if >= 80% of its nights are labeled
+
+walkforward:
+  # Rolling-origin evaluation: from this month on, refit every month on all earlier nights.
+  start: 2025-01-01
+
 calibration:
   # Apply isotonic calibration to a blend only if its out-of-fold expected calibration error
   # (10 bins, training folds only) exceeds this. Logistic regression is usually calibrated already.
