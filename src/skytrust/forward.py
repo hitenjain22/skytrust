@@ -86,7 +86,7 @@ def fetch_benchmarks(client: HttpClient, settings: Settings, site: Site) -> dict
             settings.sources["forecast_url"],
             {
                 **loc,
-                "models": ",".join(fwd["benchmark_models"]),
+                "models": ",".join(m.id for m in settings.benchmarks),
                 "hourly": "cloud_cover",
                 "forecast_days": 8,
             },
@@ -124,7 +124,7 @@ def benchmark_columns(
     night_hours = astro.night_hours(windows)
     out = pd.DataFrame(index=pd.Index(nights, name="night_date"))
     if bench.get("nbm"):
-        nbm_id = settings.raw["forward"]["benchmark_models"][0]
+        nbm_id = settings.benchmarks[0].id
         series = openmeteo.parse_hourly(bench["nbm"], ["cloud_cover"], nbm_id)["cloud_cover"]
         summary = summarize_nights(night_hours, series, rules).reindex(out.index)
         for f in FEATURES:

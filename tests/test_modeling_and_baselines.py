@@ -102,6 +102,8 @@ def test_run_baselines_shapes_and_common_eval_set(synthetic_built, fast_settings
     expected = {"climatology", "persistence", "equal_weight"}
     for m in fast_settings.models:
         expected |= {f"{m.short}_rule", f"{m.short}_lr"}
+    for b in fast_settings.benchmarks:
+        expected |= {f"{b.short}_rule", f"{b.short}_raw", f"{b.short}_lr"}
     assert set(result.methods) == expected
     for method in result.methods.values():
         assert len(method.p) == n and np.isfinite(method.p).all()
@@ -131,3 +133,19 @@ def test_choose_c_prefers_regularized_among_near_ties():
     scores = {0.01: 0.40, 0.1: 0.37260, 1.0: 0.37255, 1000.0: 0.37254}
     assert modeling.choose_C(scores, 1e-4) == 0.1
     assert modeling.choose_C(scores, 0.0) == 1000.0
+
+
+def test_benchmarks_are_scored_but_never_chosen_as_best_single(synthetic_built, fast_settings):
+    result = baselines.run_baselines(synthetic_built[0], "primary", 1, fast_settings)
+    assert result.methods["nbm_lr"].family == "benchmark"
+    assert result.methods["nbm_raw"].kind == "prob"
+    assert not result.best_single.startswith("nbm")  # "best single" = best blend *member*
+
+
+def test_benchmark_features_never_change_blend_inputs(synthetic_built, fast_settings):
+    """Adding NBM must not alter the spread / model count the shipped blend was trained on."""
+    df = synthetic_built[0]
+    members = [f"{m.short}_frac_clear" for m in fast_settings.models]
+    lead1 = df[df["lead"] == 1]
+    assert (lead1["n_models_available"] == lead1[members].notna().sum(axis=1)).all()
+    assert "nbm_frac_clear" in df and lead1["nbm_frac_clear"].notna().any()

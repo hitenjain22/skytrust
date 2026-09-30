@@ -55,14 +55,24 @@ class Settings:
     max_missing_frac: float
     sky_cover_mapping: dict[str, float]
     asos_hour_aggregation: str
-    models: tuple[ModelSpec, ...]
+    models: tuple[ModelSpec, ...]  # blend members
+    benchmarks: tuple[ModelSpec, ...]  # compared against, never blended (e.g. NOAA NBM)
     http: HttpSettings
     history_start: dt.date
     raw: dict[str, Any]
 
     @property
+    def forecast_models(self) -> tuple[ModelSpec, ...]:
+        """Every model whose forecasts are downloaded and turned into features."""
+        return self.models + self.benchmarks
+
+    @property
     def sources(self) -> dict[str, Any]:
         return self.raw["sources"]
+
+
+def _model_spec(m: dict) -> ModelSpec:
+    return ModelSpec(m["short"], m["id"], m["name"], tuple(m["leads"]))
 
 
 def load_settings(path: Path | None = None) -> Settings:
@@ -81,9 +91,8 @@ def load_settings(path: Path | None = None) -> Settings:
         max_missing_frac=float(defs["max_missing_frac"]),
         sky_cover_mapping={k: float(v) for k, v in defs["sky_cover_mapping"][mode].items()},
         asos_hour_aggregation=defs["asos_hour_aggregation"],
-        models=tuple(
-            ModelSpec(m["short"], m["id"], m["name"], tuple(m["leads"])) for m in raw["models"]
-        ),
+        models=tuple(_model_spec(m) for m in raw["models"]),
+        benchmarks=tuple(_model_spec(m) for m in raw.get("benchmark_models", [])),
         http=HttpSettings(**raw["http"]),
         history_start=raw["sources"]["history_start"],
         raw=raw,

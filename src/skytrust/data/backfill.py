@@ -75,7 +75,7 @@ def fetch_source(
                     today=today,
                 )
             else:
-                for model in settings.models:
+                for model in settings.forecast_models:
                     openmeteo.fetch_prevruns(
                         client, settings, site, model, first_night, next_day, refresh, today=today
                     )

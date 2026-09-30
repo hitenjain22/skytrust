@@ -68,7 +68,7 @@ def main() -> None:
     save_json(
         "openmeteo_nbm_SAC_live.json",
         src["forecast_url"],
-        {**SAC, "models": ",".join(fwd["benchmark_models"]), "hourly": "cloud_cover",
+        {**SAC, "models": ",".join(m.id for m in settings.benchmarks), "hourly": "cloud_cover",
          "forecast_days": 8, "timezone": "UTC"},
     )  # fmt: skip
     save_json(

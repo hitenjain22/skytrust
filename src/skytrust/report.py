@@ -28,10 +28,13 @@ def display_name(method: str) -> str:
         "persistence": "Persistence (B2)",
         "equal_weight": "Equal-weight average (B5)",
         "blend": "Blend",
+        "blend_nbm": "Blend + NBM input (research)",
     }
     if method in fixed:
         return fixed[method]
     model, kind = method.rsplit("_", 1)
+    if model == "nbm":  # NOAA's own blend: a benchmark, not one of the blend's inputs
+        return {"rule": "NOAA NBM rule", "raw": "NOAA NBM (raw)", "lr": "NOAA NBM calibrated"}[kind]
     return f"{model.upper()} {'rule (B3)' if kind == 'rule' else 'calibrated (B4)'}"
 
 
@@ -100,7 +103,7 @@ def forecast_coverage_table(df: pd.DataFrame, settings: Settings) -> pd.DataFram
     """Share of site-nights with usable features, per model x lead, counted from each model's
     first available night (so the pre-archive weeks of Jan 2024 don't dilute it)."""
     table = {}
-    for m in settings.models:
+    for m in settings.forecast_models:
         col = f"{m.short}_frac_clear"
         row = {}
         for lead in settings.raw["leads"]:
@@ -114,7 +117,8 @@ def forecast_coverage_table(df: pd.DataFrame, settings: Settings) -> pd.DataFram
             row[f"L{lead}"] = pct(in_range[col].notna().mean()) if len(in_range) else "0"
         first = df.loc[df[col].notna(), "night_date"].min()
         row["first night"] = first if pd.notna(first) else "–"
-        table[f"{m.short} ({m.id})"] = row
+        role = " [benchmark]" if m in settings.benchmarks else ""
+        table[f"{m.short} ({m.id}){role}"] = row
     out = pd.DataFrame(table).T
     out.index.name = "model"
     return out
@@ -523,12 +527,16 @@ def _diff_phrase(d: pd.Series | None) -> str:
 def blend_verdicts(v: MetricsView, label: str = "primary") -> dict[str, dict[str, list[int]]]:
     """Per comparison target, which leads the blend is significantly better / not better."""
     out: dict[str, dict[str, list[int]]] = {}
-    for target in ["best_single", "equal_weight"]:
+    for target in ["best_single", "equal_weight", "nbm_lr"]:
         better, not_better = [], []
         for ld in v.lead_list(label):
-            if v.rec(label, ld, "blend") is None:
+            if (
+                v.rec(label, ld, "blend") is None
+                or v.rec(label, ld, target) is None
+                and (target != "best_single")
+            ):
                 continue
-            b = v.best_single(label, ld) if target == "best_single" else "equal_weight"
+            b = v.best_single(label, ld) if target == "best_single" else target
             d = v.diff(label, ld, "blend", b)
             (
                 better if d is not None and d["significant"] and d["brier_diff"] < 0 else not_better
@@ -553,10 +561,36 @@ def blend_summary_lines(v: MetricsView) -> list[str]:
         f"{_diff_phrase(v.diff(lab, lead, 'blend', best))}. Versus the equal-weight average: "
         f"{_diff_phrase(v.diff(lab, lead, 'blend', 'equal_weight'))}.",
     ]
+    nbm, raw = v.rec(lab, lead, "nbm_lr"), v.rec(lab, lead, "nbm_raw")
+    if nbm is not None:
+        lines.append(
+            f"- **Versus NOAA's National Blend of Models (NBM)**, NOAA's own statistical blend, "
+            f"calibrated here with the same site/season context (BSS {with_ci(nbm, 'bss')}): at "
+            f"lead {lead} SkyTrust's blend is {_diff_phrase(v.diff(lab, lead, 'blend', 'nbm_lr'))}."
+            + (
+                f" NBM's raw forecast used directly as a probability scores "
+                f"{with_ci(raw, 'bss')}; it isn't a calibrated probability, so the calibrated "
+                "version is the fair comparison."
+                if raw is not None
+                else ""
+            )
+        )
+    research = v.rec(lab, lead, "blend_nbm")
+    if research is not None:
+        lines.append(
+            f"- **Would NBM help as an input?** A research variant of the blend that also sees NBM "
+            f"(trained only on the ~15 months NBM's archive covers) is "
+            f"{_diff_phrase(v.diff(lab, lead, 'blend_nbm', 'blend'))} compared with the shipped "
+            "blend at the same lead. The shipped model is unchanged either way, so the live "
+            "forward test keeps scoring one fixed model."
+        )
     for target, name in [
         ("best_single", "the best single model"),
         ("equal_weight", "the simple equal-weight average"),
+        ("nbm_lr", "NOAA's calibrated NBM"),
     ]:
+        if not (verdict[target]["better"] or verdict[target]["not_better"]):
+            continue
         wins, others = verdict[target]["better"], verdict[target]["not_better"]
         sentence = (
             f"- Across leads, the blend beats {name} with a 95% CI excluding zero at "
@@ -839,9 +873,8 @@ def write_results(metrics: dict, docs: Path = DOCS) -> Path:
     fig_dir = docs / "figures"
     records = pd.DataFrame(metrics["records"])
     best = MetricsView(metrics).best_single("primary", RESULTS_LEAD)
-    shown = ["climatology", best, "equal_weight"] + (
-        ["blend"] if "blend" in set(records["method"]) else []
-    )
+    present = set(records["method"])
+    shown = ["climatology", best, "equal_weight"] + [m for m in ["nbm_lr", "blend"] if m in present]
     paths = {
         "lead_curves": figures.lead_curves(records, "primary", fig_dir / "lead_curves_primary.png"),
         "reliability": figures.reliability(
@@ -875,7 +908,7 @@ def readme_block(metrics: dict) -> str:
     v = MetricsView(metrics)
     lead = RESULTS_LEAD
     best = v.best_single("primary", lead)
-    methods = [m for m in ["blend", "equal_weight", best, "climatology"] if m]
+    methods = [m for m in ["blend", "nbm_lr", "equal_weight", best, "climatology"] if m]
     rows = {}
     for method in methods:
         r = v.rec("primary", lead, method)
@@ -960,6 +993,10 @@ def resume_bullets(metrics: dict) -> list[str]:
     n_leads = len(v.lead_list("primary"))
     wins = len(verdict["best_single"]["better"])
     period = test_period_name(metrics["meta"])
+    nbm_wins = verdict["nbm_lr"]["better"]
+    nbm_clause = (
+        f" and NOAA's National Blend of Models at {len(nbm_wins)} of {n_leads}" if nbm_wins else ""
+    )
     return [
         f"Built SkyTrust, an astronomy cloud forecast that backtests {n_models} weather models "
         f"against airport ceilometer observations and ERA5 reanalysis at {len(sites)} California "
@@ -970,7 +1007,7 @@ def resume_bullets(metrics: dict) -> list[str]:
         "archived fixed-lead forecasts to avoid look-ahead bias) with week-block bootstrap CIs; "
         f"the blend reached a Brier Skill Score of {blend['bss']:.2f} "
         f"(95% CI {blend['bss_lo']:.2f}–{blend['bss_hi']:.2f}) and beat the best single model at "
-        f"{wins} of {n_leads} lead times.",
+        f"{wins} of {n_leads} lead times" + nbm_clause + ".",
         "Shipped a Streamlit app with live 7-night outlooks, per-site track records, and graceful "
         "API-failure fallback; models are exported to JSON and served with numpy, with CI running "
         "an offline test suite on every push.",

@@ -16,7 +16,12 @@ from skytrust.report import display_name  # noqa: E402
 FIG_DIR = REPO_ROOT / "docs" / "figures"
 # PNGs carry no timestamp/version metadata, so re-running `report` doesn't churn git diffs.
 SAVE_KW = {"dpi": 130, "bbox_inches": "tight", "metadata": {"Software": None}}
-EMPHASIS = {"blend": "#d62728", "equal_weight": "#1f77b4", "climatology": "#7f7f7f"}
+EMPHASIS = {
+    "blend": "#d62728",
+    "equal_weight": "#1f77b4",
+    "climatology": "#7f7f7f",
+    "nbm_lr": "#e377c2",  # NOAA's National Blend of Models, calibrated: the benchmark to beat
+}
 # Fixed colour per forecast model so the same model looks the same in every figure, and no
 # model can be drawn in an emphasis colour.
 MODEL_COLORS = {"gfs": "#17becf", "hrrr": "#ff7f0e", "ecmwf": "#2ca02c", "gem": "#8c564b",

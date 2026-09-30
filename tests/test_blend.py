@@ -159,6 +159,10 @@ def test_end_to_end_offline_pipeline(trained, synthetic_built, fast_settings, tm
     assert blend_rows["brier"].between(0, 1).all()
     diffs = pd.DataFrame(metrics["differences"])
     assert (diffs["a"] == "blend").any()
+    # NOAA NBM head-to-head and the research blend+NBM variant are evaluated too.
+    assert {("blend", "nbm_lr"), ("blend_nbm", "blend")} <= set(
+        zip(diffs["a"], diffs["b"], strict=True)
+    )
     leads = pd.DataFrame(metrics["leads"])
     assert all("blend" in info for info in leads["model_info"])
 

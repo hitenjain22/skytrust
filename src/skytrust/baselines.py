@@ -53,7 +53,13 @@ class LeadResult:
 
 
 def models_at_lead(settings: Settings, lead: int) -> list[ModelSpec]:
+    """Blend members that forecast this lead."""
     return [m for m in settings.models if lead in m.leads]
+
+
+def benchmarks_at_lead(settings: Settings, lead: int) -> list[ModelSpec]:
+    """Benchmark models (e.g. NOAA NBM) that forecast this lead."""
+    return [m for m in settings.benchmarks if lead in m.leads]
 
 
 def single_model_columns(model: ModelSpec) -> list[str]:
@@ -106,7 +112,8 @@ def evaluation_rows(
 ) -> tuple[pd.DataFrame, pd.Series]:
     rows = test[test["lead"] == lead]
     keep = rows[label_col].notna()
-    for m in models_at_lead(settings, lead):
+    # Blend members *and* benchmarks must all be present, so every method scores the same nights.
+    for m in models_at_lead(settings, lead) + benchmarks_at_lead(settings, lead):
         keep &= rows[single_model_columns(m)].notna().all(axis=1)
         keep &= rows[f"{m.short}_pred_usable"].notna()
     persist = persistence_outcome(df, rows, label_col, lead)
@@ -134,6 +141,41 @@ def fit_single_model(
     return fit_tuned_logistic(
         X, rows[label_col].astype(bool), rows["night_date"], settings, impute=False
     )
+
+
+# ---------- benchmarks (NOAA NBM) ----------
+
+
+def add_benchmark_methods(
+    methods: dict,
+    bench: ModelSpec,
+    train: pd.DataFrame,
+    rows: pd.DataFrame,
+    label_col: str,
+    lead: int,
+    settings: Settings,
+    site_ids: list[str],
+) -> None:
+    """Three views of a benchmark: its own usable rule (hard), its raw forecast clear fraction
+    used as a probability, and a calibrated version with the same context features as B4 and
+    the blend. Only the calibrated one is a fair head-to-head with the blend."""
+    s = bench.short
+    methods[f"{s}_rule"] = MethodPrediction(
+        f"{s}_rule", "hard", "rule", rows[f"{s}_pred_usable"].astype(float).to_numpy()
+    )
+    methods[f"{s}_raw"] = MethodPrediction(
+        f"{s}_raw", "prob", "benchmark", rows[f"{s}_frac_clear"].to_numpy(dtype=float)
+    )
+    tuned = fit_single_model(train, bench, label_col, lead, settings, site_ids)
+    X = design_matrix(rows, single_model_columns(bench), site_ids)
+    methods[f"{s}_lr"] = MethodPrediction(
+        f"{s}_lr",
+        "prob",
+        "benchmark",
+        tuned.pipeline.predict_proba(X)[:, 1],
+        {"C": tuned.C, "cv_log_loss": tuned.cv_log_loss, "n_train": tuned.n_train,
+         "train_start": str(min(train.loc[train[f"{s}_frac_clear"].notna(), "night_date"]))},
+    )  # fmt: skip
 
 
 # ---------- all baselines for one (label, lead) ----------
@@ -181,6 +223,8 @@ def run_baselines(df: pd.DataFrame, label: str, lead: int, settings: Settings) -
             },
         )
         cv_losses[f"{m.short}_lr"] = tuned.cv_log_loss
+    for b in benchmarks_at_lead(settings, lead):
+        add_benchmark_methods(methods, b, train, rows, label_col, lead, settings, site_ids)
     frac = rows[[f"{m.short}_frac_clear" for m in models_at_lead(settings, lead)]]
     methods["equal_weight"] = MethodPrediction(
         "equal_weight", "prob", "equal_weight", frac.mean(axis=1).to_numpy()

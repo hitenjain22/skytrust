@@ -30,7 +30,12 @@ DAY = {
         "icon": "#9467bd",
         "median": "#ffffff",
     },
-    "methods": {"blend": "#d62728", "equal_weight": "#4ea1ff", "climatology": "#7f7f7f"},
+    "methods": {
+        "blend": "#d62728",
+        "equal_weight": "#4ea1ff",
+        "climatology": "#7f7f7f",
+        "nbm_lr": "#e377c2",
+    },
 }
 # Astronomers use dim red light to keep their eyes dark-adapted.
 NIGHT = {
@@ -55,7 +60,12 @@ NIGHT = {
         )
     }
     | {"median": "#ff3b30"},
-    "methods": {"blend": "#ff3b30", "equal_weight": "#c0392b", "climatology": "#6b1a1a"},
+    "methods": {
+        "blend": "#ff3b30",
+        "equal_weight": "#c0392b",
+        "climatology": "#6b1a1a",
+        "nbm_lr": "#a93226",
+    },
 }
 
 

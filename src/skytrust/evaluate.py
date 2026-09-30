@@ -215,7 +215,11 @@ def comparison_pairs(result: LeadResult) -> list[tuple[str, str]]:
         pairs += [(best, "climatology"), ("equal_weight", best)]
     pairs += [("equal_weight", "climatology")]
     if "blend" in result.methods:
-        pairs = [("blend", best), ("blend", "climatology"), ("blend", "equal_weight")] + pairs
+        head = [("blend", best), ("blend", "climatology"), ("blend", "equal_weight")]
+        # NOAA's own blend: calibrated head-to-head, and against its raw forecast.
+        head += [("blend", "nbm_lr"), ("blend", "nbm_raw"), ("nbm_lr", "climatology")]
+        head += [("blend_nbm", "blend"), ("blend_nbm", "nbm_lr")]
+        pairs = head + pairs
     return [(a, b) for a, b in pairs if a in result.methods and b in result.methods]
 
 
@@ -290,6 +294,38 @@ def add_blend(result: LeadResult, settings: Settings, artifacts_dir: Path) -> bo
     return True
 
 
+def add_blend_with_benchmarks(result: LeadResult, df: pd.DataFrame, settings: Settings) -> None:
+    """Research variant (not shipped): the blend with NOAA NBM's features as extra inputs.
+
+    Trained exactly like the blend, but only on training nights where NBM exists (its archive
+    starts 2024-10-09, so ~15 months instead of ~23). Answers "would NBM help as an input?"
+    without changing the shipped model the live forward test is scoring.
+    """
+    from skytrust import blend
+    from skytrust.modeling import design_matrix, fit_tuned_logistic, model_columns, split_train_test
+
+    benches = baselines.benchmarks_at_lead(settings, result.lead)
+    if not benches:
+        return
+    train, _ = split_train_test(df)
+    cols = blend.blend_feature_columns(settings, result.lead)
+    cols += [c for b in benches for c in model_columns(b.short)]
+    label_col = baselines.LABELS[result.label]
+    rows = blend.training_rows(train, label_col, result.lead)
+    rows = rows.dropna(subset=[c for b in benches for c in model_columns(b.short)])
+    site_ids = sorted(rows["site"].unique())
+    X = design_matrix(rows, cols, site_ids)
+    tuned = fit_tuned_logistic(
+        X, rows[label_col].astype(bool), rows["night_date"], settings, impute=True
+    )
+    p = tuned.pipeline.predict_proba(design_matrix(result.features, cols, site_ids))[:, 1]
+    result.methods["blend_nbm"] = MethodPrediction(
+        "blend_nbm", "prob", "research", p,
+        {"C": tuned.C, "cv_log_loss": tuned.cv_log_loss, "n_train": tuned.n_train,
+         "train_start": str(min(rows["night_date"]))},
+    )  # fmt: skip
+
+
 def lead_results(
     df: pd.DataFrame, settings: Settings, artifacts_dir: Path | None = None
 ) -> list[LeadResult]:
@@ -298,8 +334,8 @@ def lead_results(
     for label in baselines.LABELS:
         for lead in settings.raw["leads"]:
             result = baselines.run_baselines(df, label, lead, settings)
-            if artifacts_dir is not None:
-                add_blend(result, settings, artifacts_dir)
+            if artifacts_dir is not None and add_blend(result, settings, artifacts_dir):
+                add_blend_with_benchmarks(result, df, settings)
             results.append(result)
     return results
 

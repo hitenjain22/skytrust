@@ -71,8 +71,9 @@ def build_site_dataset(
     nights = nights_astro.index
     lab = labels.build_labels(nights_astro[["dusk_utc", "dawn_utc"]], night_hours, observed, rules)
     feats = features.build_features(
-        night_hours, nights, forecasts, settings.models, settings.raw["leads"], rules
-    )
+        night_hours, nights, forecasts, settings.models, settings.raw["leads"], rules,
+        benchmarks=settings.benchmarks,
+    )  # fmt: skip
     per_night = nights_astro.join(lab)
     df = feats.reset_index().merge(per_night.reset_index(), on="night_date", how="left")
     months = pd.to_datetime(df["night_date"]).dt.month
@@ -128,7 +129,7 @@ def build_dataset(
     for site in sites:
         log.info("building %s nights %s..%s", site.id, first_night, last_night)
         observed = labels.load_observed_hourly(site.id, settings, root)
-        forecasts = features.load_forecasts(site.id, settings.models, root)
+        forecasts = features.load_forecasts(site.id, settings.forecast_models, root)
         parts.append(
             build_site_dataset(site, settings, first_night, last_night, observed, forecasts)
         )

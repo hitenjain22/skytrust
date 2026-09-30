@@ -58,13 +58,18 @@ def build_features(
     models: tuple[ModelSpec, ...],
     leads: list[int],
     rules: NightRules,
+    benchmarks: tuple[ModelSpec, ...] = (),
 ) -> pd.DataFrame:
     """Wide feature table indexed by (night_date, lead): `{model}_{feature}` columns plus
-    cross-model `spread_frac_clear` and `n_models_available`."""
+    cross-model `spread_frac_clear` and `n_models_available`.
+
+    Benchmark models (e.g. NOAA NBM) get the same per-model columns, but the spread and model
+    count use the blend members only, so adding a benchmark never changes the blend's inputs.
+    """
     per_lead = []
     for lead in leads:
         cols = {}
-        for m in models:
+        for m in (*models, *benchmarks):
             df = forecasts.get(m.short)
             col = f"lead{lead}"
             hourly = df[col] if df is not None and lead in m.leads and col in df else None

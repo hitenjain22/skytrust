@@ -54,7 +54,8 @@ def test_prevruns_fetches_every_model_through_next_morning(settings, monkeypatch
         MagicMock(n_requests=0), settings, SITES[:1], "prevruns",
         dt.date(2025, 1, 1), dt.date(2025, 1, 31), TODAY,
     )  # fmt: skip
-    assert [m for m, _ in seen] == [m.id for m in settings.models]
+    # Blend members and benchmarks (NOAA NBM) are both downloaded.
+    assert [m for m, _ in seen] == [m.id for m in settings.forecast_models]
     assert all(end == dt.date(2025, 2, 1) for _, end in seen)
 
 

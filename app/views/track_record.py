@@ -45,7 +45,7 @@ def render(ctx: Context) -> None:
 
     st.plotly_chart(charts.false_clear_bars(v.records, label, lead, ctx.palette), width="stretch")
     best = v.best_single(label, lead)
-    shown = [m for m in ["climatology", best, "equal_weight", "blend"] if m]
+    shown = [m for m in ["climatology", best, "equal_weight", "nbm_lr", "blend"] if m]
     st.plotly_chart(
         charts.reliability(ctx.metrics["reliability"], shown, label, lead, ctx.palette),
         width="stretch",

@@ -35,6 +35,12 @@ models:
   - {short: gem, id: gem_seamless, name: CMC GEM, leads: [1, 2, 3, 4, 5, 6, 7]}
   - {short: icon, id: icon_seamless, name: DWD ICON, leads: [1, 2, 3, 4, 5, 6]}
 
+# Benchmarks: scored against the blend but never used inside the shipped blend (so the live
+# forward test keeps evaluating one fixed model). NBM = NOAA's own statistical blend of models;
+# its Previous Runs archive starts 2024-10-09 (DATA_NOTES).
+benchmark_models:
+  - {short: nbm, id: ncep_nbm_conus, name: NOAA National Blend of Models (2.5 km), leads: [1, 2, 3, 4, 5, 6, 7]}
+
 leads: [1, 2, 3, 4, 5, 6, 7]
 
 astro:
@@ -98,7 +104,6 @@ forward:
   # Prospective verification: forecasts are logged daily *before* the outcome exists, then scored
   # once observations arrive. Nights issued on/after start_date were never seen during development.
   start_date: 2026-09-30
-  benchmark_models: [ncep_nbm_conus]          # NOAA National Blend of Models (logged, not in blend)
   ensemble_models: [ecmwf_ifs025, gfs025]     # raw ensembles -> P(usable) = share of members
   ensemble_url: https://ensemble-api.open-meteo.com/v1/ensemble
   verify_after_days: 9                         # ERA5 lag (~6 days) + margin before scoring a night

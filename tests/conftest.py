@@ -46,5 +46,5 @@ def synthetic_built(tmp_path_factory, settings) -> tuple[pd.DataFrame, Path]:
     from skytrust import dataset
 
     root = tmp_path_factory.mktemp("raw")
-    write_synthetic_cache(root, settings.models, SYNTH_FIRST, SYNTH_LAST)
+    write_synthetic_cache(root, settings.forecast_models, SYNTH_FIRST, SYNTH_LAST)
     return dataset.build_dataset(settings, SYNTH_SITES, SYNTH_FIRST, SYNTH_LAST, root=root), root
