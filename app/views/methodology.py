@@ -78,6 +78,6 @@ afterwards (the forward test on the Track Record page).
 Weather data by [Open-Meteo.com](https://open-meteo.com/), licensed CC BY 4.0. ASOS
 observations courtesy of the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/),
 Iowa State University. Satellite cloud mask and imagery: NOAA GOES-18 (public AWS bucket
-`noaa-goes18`; NOAA/NESDIS STAR). Astronomy by [Skyfield](https://rhodesmill.org/skyfield/) with JPL's
-DE421 ephemeris.
+`noaa-goes18`; NOAA/NESDIS STAR). Astronomy by [Skyfield](https://rhodesmill.org/skyfield/)
+with JPL's DE421 ephemeris.
 """)
