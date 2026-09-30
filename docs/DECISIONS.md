@@ -357,3 +357,43 @@ Hiten asked for the path that is easiest to understand and gives the most consis
 - Night-by-hour outlook grid (Clear Sky Chart style), the latest GOES-West GeoColor image with a
   link to the animated loop, an About section, Paul Tol colour-blind-safe palettes in figures and
   app, and Dependabot for weekly dependency/Actions update PRs (tested by CI).
+
+### 2026-09-30 · Hourly P(clear) model
+- The nightly blend answers "will tonight be usable?"; planning also needs "which hours?". Each
+  dark hour at lead d is one example: every member model's forecast cover for that hour, their
+  mean and spread, where the hour falls in the night (0 = dusk, 1 = dawn), month and site.
+  Target: the hour is clear under the primary truth (the hourly quantity the nightly rule is
+  built from). Same tuned L2 logistic regression and JSON/numpy export as the blend.
+- Evaluated once on the frozen test period against an hourly climatology (training-years rate
+  per site and month) and the "share of models forecasting clear" baseline, with week-block CIs.
+  The app shows it as per-hour bars; it is additional information, and the nightly verdict still
+  comes from the nightly blend.
+
+### 2026-09-30 · Memory-lean ASOS loading
+- Labelling 20 years at AUN (a station with many special reports) read every METAR column and
+  pushed an 8 GB laptop into 14 GB of swap. `load_asos` now reads only the time and sky-cover
+  columns, dedupes on them, and stores the sky codes as categoricals: 14 MB for the same data.
+  A regression test checks the labels are identical to the old loader's.
+
+### 2026-09-30 · GOES-18 satellite cloud mask as an independent truth (Hiten approved adding h5py)
+- **Problem:** both ground truths have a known blind spot. ASOS can't see above 12,000 ft; ERA5
+  is a model. The primary label (max of the two) was designed around that, but nothing tested it
+  against a real observation that sees high cloud.
+- **Decision:** add the GOES-18 Clear Sky Mask (AWS open data, 5-minute CONUS scans) as a fourth
+  label, `usable_goes`, built with exactly the same clear / usable / missing rules. It does **not**
+  change the primary label (SPEC §4 is unchanged); it's used three ways:
+  1. **Referee** (DATA_QUALITY §7): on nights where ASOS and ERA5 disagree, which side does the
+     satellite take? This tests the "ASOS misses cirrus" explanation directly.
+  2. **Label sensitivity** (RESULTS §6): a blend trained on the GOES label, like the ASOS-only and
+     ERA5-only ones. GOES skill is measured against its own 2024–25 rate (no 20-year satellite
+     record exists for this sensor).
+  3. **Cross-truth check** (RESULTS §6): the *shipped* blend, trained on the primary label only,
+     scored against the GOES truth it never saw, head-to-head with NOAA's NBM.
+- **How:** geometry from the GOES-R Product User Guide (tested on its worked example), 5 × 5
+  good-quality-pixel box per site, first scan of each dark hour. `h5py` reads the NetCDF4 files
+  (reading NetCDF4 without it would need a heavier stack such as xarray + netCDF4). Labels that
+  lack data (e.g. GOES before it's fetched) are skipped by training and evaluation automatically.
+
+### 2026-09-30 · Static type checking (Hiten approved adding mypy)
+- mypy runs in CI next to ruff, so type hints are checked, not decorative.
+

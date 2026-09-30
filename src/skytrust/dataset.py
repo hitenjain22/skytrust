@@ -25,7 +25,7 @@ DATASET_PATH = REPO_ROOT / "data" / "processed" / "dataset.parquet"
 KEYS = ["site", "night_date", "lead"]
 SEASONS = {12: "DJF", 1: "DJF", 2: "DJF", 3: "MAM", 4: "MAM", 5: "MAM",
            6: "JJA", 7: "JJA", 8: "JJA", 9: "SON", 10: "SON", 11: "SON"}  # fmt: skip
-LABEL_COLUMNS = ["usable_primary", "usable_asos", "usable_era5"]
+LABEL_COLUMNS = ["usable_primary", "usable_asos", "usable_era5", "usable_goes"]
 
 
 class DatasetValidationError(Exception):

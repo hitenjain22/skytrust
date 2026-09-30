@@ -31,6 +31,7 @@ def display_name(method: str) -> str:
         "equal_weight_cal": "Equal-weight, calibrated (B6)",
         "blend": "Blend",
         "blend_nbm": "Blend + NBM input (research)",
+        "blend_primary": "Shipped blend (trained on primary)",
     }
     if method in fixed:
         return fixed[method]
@@ -153,7 +154,9 @@ def label_comparison_table(nights: pd.DataFrame) -> pd.DataFrame:
         "ASOS only": "usable_asos",
         "ERA5 only": "usable_era5",
         "ASOS (max-per-hour rule)": "usable_asos_max",
+        "GOES satellite": "usable_goes",
     }
+    labels = {k: c for k, c in labels.items() if c in nights and nights[c].notna().any()}
     g = nights.groupby("site", sort=False)
     return pd.DataFrame(
         {
@@ -178,11 +181,70 @@ def agreement_table(nights: pd.DataFrame) -> pd.DataFrame:
             "ERA5 usable, ASOS not": g.apply(lambda d: pct((d["cat"] == "era5_only").mean())),
         }
     )
+    if "usable_goes" in both and both["usable_goes"].notna().any():
+        # The satellite as referee on the disagreement nights: which source does it side with?
+        pairs = [("asos_only", "ASOS usable, ERA5 not"), ("era5_only", "ERA5 usable, ASOS not")]
+        for cat, name in pairs:
+            sub = both[(both["cat"] == cat) & both["usable_goes"].notna()]
+            out[f"…{name}: GOES says usable"] = (
+                sub["usable_goes"].astype(float).groupby(sub["site"], sort=False).mean().map(pct)
+            )
     if {"era5_high_mean_cover", "era5_low_mean_cover"} <= set(both.columns):
         dis = both[both["cat"] == "asos_only"].groupby("site", sort=False)
         out["…those nights: ERA5 mean high cloud"] = dis["era5_high_mean_cover"].mean().map(pct)
         out["…those nights: ERA5 mean low cloud"] = dis["era5_low_mean_cover"].mean().map(pct)
     return out
+
+
+def cohen_kappa(a: pd.Series, b: pd.Series) -> float:
+    """Agreement beyond chance (1 = perfect, 0 = what two coins with these base rates would
+    manage). Raw agreement flatters labels that are both usually "clear"."""
+    a, b = a.astype(bool).to_numpy(), b.astype(bool).to_numpy()
+    if len(a) == 0:
+        return float("nan")
+    po = float(np.mean(a == b))
+    pe = float(a.mean() * b.mean() + (1 - a.mean()) * (1 - b.mean()))
+    return float("nan") if pe == 1 else (po - pe) / (1 - pe)
+
+
+def goes_agreement_table(nights: pd.DataFrame) -> pd.DataFrame | None:
+    """How often the independent satellite label agrees with each ground-truth label, per site
+    and overall: raw agreement and Cohen's kappa."""
+    if "usable_goes" not in nights or nights["usable_goes"].notna().sum() == 0:
+        return None
+    groups = [(s, g) for s, g in nights.groupby("site", sort=False)] + [("all sites", nights)]
+    rows = {}
+    for site, g in groups:
+        row = {}
+        for name, col in [("primary", "usable_primary"), ("ASOS", "usable_asos"),
+                          ("ERA5", "usable_era5")]:  # fmt: skip
+            both = g.dropna(subset=[col, "usable_goes"])
+            same = both[col].astype(bool) == both["usable_goes"].astype(bool)
+            row[f"agree w/ {name}"] = pct(same.mean()) if len(both) else "–"
+            row[f"κ w/ {name}"] = _fmt(cohen_kappa(both[col], both["usable_goes"]), "num")
+        row["GOES-labeled nights"] = int(g["usable_goes"].notna().sum())
+        rows[site] = row
+    out = pd.DataFrame(rows).T
+    out.index.name = "site"
+    return out
+
+
+def goes_quality_section(nights: pd.DataFrame) -> list[str]:
+    table = goes_agreement_table(nights)
+    if table is None:
+        return []
+    return [
+        "## 7b. The satellite check (GOES-18 Clear Sky Mask)",
+        "",
+        "A third, independent truth: the GOES-18 satellite's cloud mask averaged over a ~10 km "
+        "box around each airport, for the scan nearest the top of each dark hour, with the same "
+        "clear / usable rules. It is a real observation (unlike ERA5) and sees high cloud "
+        "(unlike ASOS); at night it relies on infrared channels only, so very thin cirrus can "
+        "still slip through. κ (Cohen's kappa) is agreement beyond chance.",
+        "",
+        md_table(table),
+        "",
+    ]
 
 
 def train_test_shift_table(nights: pd.DataFrame) -> pd.DataFrame:
@@ -299,6 +361,7 @@ def data_quality_markdown(df: pd.DataFrame, settings: Settings, generated: dt.da
         "",
         md_table(agreement_table(nights)),
         "",
+        *goes_quality_section(nights),
         "## 8. Train vs test base rate",
         "",
         md_table(train_test_shift_table(nights)),
@@ -537,9 +600,15 @@ def breakdown_table(v: MetricsView, label: str, lead: int, subset_type: str) -> 
     return out
 
 
+def labels_in(v: MetricsView) -> list[str]:
+    present = set(v.records["label"])
+    return [lab for lab in ["primary", "asos", "era5", "goes"] if lab in present]
+
+
 def label_sensitivity_table(v: MetricsView, lead: int) -> pd.DataFrame:
-    labels = ["primary", "asos", "era5"]
-    methods = list(dict.fromkeys(m for lab in labels for m in v.methods(lab, lead, "prob")))
+    labels = labels_in(v)
+    methods = [m for lab in labels for m in v.methods(lab, lead, "prob") if m != "blend_primary"]
+    methods = list(dict.fromkeys(methods))
     rows = {}
     for method in methods:
         rows[v.name(method)] = {lab: with_ci(v.rec(lab, lead, method), "bss") for lab in labels}
@@ -548,6 +617,46 @@ def label_sensitivity_table(v: MetricsView, lead: int) -> pd.DataFrame:
     out.loc["(test base rate)"] = base
     out.index.name = f"BSS at lead {lead}"
     return out
+
+
+def cross_truth_table(v: MetricsView, lead: int) -> pd.DataFrame | None:
+    """The shipped (primary-trained) blend scored against every other truth it never saw."""
+    rows = {}
+    for lab in labels_in(v):
+        r = v.rec(lab, lead, "blend_primary")
+        if r is None:
+            continue
+        nbm, clim = v.rec(lab, lead, "nbm_lr"), v.rec(lab, lead, "climatology")
+        rows[LABEL_NAMES[lab]] = {
+            "BSS shipped blend": with_ci(r, "bss"),
+            "BSS NOAA NBM calibrated": with_ci(nbm, "bss"),
+            "false-clear shipped blend": _fmt(r["false_clear_rate"], "pct"),
+            "false-clear climatology": _fmt(clim["false_clear_rate"], "pct"),
+            "shipped blend vs NBM": _diff_phrase(v.diff(lab, lead, "blend_primary", "nbm_lr")),
+        }
+    if not rows:
+        return None
+    out = pd.DataFrame(rows).T
+    out.index.name = f"judged by (lead {lead})"
+    return out
+
+
+def cross_truth_lines(v: MetricsView, lead: int) -> list[str]:
+    table = cross_truth_table(v, lead)
+    if table is None:
+        return []
+    lines = [
+        "**Cross-truth check.** The shipped blend is trained on the primary label only. Scoring "
+        "that same model against truths it never trained on tests whether its skill is an "
+        "artifact of how the primary label is built.",
+    ]
+    if "goes" in labels_in(v):
+        lines[0] += (
+            " GOES is the most independent: a satellite observation, not a model, that also "
+            "sees the high cloud ASOS can't. Its climatology is its own 2024–25 training-years "
+            "rate (there is no 20-year satellite record)."
+        )
+    return [*lines, "", md_table(table), ""]
 
 
 def model_info_table(v: MetricsView, label: str) -> pd.DataFrame:
@@ -1254,6 +1363,7 @@ def results_markdown(metrics: dict, figure_paths: dict[str, str]) -> str:
         "",
         md_table(label_sensitivity_table(v, lead)),
         "",
+        *cross_truth_lines(v, lead),
         "## 7. Single-model tuning (training data only)",
         "",
         md_table(model_info_table(v, "primary"), index=False),
@@ -1366,7 +1476,12 @@ def update_readme(metrics: dict, path: Path = REPO_ROOT / "README.md") -> bool:
 
 # ---------- plain-English takeaways (app Track Record page) ----------
 
-LABEL_NAMES = {"primary": "primary (ASOS + ERA5)", "asos": "ASOS-only", "era5": "ERA5-only"}
+LABEL_NAMES = {
+    "primary": "primary (ASOS + ERA5)",
+    "asos": "ASOS-only",
+    "era5": "ERA5-only",
+    "goes": "GOES satellite",
+}
 
 
 def takeaways(v: MetricsView, label: str, lead: int) -> list[str]:

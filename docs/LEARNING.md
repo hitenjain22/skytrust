@@ -682,3 +682,53 @@ fail elsewhere. Leave-one-group-out cross-validation is how you measure transfer
 1. How would you know your model works at a location with no training data?
 2. Why hold out a whole site instead of random nights from every site?
 3. What would you tell a user about reliability at a custom location?
+
+---
+
+## `skytrust/hourly.py`: which hours will be clear?
+
+**What:** A second model that predicts, for every dark hour, the chance that hour is clear. Same
+recipe as the nightly blend (tuned logistic regression on the member models' forecasts, exported
+to JSON, run with numpy in the app), but one row per hour instead of per night, plus where the hour
+sits in the night.
+
+**Why:** "Tonight is 70 % likely to be usable" doesn't say *when* to set up. Hour-level
+post-processing is also how the weather literature usually treats cloud forecasts.
+
+**Key concept: the unit of analysis changes the question and the dependence.** Hours within a
+night are strongly correlated (a cloud deck lasts hours), so 280,000 hour rows carry far less
+independent information than the count suggests. That's why the confidence intervals still
+resample whole weeks, not individual hours.
+
+**Interview questions:**
+1. Why not just average the hourly probabilities to get the nightly one?
+2. Your hourly dataset has 280k rows. Why is that not 280k independent observations?
+3. What baseline would you compare an hourly cloud model against?
+
+---
+
+## `skytrust/data/goes.py`: a satellite as the referee
+
+**What:** Downloads the GOES-18 satellite's cloud mask (a 2 km grid over the US every 5 minutes,
+free on AWS), finds the pixels around each airport, and turns them into a fourth "truth" label
+with exactly the same rules as the others.
+
+**Why:** Both ground truths have blind spots: the airport sensor (ASOS) can't see high cirrus,
+and ERA5 is a model, not an observation. The satellite sees high cloud *and* is a measurement. It
+settles disagreements between the other two, and it lets the shipped model be judged by a truth
+it never trained on.
+
+**Key concepts:**
+- **Label noise and triangulation.** When the "truth" is itself uncertain, compare several
+  imperfect measurements with *different* blind spots. If conclusions hold under all of them, they
+  aren't an artifact of one measuring device.
+- **Map projections.** A geostationary satellite records scan angles, not latitude/longitude.
+  The conversion is textbook geometry (NOAA's user guide gives the formulas and a worked example,
+  which the unit test reproduces).
+- **Cohen's kappa.** Two labels that are both "clear" 60 % of the time agree often by pure chance;
+  kappa measures agreement beyond that.
+
+**Interview questions:**
+1. Your ground truth is noisy. How do you know your model's skill isn't just learning the noise?
+2. Why is raw agreement between two labels misleading, and what does kappa fix?
+3. What is parallax in satellite cloud detection, and when does it matter?

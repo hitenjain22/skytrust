@@ -86,3 +86,34 @@ def test_era5_layer_means_are_stored_when_available():
     assert out.loc[N1, "era5_high_mean_cover"] == 0.5
     assert out.loc[N2, "era5_high_mean_cover"] == 1.0
     assert "era5_low_mean_cover" not in out  # absent input -> no column
+
+
+def test_goes_label_follows_the_same_rules_independently():
+    windows, nh, idx = setup()
+    zeros = series(idx, [0.0] * 8)
+    goes = series(idx, [0.0] * 4 + [0.0, 0.6, 0.0, np.nan])  # night 2: a cloudy hour + a gap
+    hourly = {"asos": zeros, "asos_max": zeros, "era5": zeros, "goes": goes}
+    out = build_labels(windows, nh, hourly, RULES)
+    assert out.loc[N1, "usable_goes"] and not out.loc[N2, "usable_goes"]
+    assert out.loc[N2, "goes_missing_frac"] == 0.25
+    assert out.loc[N2, "usable_primary"]  # GOES never changes the primary label
+    assert pd.isna(out.loc[N3, "usable_goes"]) and out.loc[N3, "exclusion_goes"] == "no_darkness"
+
+
+def test_goes_label_is_excluded_when_the_satellite_data_is_missing():
+    windows, nh, idx = setup()
+    zeros = series(idx, [0.0] * 8)
+    goes = series(idx, [0.0] * 4 + [0.0, np.nan, np.nan, 0.0])  # night 2: 50 % missing
+    out = build_labels(
+        windows, nh, {"asos": zeros, "asos_max": zeros, "era5": zeros, "goes": goes}, RULES
+    )
+    assert out.loc[N1, "usable_goes"] and pd.isna(out.loc[N1, "exclusion_goes"])
+    assert pd.isna(out.loc[N2, "usable_goes"]) and out.loc[N2, "exclusion_goes"] == "goes_missing"
+
+
+def test_no_goes_input_gives_an_all_missing_goes_label():
+    windows, nh, idx = setup()
+    zeros = series(idx, [0.0] * 8)
+    out = build_labels(windows, nh, {"asos": zeros, "asos_max": zeros, "era5": zeros}, RULES)
+    assert out["usable_goes"].isna().all() and str(out["usable_goes"].dtype) == "boolean"
+    assert (out["exclusion_goes"].dropna() != "").all()

@@ -94,6 +94,7 @@ def small_frame() -> pd.DataFrame:
             "usable_primary": pd.array([True, pd.NA], dtype="boolean"),
             "usable_asos": pd.array([True, False], dtype="boolean"),
             "usable_era5": pd.array([True, False], dtype="boolean"),
+            "usable_goes": pd.array([pd.NA, True], dtype="boolean"),
         }
     )
 
@@ -137,6 +138,8 @@ def test_data_quality_report_renders_every_section(built, settings):
     md = report.data_quality_markdown(df, settings, dt.datetime(2026, 1, 1, tzinfo=dt.UTC))
     for heading in ["## 1. Overview", "## 5. Base rate", "## 7. Do ASOS and ERA5 agree?", "## 9."]:
         assert heading in md
+    assert "## 7b. The satellite check" in md and "κ w/ primary" in md
+    assert "…ASOS usable, ERA5 not: GOES says usable" in md
     assert "| model |" in md
     assert "SAC" in md and "BIH" in md
 
@@ -175,3 +178,11 @@ def test_default_dataset_end_is_capped_at_test_end(settings, monkeypatch):
     assert dataset.default_last_night(SYNTH_SITES, settings) == settings.raw["split"]["test_end"]
     monkeypatch.setattr(dataset, "cached_last_night", lambda *a, **k: dt.date(2026, 3, 1))
     assert dataset.default_last_night(SYNTH_SITES, settings) == dt.date(2026, 3, 1)
+
+
+def test_goes_label_is_built_from_the_satellite_cache(built):
+    lead1 = built[0][built[0]["lead"] == 1]
+    assert lead1["usable_goes"].notna().mean() > 0.9
+    # the synthetic satellite sees the full column, like ERA5, so it should mostly agree with it
+    both = lead1.dropna(subset=["usable_goes", "usable_era5"])
+    assert (both["usable_goes"] == both["usable_era5"]).mean() > 0.8

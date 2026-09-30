@@ -1,5 +1,5 @@
 """A small, deterministic, *fake* raw cache in the exact on-disk formats of the real sources
-(IEM CSV, Open-Meteo JSON), so the whole pipeline can run offline in tests.
+(IEM CSV, Open-Meteo JSON, GOES extract CSV), so the whole pipeline can run offline in tests.
 
 The fake weather has structure a model can learn: each night has a cloudiness regime, the
 "truth" follows it, and forecasts are truth plus noise that grows with lead time.
@@ -50,8 +50,11 @@ def write_synthetic_cache(
     last_night: dt.date,
     sites: tuple[Site, ...] = SYNTH_SITES,
     seed: int = 7,
+    goes: bool = True,
 ) -> None:
     rng = np.random.default_rng(seed)
+    # GOES gets its own stream so adding it didn't change any other synthetic value.
+    goes_rng = np.random.default_rng([seed, 1])
     start = pd.Timestamp(first_night, tz="UTC")
     end = pd.Timestamp(last_night, tz="UTC") + pd.Timedelta(days=2)
     hours = pd.date_range(start, end, freq="h", inclusive="left")
@@ -98,3 +101,12 @@ def write_synthetic_cache(
             path = root / "prevruns" / site.id / m.id / f"{tag}.json"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(_openmeteo_payload(hours, cols)))
+
+        if goes:
+            # GOES: 25-pixel cloud fraction of the full column (sees high cloud), a little noisy.
+            sat = np.round(np.clip(truth + goes_rng.normal(0, 0.08, len(hours)), 0, 1) * 25) / 25
+            frame = pd.DataFrame({"hour": hours, "goes_cover": sat, "n_good": 25, "key": "synth"})
+            for month, part in frame.groupby(frame["hour"].dt.strftime("%Y-%m")):
+                path = root / "goes" / site.id / f"{month}.csv"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                part.assign(hour=part["hour"].map(pd.Timestamp.isoformat)).to_csv(path, index=False)

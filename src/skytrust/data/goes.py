@@ -140,9 +140,8 @@ def load_extracts(site_id: str, root: Path = EXTRACT_DIR) -> pd.DataFrame:
 def goes_hourly(site_id: str, root: Path = EXTRACT_DIR) -> pd.Series:
     """Hourly GOES cloud fraction for a site (index = top-of-hour UTC)."""
     df = load_extracts(site_id, root)
-    return pd.Series(
-        df["goes_cover"].to_numpy(dtype=float), index=pd.DatetimeIndex(df["hour"]), name="goes"
-    )
+    index = pd.DatetimeIndex(pd.to_datetime(df["hour"], utc=True))  # tz-aware even when empty
+    return pd.Series(df["goes_cover"].to_numpy(dtype=float), index=index, name="goes")
 
 
 def _fetch_one(client: HttpClient, hour: pd.Timestamp, sites: tuple[Site, ...]):

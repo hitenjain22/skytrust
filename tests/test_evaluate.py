@@ -92,7 +92,7 @@ def metrics(synthetic_built, fast_settings):
 
 def test_run_evaluation_covers_every_label_and_lead(metrics, fast_settings):
     rec = pd.DataFrame(metrics["records"])
-    assert set(rec["label"]) == {"primary", "asos", "era5"}
+    assert set(rec["label"]) == {"primary", "asos", "era5", "goes"}
     assert set(rec["lead"]) == set(fast_settings.raw["leads"])
     overall = rec[rec["subset_type"] == "overall"]
     clim = overall[overall["method"] == "climatology"]

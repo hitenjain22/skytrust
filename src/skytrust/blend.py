@@ -26,7 +26,7 @@ import pandas as pd
 import sklearn
 from sklearn.isotonic import IsotonicRegression
 
-from skytrust.baselines import LABELS, models_at_lead
+from skytrust.baselines import LABELS, labels_available, models_at_lead
 from skytrust.config import Settings
 from skytrust.inference import (  # noqa: F401  (inference names re-exported for callers)
     ARTIFACTS,
@@ -198,10 +198,11 @@ def fit_blend(
 
 
 def train_all(df: pd.DataFrame, settings: Settings, root: Path = ARTIFACTS) -> list[Path]:
-    """Fit and save a blend for every label x lead. Touches training rows only."""
+    """Fit and save a blend for every label x lead. Touches training rows only (a label
+    without enough training nights, e.g. GOES before its data is fetched, is skipped)."""
     train, _ = split_train_test(df)
     paths = []
-    for label in LABELS:
+    for label in labels_available(train, splits=("train",)):
         for lead in settings.raw["leads"]:
             artifact = fit_blend(train, label, lead, settings)
             path = artifact_path(label, lead, root)

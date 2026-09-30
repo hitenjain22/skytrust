@@ -156,8 +156,12 @@ def test_end_to_end_offline_pipeline(trained, synthetic_built, fast_settings, tm
     assert not any(c.startswith("site_") for c in geo["inputs"])
     assert (artifacts / "model_lead1.json").exists()
     assert (artifacts / "sensitivity" / "model_asos_lead1.json").exists()
+    assert (artifacts / "sensitivity" / "model_goes_lead1.json").exists()
 
     rec = pd.DataFrame(metrics["records"])
+    # cross-truth check: the shipped primary model is scored under every other truth label
+    cross = rec[(rec["method"] == "blend_primary") & (rec["subset_type"] == "overall")]
+    assert set(cross["label"]) == set(LABELS) - {"primary"}
     blend_rows = rec[(rec["method"] == "blend") & (rec["subset_type"] == "overall")]
     assert set(blend_rows["label"]) == set(LABELS)
     assert blend_rows["brier"].between(0, 1).all()
@@ -179,6 +183,7 @@ def test_end_to_end_offline_pipeline(trained, synthetic_built, fast_settings, tm
     assert "## 8. The blend: what it learned" in md
     assert "The learned blend" in md and "Phase 4 (not yet run)" not in md
     assert "of 3 leads" in md
+    assert "**Cross-truth check.**" in md and "GOES satellite" in md
 
 
 def test_report_blend_details(trained):
@@ -242,3 +247,15 @@ def test_loso_never_trains_on_the_held_out_site(
     monkeypatch.setattr(spatial.blend, "fit_blend", spy)
     spatial.loso_predictions(synthetic_built[0], fast_settings, trained[0], leads=[1])
     assert seen == [{"SAC"}, {"BIH"}]  # BIH held out first (alphabetical), so trained on SAC
+
+
+def test_cross_truth_table_and_kappa(trained):
+    v = report.MetricsView(trained[2])
+    table = report.cross_truth_table(v, 1)
+    assert list(table.index) == ["ASOS-only", "ERA5-only", "GOES satellite"]
+    assert "Shipped blend (trained on primary)" not in report.label_sensitivity_table(v, 1).index
+    a = pd.Series([True, True, False, False])
+    assert report.cohen_kappa(a, a) == 1.0
+    assert report.cohen_kappa(a, ~a) == -1.0
+    # 3/4 raw agreement, but these base rates agree by chance half the time: kappa = 0.5
+    assert report.cohen_kappa(a, pd.Series([True, True, False, True])) == pytest.approx(0.5)

@@ -31,7 +31,29 @@ from skytrust.modeling import (
 
 log = logging.getLogger(__name__)
 
-LABELS = {"primary": "usable_primary", "asos": "usable_asos", "era5": "usable_era5"}
+LABELS = {
+    "primary": "usable_primary",
+    "asos": "usable_asos",
+    "era5": "usable_era5",
+    "goes": "usable_goes",
+}
+# A label is trained / evaluated only with at least this many labeled nights (lead 1) in each
+# required split. In practice a label either has thousands (data fetched) or none (GOES not
+# fetched), so the exact number only guards against fitting on a handful of nights.
+MIN_LABELED_NIGHTS = 30
+
+
+def labels_available(df: pd.DataFrame, splits: tuple[str, ...] = ("train", "test")) -> list[str]:
+    """Labels with enough labeled nights in every split in `splits`, in LABELS order."""
+    lead1 = df[df["lead"] == df["lead"].min()]
+    out = []
+    for name, col in LABELS.items():
+        if col not in lead1:
+            continue
+        counts = lead1.loc[lead1[col].notna(), "split"].value_counts()
+        if all(counts.get(s, 0) >= MIN_LABELED_NIGHTS for s in splits):
+            out.append(name)
+    return out
 
 
 @dataclass

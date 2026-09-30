@@ -25,15 +25,17 @@ def render(ctx: Context) -> None:
     st.divider()
     st.subheader("Backtest")
     c1, c2 = st.columns(2)
+    names = {"primary": "Primary", "asos": "ASOS only", "era5": "ERA5 only", "goes": "Satellite"}
     label = c1.radio(
         "Truth label",
-        ["primary", "asos", "era5"],
+        report.labels_in(v),
         horizontal=True,
         key="label",
-        format_func=lambda x: {"primary": "Primary", "asos": "ASOS only", "era5": "ERA5 only"}[x],
+        format_func=names.get,
         help=(
             "ASOS can't see cirrus above 12,000 ft; ERA5 is a reanalysis. "
-            "Primary = the cloudier of the two."
+            "Primary = the cloudier of the two. Satellite = GOES-18 cloud mask, an independent "
+            "check that sees high cloud."
         ),
     )
     leads = v.lead_list(label)

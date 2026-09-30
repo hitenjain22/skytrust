@@ -157,3 +157,13 @@ def test_calibrated_equal_weight_uses_one_shared_weight(synthetic_built, fast_se
     assert b6.kind == "prob" and ((b6.p > 0) & (b6.p < 1)).all()
     # Monotone in the average clear fraction at fixed context: more clear -> higher P.
     assert np.corrcoef(b6.p, result.methods["equal_weight"].p)[0, 1] > 0.8
+
+
+def test_labels_available_skips_labels_without_data(synthetic_built):
+    df = synthetic_built[0]
+    assert baselines.labels_available(df) == ["primary", "asos", "era5", "goes"]
+    no_goes = df.assign(usable_goes=pd.array([pd.NA] * len(df), dtype="boolean"))
+    assert "goes" not in baselines.labels_available(no_goes)
+    only_train = df.assign(usable_goes=df["usable_goes"].where(df["split"] == "train"))
+    assert "goes" not in baselines.labels_available(only_train)
+    assert "goes" in baselines.labels_available(only_train, splits=("train",))

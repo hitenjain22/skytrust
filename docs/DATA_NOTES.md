@@ -196,3 +196,31 @@ today so the last night is fully in the past.) All five pass the 85 % bar; no su
   professional version of what SkyTrust's blend does, which makes it the natural benchmark.
 - Open-Meteo's docs page lists GFS as `gfs_global_011` / `gfs_global_025`, but the API rejects
   both; `gfs_global` still works (checked 2026-09-29; guarded by the weekly contract tests).
+
+---
+
+## 10. GOES-18 Clear Sky Mask (satellite truth), added 2026-09-30
+
+Checked against real files (2025-01-10, 2025-06-15, 2026-02-03) before any code relied on them:
+
+- **Where:** public AWS bucket `noaa-goes18`, product `ABI-L2-ACMC` (CONUS sector, every 5 min),
+  keys `ABI-L2-ACMC/{year}/{day-of-year}/{hour}/OR_ABI-L2-ACMC-M6_G18_s{start}_e{end}_c{created}.nc`.
+  Listed with the S3 REST API (`list-type=2&prefix=…`); the first key of an hour starts at ≈ H:01.
+  No account or key needed. One NetCDF4 (HDF5) file is ≈ 3.7 MB and covers every site.
+- **Variables used:** `BCM` (binary cloud mask, uint8, 0 = clear or probably clear,
+  1 = cloudy or probably cloudy, fill 255), `DQF` (uint8, 0 = good, 1 = bad, 2 = space,
+  6 = degraded; only 0 is used), `x`/`y` (int16 scan angles, `scale_factor` 5.6e-05 rad, `y`'s is
+  negative, i.e. rows run north → south), grid 1500 × 2500, and `goes_imager_projection`
+  (perspective height 35,786,023 m, GRS80 axes, sub-satellite longitude −137°).
+- **Geometry:** latitude/longitude → scan angle with the GOES-R Product User Guide (vol. 3,
+  §4.2.8.1) formulas; the implementation reproduces the guide's worked example to 1e-6 rad.
+- **Viewing angle:** GOES-18 sees the five sites at a satellite zenith angle of 46–49°, so a
+  cloud at 10 km altitude appears ≈ 11 km away from where it really is (parallax), about one
+  5 × 5-pixel box. Negligible for widespread cloud; it blurs isolated clouds. Not corrected
+  (that would need each cloud's height, a separate product).
+- **Night-time:** at night the mask uses infrared channels only, so very thin cirrus is harder
+  to detect than by day. The satellite label is therefore not "perfect truth", just a truth with
+  different blind spots from ASOS (can't see above 12,000 ft) and ERA5 (a model).
+- **In SkyTrust:** per dark hour, the scan nearest the top of the hour; cloud fraction = mean BCM
+  over the good-quality pixels of a 5 × 5 box (≈ 12–15 km at this viewing angle) centred on the
+  airport. Only these per-site numbers are stored (`data/raw/goes/{site}/{month}.csv`).

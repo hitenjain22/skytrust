@@ -300,6 +300,8 @@ def comparison_pairs(result: LeadResult) -> list[tuple[str, str]]:
         head += [("blend_nbm", "blend"), ("blend_nbm", "nbm_lr")]
         # Weights vs calibration: blend - B6 = learned weights; B6 - B5 = calibration.
         head += [("blend", "equal_weight_cal"), ("equal_weight_cal", "equal_weight")]
+        # Cross-truth: the shipped primary model vs NOAA and the base rate under this truth.
+        head += [("blend_primary", "nbm_lr"), ("blend_primary", "climatology")]
         pairs = head + pairs
     return [(a, b) for a, b in pairs if a in result.methods and b in result.methods]
 
@@ -385,6 +387,15 @@ def add_blend(result: LeadResult, settings: Settings, artifacts_dir: Path) -> bo
     blend.assert_trained_before(artifact, settings.raw["split"]["test_start"])
     p = blend.predict_proba(artifact, blend.raw_inputs(result.features, artifact))
     result.methods["blend"] = MethodPrediction("blend", "prob", "blend", p, blend.summary(artifact))
+    shipped = blend.artifact_path("primary", result.lead, artifacts_dir)
+    if result.label != "primary" and shipped.exists():
+        # Cross-truth check: the shipped model (trained on the primary label only) judged by a
+        # truth it never saw. GOES, a satellite observation, is the most independent of these.
+        art = blend.load_artifact(shipped)
+        p = blend.predict_proba(art, blend.raw_inputs(result.features, art))
+        result.methods["blend_primary"] = MethodPrediction(
+            "blend_primary", "prob", "cross_truth", p, blend.summary(art)
+        )
     return True
 
 
@@ -423,9 +434,9 @@ def add_blend_with_benchmarks(result: LeadResult, df: pd.DataFrame, settings: Se
 def lead_results(
     df: pd.DataFrame, settings: Settings, artifacts_dir: Path | None = None
 ) -> list[LeadResult]:
-    """Baselines for every label x lead, plus the blend when `artifacts_dir` has it."""
+    """Baselines for every available label x lead, plus the blend when `artifacts_dir` has it."""
     results = []
-    for label in baselines.LABELS:
+    for label in baselines.labels_available(df):
         for lead in settings.raw["leads"]:
             result = baselines.run_baselines(df, label, lead, settings)
             if artifacts_dir is not None and add_blend(result, settings, artifacts_dir):
