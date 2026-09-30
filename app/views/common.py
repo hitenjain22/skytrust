@@ -68,6 +68,7 @@ class Context:
     forecast: object | None  # live.LiveForecast
     forecast_error: str | None
     palette: dict
+    forward_summary: dict | None = None
 
 
 def palette(night_vision: bool) -> dict:

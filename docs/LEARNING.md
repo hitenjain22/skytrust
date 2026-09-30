@@ -560,3 +560,30 @@ red night-vision mode.
    biggest avoidable cost.)
 2. How do you test a Streamlit app automatically?
 3. Why does the app not use pickle or scikit-learn at run time?
+
+---
+
+## `skytrust/forward.py` + `.github/workflows/forward.yml`: the live forward test
+
+**What:** Every afternoon a scheduled GitHub Action saves SkyTrust's forecasts for the next 7
+nights at every site, plus three reference forecasts (NOAA's National Blend of Models, and the raw
+ECMWF and GEFS ensembles). About 9 days later, when the observations exist, it scores them with
+exactly the same label and metric code as the backtest, and the app shows the running record.
+
+**Why it matters:** A backtest, however careful, is evaluated on data the developer has seen.
+Every time you look at test results and then change something, the test set leaks a little
+("the garden of forking paths"). A forward test records predictions *before* the outcome exists,
+so it can't be tuned after the fact. It's the difference between "this would have worked" and
+"this worked". It also measures the live "tonight" forecast directly, which the backtest could
+only approximate with lead-1 data.
+
+**Key concepts:**
+- **Prospective vs retrospective evaluation.** Pre-registration in science works the same way.
+- **Append-only log:** the first forecast logged for a night on a given day is the one that counts.
+- **Raw ensemble probability:** if 40 of 51 ECMWF members predict a usable night, P = 78%. It's
+  the natural "no statistics" probabilistic baseline for a learned blend.
+
+**Interview questions:**
+1. Your backtest already had a held-out test year. Why build a forward test?
+2. How do you make sure the logged forecasts can't be changed later?
+3. Why compare against NOAA's NBM and raw ensembles, and what would it mean if they won?

@@ -29,6 +29,8 @@ def offline(monkeypatch, tmp_path):
     """Freeze time, isolate the last-good cache, and start with empty Streamlit caches."""
     monkeypatch.setattr(live, "utcnow", lambda: NOW)
     monkeypatch.setenv("SKYTRUST_LIVE_CACHE", str(tmp_path))
+    # No network for the live-verification record: point it at a file that doesn't exist.
+    monkeypatch.setenv("SKYTRUST_FORWARD_SUMMARY", str(tmp_path / "no_summary.json"))
     st.cache_data.clear()
     yield tmp_path
     st.cache_data.clear()
@@ -156,3 +158,48 @@ def test_true_runs_edge_cases():
     assert true_runs(t, [True, True, False, True, True]) == [(t[0], t[2]), (t[3], t[4])]
     assert true_runs(t, [False] * 5) == []
     assert true_runs(t, [True] * 5) == [(t[0], t[4])]
+
+
+def _summary(n_verified: int) -> dict:
+    blend = {
+        "n": 40,
+        "brier": 0.09,
+        "bss": 0.6,
+        "false_clear_rate": 0.1,
+        "go_calls": 20,
+        "go_calls_usable": 18,
+    }
+    entry = {
+        "n": 40,
+        "n_weeks": 2,
+        "methods": {"blend": blend, "nbm_frac_clear": {"brier": 0.2}, "ens_ecmwf": {"brier": 0.12}},
+        "backtest": {"false_clear_rate": 0.098, "bss": 0.64},
+    }
+    return {
+        "forward_start": "2026-09-30",
+        "first_issue": "2026-09-30",
+        "n_logged": 350,
+        "n_verified": n_verified,
+        "last_verified_night": "2026-10-10",
+        "verify_after_days": 9,
+        "by_lead": [] if not n_verified else [{**entry, "lead": "all"}, {**entry, "lead": 1}],
+    }
+
+
+@pytest.mark.parametrize(("n_verified", "expected"), [(0, "forecasts saved so far"), (40, "18/20")])
+def test_live_verification_panel(offline, monkeypatch, n_verified, expected):
+    api_up(monkeypatch)
+    path = offline / "summary.json"
+    path.write_text(json.dumps(_summary(n_verified)))
+    monkeypatch.setenv("SKYTRUST_FORWARD_SUMMARY", str(path))
+    at = visit("Track Record")
+    assert not at.exception
+    shown = " ".join([i.value for i in at.info] + [str(m.value) for m in at.metric])
+    assert expected in shown
+
+
+def test_live_verification_unreachable_is_graceful(offline, monkeypatch):
+    api_up(monkeypatch)
+    at = visit("Track Record")
+    assert not at.exception
+    assert any("isn't reachable" in i.value for i in at.info)

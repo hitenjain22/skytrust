@@ -63,6 +63,20 @@ def main() -> None:
             "hourly": LAYERS + ",temperature_2m,dew_point_2m,wind_speed_10m,wind_gusts_10m",
         },
     )
+    # Forward-test benchmarks: NOAA NBM (deterministic) and ECMWF/GEFS ensembles (all members).
+    fwd = settings.raw["forward"]
+    save_json(
+        "openmeteo_nbm_SAC_live.json",
+        src["forecast_url"],
+        {**SAC, "models": ",".join(fwd["benchmark_models"]), "hourly": "cloud_cover",
+         "forecast_days": 8, "timezone": "UTC"},
+    )  # fmt: skip
+    save_json(
+        "openmeteo_ensemble_SAC_live.json",
+        fwd["ensemble_url"],
+        {**SAC, "models": ",".join(fwd["ensemble_models"]), "hourly": "cloud_cover",
+         "forecast_days": 8, "timezone": "UTC"},
+    )  # fmt: skip
     # IEM: two nights of routine + SPECI reports.
     params = [("station", "SAC")] + [
         ("data", c)

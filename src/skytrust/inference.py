@@ -109,3 +109,26 @@ def summary(artifact: dict) -> dict:
         "weight_shares": weight_shares(artifact),
         "models": artifact["models"],
     }
+
+
+def load_forward_summary(url: str | None, local: Path | None = None) -> dict | None:
+    """The forward-test summary (written daily by the scheduled workflow to the `forward-data`
+    branch). Looks at $SKYTRUST_FORWARD_SUMMARY, then a local copy, then the published URL.
+    Returns None if none is reachable; the app must work without it."""
+    import os
+
+    import requests
+
+    override = os.environ.get("SKYTRUST_FORWARD_SUMMARY")
+    if override:
+        path = Path(override)
+        return json.loads(path.read_text()) if path.exists() else None
+    if local is not None and local.exists():
+        return json.loads(local.read_text())
+    if not url:
+        return None
+    try:
+        resp = requests.get(url, timeout=5)
+        return resp.json() if resp.status_code == 200 else None
+    except (requests.RequestException, ValueError):
+        return None

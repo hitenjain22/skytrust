@@ -5,7 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from skytrust import report
-from views import charts
+from views import charts, forward_panel
 from views.common import Context
 
 
@@ -21,6 +21,9 @@ def render(ctx: Context) -> None:
         f"{meta['test_period'][0]} → {meta['test_period'][1]}, a period the models never saw. "
         "95% confidence intervals resample whole weeks."
     )
+    forward_panel.render(ctx.forward_summary)
+    st.divider()
+    st.subheader("Backtest")
     c1, c2 = st.columns(2)
     label = c1.radio(
         "Truth label",

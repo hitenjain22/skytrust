@@ -54,6 +54,14 @@ def cached_forecast(site_id: str):
     return live.get_forecast(site, settings, metrics)
 
 
+@st.cache_data(ttl=60 * 60, show_spinner=False)
+def cached_forward_summary():
+    """Live verification record from the forward-data branch (refreshed hourly)."""
+    settings, _, _ = load_static()
+    local = Path(__file__).resolve().parents[1] / "forward" / "summary.json"
+    return inference.load_forward_summary(settings.raw["forward"]["summary_url"], local)
+
+
 def get_forecast(site_id: str) -> tuple[object | None, str | None]:
     try:
         return cached_forecast(site_id), None
@@ -98,7 +106,8 @@ def main() -> None:
     site = next(s for s in sites if s.id == site_id)
     needs_live = page in ("Tonight", "7-Night Outlook")
     forecast, error = get_forecast(site_id) if needs_live else (None, None)
-    ctx = Context(settings, site, sites, metrics, forecast, error, palette(night_vision))
+    summary = cached_forward_summary() if page == "Track Record" else None
+    ctx = Context(settings, site, sites, metrics, forecast, error, palette(night_vision), summary)
     try:
         PAGES[page](ctx)
     except Exception as exc:  # show a message instead of a stack trace

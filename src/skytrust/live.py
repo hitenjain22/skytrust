@@ -83,6 +83,9 @@ class NightForecast:
     moon_illum: float | None
     moon_free_hours: int
     moon_events: list[dict] = field(default_factory=list)
+    # {model: {frac_clear, longest_clear_run_frac, mean_cover}} exactly as fed to the blend
+    model_features: dict = field(default_factory=dict)
+    blend_version: str | None = None  # git commit recorded in the artifact that produced p_usable
 
 
 @dataclass
@@ -287,6 +290,8 @@ def _forecast_night(
             {"time_utc": t, "event": e}
             for t, e in zip(events["time_utc"], events["event"], strict=True)
         ],
+        model_features=per_model,
+        blend_version=artifact.get("git_commit"),
     )
 
 

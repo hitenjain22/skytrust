@@ -94,6 +94,16 @@ modeling:
   # CV log losses within this of the best are treated as ties; the most regularized C wins.
   cv_tie_tolerance: 1.0e-4
 
+forward:
+  # Prospective verification: forecasts are logged daily *before* the outcome exists, then scored
+  # once observations arrive. Nights issued on/after start_date were never seen during development.
+  start_date: 2026-09-30
+  benchmark_models: [ncep_nbm_conus]          # NOAA National Blend of Models (logged, not in blend)
+  ensemble_models: [ecmwf_ifs025, gfs025]     # raw ensembles -> P(usable) = share of members
+  ensemble_url: https://ensemble-api.open-meteo.com/v1/ensemble
+  verify_after_days: 9                         # ERA5 lag (~6 days) + margin before scoring a night
+  summary_url: https://raw.githubusercontent.com/hitenjain22/skytrust/forward-data/summary.json
+
 calibration:
   # Apply isotonic calibration to a blend only if its out-of-fold expected calibration error
   # (10 bins, training folds only) exceeds this. Logistic regression is usually calibrated already.

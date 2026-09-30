@@ -75,6 +75,15 @@ every single model at every lead time, but beats a plain average of the models a
   <img src="docs/figures/lead_curves_primary.png" alt="Skill and false-clear rate by lead time" width="85%">
 </p>
 
+## Live verification
+
+A backtest is evaluated on data the developer has seen, so SkyTrust also runs a **forward test**.
+Every afternoon a scheduled GitHub Action saves the forecasts for the next 7 nights *before* the
+outcome exists. About a week later, once observations are published, it scores them with the same
+code, next to NOAA's National Blend of Models and the raw ECMWF/GEFS ensembles. The running record
+is on the app's Track Record page. The log is append-only on the
+[`forward-data`](https://github.com/hitenjain22/skytrust/tree/forward-data) branch.
+
 ## Methodology and caveats
 
 The short version is above; the app's **Methodology** page and [docs/RESULTS.md](docs/RESULTS.md)

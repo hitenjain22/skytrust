@@ -126,6 +126,29 @@ def cmd_tonight(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_forward_log(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from skytrust import forward
+
+    added = forward.log_forecasts(load_settings(), load_sites(), Path(args.out))
+    print(f"Logged {added} new forecast rows to {Path(args.out) / forward.LOG_FILE}")
+    return 0 if added else 1
+
+
+def cmd_forward_verify(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from skytrust import forward
+
+    summary = forward.verify(load_settings(), load_sites(), Path(args.out))
+    print(
+        f"Forward test: {summary['n_logged']} forecasts logged since {summary['forward_start']}, "
+        f"{summary['n_verified']} verified so far -> {Path(args.out) / forward.SUMMARY_FILE}"
+    )
+    return 0
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     from skytrust import evaluate, report
 
@@ -170,6 +193,14 @@ def build_parser() -> argparse.ArgumentParser:
     tn = sub.add_parser("tonight", help="Tonight + 7-night outlook for one site (live)")
     tn.add_argument("--site", default="SAC", help="site ID (default SAC)")
     tn.set_defaults(func=cmd_tonight)
+    fl = sub.add_parser("forward-log", help="Record today's forecasts for the prospective test")
+    fl.add_argument("--out", default="forward", help="folder holding the forward-test log")
+    fl.set_defaults(func=cmd_forward_log)
+    fv = sub.add_parser(
+        "forward-verify", help="Score logged forecasts whose nights have observations"
+    )
+    fv.add_argument("--out", default="forward", help="folder holding the forward-test log")
+    fv.set_defaults(func=cmd_forward_verify)
     rp = sub.add_parser("report", help="metrics.json -> docs/RESULTS.md + figures")
     rp.set_defaults(func=cmd_report)
     return parser

@@ -1,0 +1,57 @@
+name: Forward test (daily)
+
+# The prospective evaluation: log today's forecasts before anyone knows the outcome, then score
+# nights whose observations have been published. Results go to the `forward-data` branch so the
+# bot never touches `main`.
+on:
+  schedule:
+    - cron: "0 22 * * *" # 22:00 UTC = 3 PM PDT / 2 PM PST: before dusk, when you'd decide
+  workflow_dispatch: # "Run workflow" button on the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: forward-data
+  cancel-in-progress: false
+
+jobs:
+  log-and-verify:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync
+      - name: Check out the forward-data branch (created on the first run)
+        run: |
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$REMOTE" forward-data > /dev/null; then
+            git clone --quiet --branch forward-data --single-branch "$REMOTE" forward
+          else
+            mkdir forward && git -C forward init --quiet -b forward-data
+            git -C forward remote add origin "$REMOTE"
+          fi
+      - name: Log today's forecasts
+        id: log
+        continue-on-error: true
+        run: uv run python -m skytrust forward-log --out forward
+      - name: Score nights that now have observations
+        run: uv run python -m skytrust forward-verify --out forward
+      - name: Commit results to forward-data
+        if: always()
+        run: |
+          cd forward
+          git config user.name "skytrust-bot"
+          git config user.email "skytrust-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit --quiet -m "Forward test $(date -u +%Y-%m-%d)"
+          git push --quiet origin forward-data
+      - name: Fail the run if logging failed (after saving what we could)
+        if: steps.log.outcome == 'failure'
+        run: exit 1

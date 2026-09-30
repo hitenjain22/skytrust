@@ -32,3 +32,5 @@
 - The shipped models are `artifacts/model_lead{d}.json`; load them only via `inference.load_artifact` + `inference.predict_proba` (numpy). Never pickle. The app/CLI import path must not load sklearn (tested).
 - App: `make app`; CLI: `make tonight SITE=BIH`. Quick tests: `pytest`; everything offline: `make test`.
 - Live app: https://skytrust.streamlit.app/ (redeploys on every push to main).
+- Forward test: `.github/workflows/forward.yml` (daily 22:00 UTC) -> `forward-data` branch. `python -m skytrust forward-log|forward-verify --out forward`. Never rewrite that log.
+- Live API contract tests: `pytest -m network` (weekly workflow).

@@ -138,7 +138,7 @@ def _fetch_chunk(
     return payload
 
 
-def _location(site: Site) -> dict[str, Any]:
+def location_params(site: Site) -> dict[str, Any]:
     # Station coordinates + elevation, so forecasts are downscaled to the station (SPEC 5).
     return {
         "latitude": site.lat,
@@ -161,7 +161,7 @@ def fetch_prevruns(
     """Download (or read from cache) Previous Runs forecasts for one site x model, month by
     month. Only the leads the model actually has are requested. Returns chunks processed."""
     params = {
-        **_location(site),
+        **location_params(site),
         "models": model.id,
         "hourly": ",".join(prevruns_var(d) for d in model.leads),
     }
@@ -185,7 +185,7 @@ def fetch_era5(
     today: dt.date | None = None,
 ) -> int:
     params = {
-        **_location(site),
+        **location_params(site),
         "models": settings.sources["era5_model"],
         "hourly": ",".join(ERA5_VARS),
     }
@@ -203,7 +203,7 @@ def fetch_live(client: HttpClient, settings: Settings, site: Site) -> dict[str, 
     """Live 8-day forecast for all models in one request (not disk-cached here; the live
     module keeps its own last-good copy)."""
     params = {
-        **_location(site),
+        **location_params(site),
         "models": ",".join(m.id for m in settings.models),
         "hourly": ",".join(LIVE_CLOUD_VARS + LIVE_EXTRA_VARS),
         "forecast_days": 8,

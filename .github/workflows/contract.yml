@@ -1,0 +1,21 @@
+name: API contract tests (weekly)
+
+# Live checks that the data sources still behave the way the code assumes (model IDs, variable
+# names, ensemble member counts, publication lag). Offline CI can't notice when an API changes.
+on:
+  schedule:
+    - cron: "0 15 * * 1" # Mondays 15:00 UTC
+  workflow_dispatch:
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync
+      - name: Live API contract tests
+        run: uv run pytest -m network -v

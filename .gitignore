@@ -14,3 +14,6 @@ data/live_cache/
 # Skyfield ephemeris downloads; the small committed excerpt is the exception
 *.bsp
 !data/ephemeris/de421_2023_2030.bsp
+
+# Forward-test log lives on the `forward-data` branch (written by the scheduled workflow)
+forward/

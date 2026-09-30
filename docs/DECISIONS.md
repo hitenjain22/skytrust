@@ -268,3 +268,24 @@ Hiten asked for the path that is easiest to understand and gives the most consis
   good and easy to explain ("tested on Jan–Aug 2026"). Chosen on data completeness only.
 - **Refreshing later:** move `split.test_end` (≥ 2 weeks back), run `make all`, commit. The git
   history then shows exactly when and why the numbers changed.
+
+### 2026-09-29 · Prospective (forward) verification as the untouched holdout
+- **Problem it fixes:** development touched the 2026 test period more than once (the B4 context
+  change and the test-end freeze came after seeing test results). Both were principled, but only
+  an evaluation that *couldn't* be seen during development is fully clean.
+- **Design:** a scheduled GitHub Action runs daily at 22:00 UTC (3 PM Pacific, a realistic
+  decision time). It logs every live forecast (5 sites × 7 nights) with the blend and code version,
+  plus three references computed from the same moment's data: NOAA's National Blend of Models
+  (NBM), and raw-ensemble probabilities (share of ECMWF's 51 / GEFS's 31 members predicting a
+  usable night). About 9 days later (ERA5 lag + margin) the same job labels those nights with the
+  backtest's label code and scores everything with the backtest's metric code.
+- **Integrity:** append-only log keyed on (issue date, site, night); the first forecast issued for
+  a night on a given day wins, so re-runs can't overwrite history. Only issues on/after
+  `forward.start_date` (2026-09-30, the day after development stopped touching it) count.
+- **Where it lives:** the `forward-data` branch (bot-owned), so daily bot commits never conflict
+  with human pushes to `main`. The app reads `summary.json` from that branch (hourly cache) and
+  degrades gracefully if it's unreachable.
+- **Weekly API contract tests** (`pytest -m network`, scheduled) guard the assumptions the forward
+  test depends on. Finding while writing them: Open-Meteo's docs now show `gfs_global_011` /
+  `gfs_global_025`, but the API rejects those and still serves `gfs_global`; the test will flag it
+  if that ever flips.
