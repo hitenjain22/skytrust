@@ -252,14 +252,19 @@ Hiten asked for the path that is easiest to understand and gives the most consis
 - **Deep links** `?page=track-record&site=BIH` make pages shareable (and screenshot-able).
 - **Deployed:** https://skytrust.streamlit.app/ (verified as a logged-out visitor).
 
-### 2026-09-29 · Freeze the end of the test period at 2026-09-23 (changes SPEC 8.1; Hiten delegated the choice)
+### 2026-09-29 · Freeze the test period: 2026-01-01 → 2026-08-31 (changes SPEC 8.1; Hiten delegated the choice)
 - **Problem:** SPEC's test period was "2026-01-01 → latest labeled night", so re-running
-  `make all` on a later day added nights and shifted metrics (blend BSS 0.627 → 0.629 on
-  2026-09-29). Conclusions were unchanged, but README / RESUME_BULLETS / app numbers would drift.
+  `make all` on a later day changed the metrics (blend BSS 0.627 → 0.629 on 2026-09-29).
+  Conclusions were unchanged, but README / RESUME_BULLETS / app numbers would drift.
 - **Alternatives:** (A) freeze `split.test_end`; (B) keep it rolling.
-- **Decision: A**, better for a portfolio (numbers on the resume always match the repo and app,
-  and anyone re-running gets identical results) and standard practice (evaluate on a fixed period,
-  refresh deliberately). Training data and the models are unaffected. Nights after the test end
-  are `split = "none"`, and the dataset build stops there by default.
-- **Refreshing later:** move `split.test_end`, run `make all`, commit. The git history then shows
-  exactly when and why the numbers changed.
+- **Decision: A**, better for a portfolio (numbers on the resume always match the repo and app;
+  anyone re-running gets identical results) and standard practice (fixed evaluation period,
+  refreshed deliberately). Training data and models are unaffected; nights after the end are
+  `split = "none"` and the dataset build stops there by default.
+- **Why Aug 31 and not Sep 23 (the last night in the earlier results):** a first attempt froze
+  2026-09-23 and still didn't reproduce. ERA5's ~6-day publication lag meant the last week before
+  Sep 23 was unlabeled when the results were first computed (24 Sep) but labeled by 29 Sep. The
+  end date must be one whose data is *final*. A month boundary well past the lag is final for
+  good and easy to explain ("tested on Jan–Aug 2026"). Chosen on data completeness only.
+- **Refreshing later:** move `split.test_end` (≥ 2 weeks back), run `make all`, commit. The git
+  history then shows exactly when and why the numbers changed.

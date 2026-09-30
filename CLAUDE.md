@@ -22,7 +22,7 @@
 - **ERA5 label:** Open-Meteo archive, `models=era5`, cloud_cover/100. Reanalysis, ECMWF-related, ~6-day lag.
 - **Primary label:** per hour `max(asos, era5)`; > 25 % missing in either source → exclude night (log reason).
 - **Features:** Previous Runs `cloud_cover_previous_day{d}`; > 25 % missing → NaN.
-- **Split:** train 2024-01-01 → 2025-12-31, test 2026-01-01 → 2026-09-23 (`split.test_end`, frozen 2026-09-29). Test set used once per final model.
+- **Split:** train 2024-01-01 → 2025-12-31, test 2026-01-01 → 2026-08-31 (`split.test_end`, frozen 2026-09-29; data must be final). Test set used once per final model.
 
 ## Commands
 - `uv sync` · `uv run pytest` · `uv run ruff check . && uv run ruff format --check .`

@@ -20,9 +20,10 @@ split:
   train_start: 2024-01-01
   train_end: 2025-12-31
   test_start: 2026-01-01
-  # Frozen end of the evaluation period (approved 2026-09-29) so every rerun reproduces the same
-  # numbers. To refresh the track record: move this date, run `make all`, commit the new results.
-  test_end: 2026-09-23
+  # Frozen end of the evaluation period (2026-09-29) so every rerun reproduces the same numbers.
+  # Must be a date whose data is final: ERA5 publishes ~6 days late, so stay >= 2 weeks back.
+  # To refresh the track record: move this date, run `make all`, commit the new results.
+  test_end: 2026-08-31
   cv_folds: 4
 
 # Forecast models, verified by probing the Previous Runs API (see docs/DATA_NOTES.md).
