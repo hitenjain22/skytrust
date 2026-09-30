@@ -6,6 +6,7 @@ means "no clouds below 12,000 ft". This source cannot see cirrus (SPEC 4.6a).
 
 from __future__ import annotations
 
+import csv
 import datetime as dt
 import io
 import logging
@@ -143,9 +144,19 @@ def load_asos(station: str, root: Path = RAW_DIR) -> pd.DataFrame:
 
 
 def parse_asos_csv(text: str) -> pd.DataFrame:
-    """Parse IEM CSV into a DataFrame with a tz-aware UTC `valid` column."""
+    """Parse IEM CSV into a DataFrame with a tz-aware UTC `valid` column.
+
+    Raw METAR text has real-world quirks: a stray carriage return inside a remark (TRK, 2008)
+    crashes pandas' C parser, and remarks use `"` as an inch mark (`NO SN 9"`). IEM's
+    `onlycomma` format never quotes fields, so carriage returns become spaces and quoting is off.
+    """
     try:
-        df = pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False)
+        df = pd.read_csv(
+            io.StringIO(text.replace("\r", " ")),
+            dtype=str,
+            keep_default_na=False,
+            quoting=csv.QUOTE_NONE,
+        )
     except (pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
         raise BadResponseError(f"Malformed IEM CSV: {exc}") from exc
     missing = {"station", "valid", *SKY_COLS} - set(df.columns)

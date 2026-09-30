@@ -197,3 +197,20 @@ def test_fetch_asos_writes_cache_and_sends_report_types(tmp_path, monkeypatch, f
     params = client.get.call_args.args[1]
     assert ("report_type", 3) in params and ("report_type", 4) in params
     assert (tmp_path / "new.csv").read_text() == text
+
+
+def test_parse_survives_real_metar_quirks():
+    """Regression (TRK 2004/2008 history): a stray carriage return inside a METAR remark crashed
+    pandas' C parser, and an inch mark (`NO SN 9"`) is not a CSV quote."""
+    header = "station,valid,elevation,skyc1,skyc2,skyc3,skyc4,skyl1,skyl2,skyl3,skyl4,metar"
+    rows = [
+        "TRK,2008-12-31 14:55,1798.00,FEW,M,M,M,15000.00,M,M,M,KTRK 311455Z RMK FIRST 4\r 24HR MAX",
+        'TRK,2004-01-23 14:55,1798.00,SCT,M,M,M,18000.00,M,M,M,KTRK 231455Z RMK NO SN 9" T1133',
+        "TRK,2004-01-23 15:55,1798.00,CLR,M,M,M,M,M,M,M,KTRK 231555Z CLR",
+    ]
+    text = "\n".join([header, *(rows * 2000)]) + "\n"  # long enough to hit the C parser's buffers
+    df = iem.parse_asos_csv(text)
+    assert len(df) == 6000
+    assert df["metar"].iloc[0].endswith("FIRST 4  24HR MAX")
+    assert df["metar"].iloc[1].endswith('9" T1133')
+    assert df["skyc1"].iloc[2] == "CLR"
