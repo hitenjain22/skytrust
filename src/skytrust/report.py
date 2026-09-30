@@ -838,7 +838,47 @@ def blend_summary_lines(v: MetricsView) -> list[str]:
     attribution = attribution_line(v)
     if attribution:
         lines.append(attribution)
+    lines += satellite_summary_lines(v)
     return lines
+
+
+def satellite_summary_lines(v: MetricsView) -> list[str]:
+    """The cross-truth result under the GOES satellite label, if it was evaluated."""
+    lead = RESULTS_LEAD
+    r = v.rec("goes", lead, "blend_primary")
+    if r is None:
+        return []
+    nbm = v.rec("goes", lead, "nbm_lr_primary")
+    clim, prim = v.req("goes", lead, "climatology"), v.req("primary", lead, "climatology")
+    nbm_part = ""
+    if nbm is not None:
+        nbm_part = f" (NOAA NBM given the same treatment: {with_ci(nbm, 'auc')})"
+    return [
+        f"- **Checked against a satellite.** Judged by the GOES-18 cloud mask, an observation the "
+        f"shipped blend never trained on, it ranks nights with AUC {with_ci(r, 'auc')}{nbm_part}. "
+        f'When it says "go", the satellite shows a usable night '
+        f"{_fmt(1 - r['false_clear_rate'], 'pct')} of the time (false-clear "
+        f"{with_ci(r, 'false_clear_rate', 'pct')} vs {_fmt(clim['false_clear_rate'], 'pct')} for "
+        f"climatology). Its Brier skill there, {with_ci(r, 'bss')}, is lower than under its own "
+        f"label because the satellite's definition is more lenient (usable on "
+        f"{_fmt(clim['base_rate'], 'pct')} of test nights vs {_fmt(prim['base_rate'], 'pct')}), so "
+        "probabilities calibrated to the primary label run low; versus NBM on Brier it is "
+        f"{_diff_phrase(v.diff('goes', lead, 'blend_primary', 'nbm_lr_primary'))}."
+        + decomposition_clause(r, v.rec("goes", lead, "blend")),
+    ]
+
+
+def decomposition_clause(cross: pd.Series, own: pd.Series | None) -> str:
+    """Murphy decomposition evidence that a cross-truth Brier gap is calibration, not ranking."""
+    keys = ("brier_resolution", "brier_reliability")
+    if own is None or any(pd.isna(x.get(k)) for x in (cross, own) for k in keys):
+        return ""
+    return (
+        f" The Brier decomposition shows where the gap comes from: its resolution "
+        f"({cross['brier_resolution']:.3f}) nearly matches a blend trained on the satellite "
+        f"label ({own['brier_resolution']:.3f}), while its reliability (calibration) penalty is "
+        f"{cross['brier_reliability']:.3f} vs {own['brier_reliability']:.3f}."
+    )
 
 
 def blend_lead_table(v: MetricsView, label: str = "primary") -> pd.DataFrame:

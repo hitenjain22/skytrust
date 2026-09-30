@@ -98,6 +98,9 @@ def test_track_record_label_toggle(offline, monkeypatch):
     at.radio(key="label").set_value("asos").run()
     assert not at.exception
     assert any("ASOS-only" in m.value for m in at.markdown)
+    at.radio(key="label").set_value("goes").run()  # the satellite truth
+    assert not at.exception
+    assert any("GOES satellite" in m.value for m in at.markdown)
 
 
 def test_night_vision_and_site_switch(offline, monkeypatch):

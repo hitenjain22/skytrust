@@ -187,6 +187,7 @@ def test_end_to_end_offline_pipeline(trained, synthetic_built, fast_settings, tm
     assert "The learned blend" in md and "Phase 4 (not yet run)" not in md
     assert "of 3 leads" in md
     assert "**Cross-truth check.**" in md and "GOES satellite" in md
+    assert "**Checked against a satellite.**" in md and "Brier decomposition" in md
 
 
 def test_report_blend_details(trained):
