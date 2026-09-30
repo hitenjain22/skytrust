@@ -184,12 +184,24 @@ def trust_level(bss: float | None, settings: Settings) -> str:
     return "High" if bss >= t["high"] else "Medium" if bss >= t["medium"] else "Low"
 
 
-def track_record(metrics: dict | None, site_id: str, lead: int) -> dict | None:
-    """Blend's test-set skill at this site and lead, plus the all-site figure, from metrics.json."""
+def blend_records(metrics: dict | None) -> pd.DataFrame | None:
+    """The shipped blend's primary-label records from metrics.json (built once per forecast:
+    the full table has thousands of rows and every night needs a lookup)."""
     if not metrics:
         return None
     rec = pd.DataFrame(metrics["records"])
-    base = rec[(rec["method"] == "blend") & (rec["label"] == "primary") & (rec["lead"] == lead)]
+    return rec[(rec["method"] == "blend") & (rec["label"] == "primary")]
+
+
+def track_record(
+    metrics: dict | None, site_id: str, lead: int, records: pd.DataFrame | None = None
+) -> dict | None:
+    """Blend's test-set skill at this site and lead, plus the all-site figure, from metrics.json.
+    Pass `records` (from blend_records) to skip rebuilding the table."""
+    rec = records if records is not None else blend_records(metrics)
+    if rec is None:
+        return None
+    base = rec[rec["lead"] == lead]
     site_row = base[(base["subset_type"] == "site") & (base["subset"] == site_id)]
     overall = base[base["subset_type"] == "overall"]
     if overall.empty:
@@ -327,6 +339,7 @@ class _Context:
     moon_events: pd.DataFrame
     variant: str = "primary"  # "geo" = site-agnostic blend for custom locations
     hourly_covers: pd.DataFrame | None = None  # time x model cloud cover (for the hourly model)
+    records: pd.DataFrame | None = None  # blend records from metrics.json (see blend_records)
 
 
 def _forecast_night(
@@ -352,7 +365,7 @@ def _forecast_night(
     )
     spread = float(row["spread_frac_clear"].iloc[0])
     record = (
-        track_record(ctx.metrics, ctx.site.id, lead)
+        track_record(ctx.metrics, ctx.site.id, lead, ctx.records)
         if ctx.variant == "primary"
         else inference.unseen_site_record(lead)
     )
@@ -445,6 +458,7 @@ def build_forecast(
         moon_events,
         variant,
         covers,
+        blend_records(metrics),
     )
     nights = [_forecast_night(ctx, n, w["dusk_utc"], w["dawn_utc"]) for n, w in windows.iterrows()]
     return LiveForecast(site, fetched_at, source, warning, nights, hourly)
