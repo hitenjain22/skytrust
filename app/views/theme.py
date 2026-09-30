@@ -1,63 +1,70 @@
-"""The "Moonlight" design system: colour palettes (normal + red night vision) and the global CSS.
+"""The "Observatory" design system: tokens, palettes, and the global stylesheet.
 
-Every custom HTML element reads its colours from CSS variables set here, so switching to night
-vision recolours the whole page (cards, moon icon, pills) as well as the Plotly charts, which read
-the same palette dict.
+Principles (from studying Vercel's Geist, Linear's 2025 refresh, Apple Weather and published
+motion guidelines):
+
+- Monochrome structure, colour only for meaning. Status is a small muted dot (sage / ochre /
+  clay), never a large fill. One quiet accent (champagne) marks SkyTrust's own series in charts.
+- Soft ends: graphite and paper instead of pure black and white.
+- Every custom colour is derived from `currentColor` (borders 11%, surfaces 4%, secondary text
+  60%), so the same HTML is correct in the light theme, the dark theme and night vision without
+  Python needing to know which one the browser is showing.
+- Motion: transform/opacity only, strong ease-out, 30-80 ms stagger, under ~300 ms for UI;
+  hover effects only on precise pointers; reduced motion keeps only gentle fades.
 """
 
 from __future__ import annotations
 
 import streamlit as st
 
-MOON = {
-    "bg": "#070B18",
+EASE = "cubic-bezier(0.23, 1, 0.32, 1)"
+
+# Data colours for charts. Plotly draws text, grids and backgrounds from Streamlit's active theme;
+# these mid-lightness values stay readable on both the light and the dark background.
+MONO = {
     "paper": "rgba(0,0,0,0)",
-    "surface": "#111831",
-    "surface2": "#172044",
-    "border": "#24305A",
-    "text": "#E6E8F2",
-    "muted": "#98A2C3",
-    "grid": "rgba(152,162,195,0.14)",
-    "accent": "#E8C872",  # moonlight gold
-    "accent2": "#8FB3FF",  # lunar blue
-    "Go": "#5ED3A5",
-    "Maybe": "#F2C35B",
-    "Skip": "#F28482",
-    "No data": "#6B7394",
-    "dark": "rgba(143,179,255,0.10)",
-    "twilight": "rgba(143,179,255,0.04)",
-    "moon": "#F4EFD8",
-    "moon_shadow": "#1B2346",
-    # Paul Tol's colour-blind-safe palette (lighter variants for the dark background).
+    "text": None,  # let the Streamlit chart theme decide
+    "muted": "#8B8B94",
+    "grid": "rgba(139,139,148,0.16)",
+    "border": "rgba(139,139,148,0.30)",
+    "surface": None,
+    "ink": "#8E8E97",
+    "accent": "#B5A27A",  # champagne: SkyTrust's own series
+    "accent2": "#8B8B94",
+    "Go": "#5E9E80",
+    "Maybe": "#C29A4A",
+    "Skip": "#C46A62",
+    "No data": "#8B8B94",
+    "dark": "rgba(139,139,148,0.10)",
+    "moon": "#B4B4BB",
     "models": {
-        "gfs": "#88CCEE",
-        "hrrr": "#DDCC77",
-        "ecmwf": "#44AA99",
-        "gem": "#AA99DD",
-        "icon": "#CC6677",
-        "median": "#FFFFFF",
+        "gfs": "#5B8DB8",
+        "hrrr": "#B8923F",
+        "ecmwf": "#4E9A7E",
+        "gem": "#8C73B8",
+        "icon": "#B86B6B",
+        "median": "#8B8B94",
     },
-    "layers": {"low": "#8FB3FF", "mid": "#C3A6FF", "high": "#E8C872"},
+    "layers": {"low": "#6F8FAF", "mid": "#8C7BAE", "high": "#B39A5E"},
     "methods": {
-        "blend": "#E8C872",
-        "equal_weight": "#8FB3FF",
-        "climatology": "#7A83A6",
-        "nbm_lr": "#C792EA",
-        "equal_weight_cal": "#5FB7D9",
+        "blend": "#B5A27A",
+        "equal_weight": "#7F8FA6",
+        "climatology": "#8B8B94",
+        "nbm_lr": "#9C84B5",
+        "equal_weight_cal": "#6FA0A0",
     },
-    "heat": [[0, "#0B1633"], [0.2, "#1F3B73"], [0.5, "#5F7FB8"], [0.8, "#B8C4DE"], [1, "#F1F3F9"]],
+    "heat": [[0, "#2A2C31"], [0.35, "#4B4E56"], [0.7, "#8E9099"], [1, "#DADBE0"]],
 }
 
 # Astronomers use dim red light to keep their eyes dark-adapted.
 NIGHT = {
-    "bg": "#000000",
     "paper": "rgba(0,0,0,0)",
-    "surface": "#0A0000",
-    "surface2": "#140000",
-    "border": "#3A0000",
     "text": "#FF3B30",
     "muted": "#A3261F",
     "grid": "rgba(255,59,48,0.15)",
+    "border": "#3A0000",
+    "surface": "#0A0000",
+    "ink": "#FF3B30",
     "accent": "#FF3B30",
     "accent2": "#C0392B",
     "Go": "#FF5A4F",
@@ -65,9 +72,7 @@ NIGHT = {
     "Skip": "#7F1D1D",
     "No data": "#5A1A1A",
     "dark": "rgba(255,59,48,0.10)",
-    "twilight": "rgba(255,59,48,0.04)",
     "moon": "#FF8A80",
-    "moon_shadow": "#2A0000",
     "models": {
         k: c
         for k, c in zip(
@@ -87,147 +92,176 @@ NIGHT = {
     "heat": [[0, "#000000"], [0.5, "#5A0F0A"], [1, "#FF3B30"]],
 }
 
-# Backwards-compatible name used by older code and tests.
-DAY = MOON
+# Older names kept for callers and tests.
+MOON = DAY = MONO
 
 
 def palette(night_vision: bool) -> dict:
-    return NIGHT if night_vision else MOON
-
-
-def _variables(pal: dict) -> str:
-    keys = ["bg", "surface", "surface2", "border", "text", "muted", "accent", "accent2", "moon",
-            "moon_shadow", "Go", "Maybe", "Skip"]  # fmt: skip
-    return "".join(f"--sk-{k.lower().replace(' ', '-')}:{pal[k]};" for k in keys)
-
-
-# A few hundred pixels of hand-placed "stars" tiled across the page, under two soft glows (the
-# Moon's halo top right, a faint blue sky glow top left). Pure CSS: no images to load.
-_STARS = [
-    f"radial-gradient({r}px {r}px at {x}px {y}px, rgba(255,255,255,{a}) 50%, transparent 51%)"
-    for x, y, r, a in [
-        (23, 41, 1, 0.55), (91, 187, 1, 0.35), (147, 67, 1.4, 0.6), (211, 223, 1, 0.3),
-        (263, 119, 1, 0.45), (57, 271, 1.2, 0.4), (301, 31, 1, 0.3), (181, 301, 1, 0.5),
-        (331, 211, 1.5, 0.55), (121, 131, 1, 0.25), (237, 17, 1, 0.4), (17, 157, 1, 0.3),
-    ]
-]  # fmt: skip
+    return NIGHT if night_vision else MONO
 
 
 def css(pal: dict, night_vision: bool) -> str:
-    # One background-size / background-repeat entry per layer: CSS silently cycles a shorter list,
-    # which once tiled the soft glows like stars and striped the page.
-    layers, sizes, repeats = [], [], []
-    if not night_vision:
-        stars = list(_STARS)
-        glows = [
-            "radial-gradient(900px 520px at 88% -8%, rgba(232,200,114,0.10), transparent 62%)",
-            "radial-gradient(800px 480px at -8% 6%, rgba(143,179,255,0.08), transparent 60%)",
-        ]
-        layers += stars + glows
-        sizes += ["360px 330px"] * len(stars) + ["100% 100%"] * len(glows)
-        repeats += ["repeat"] * len(stars) + ["no-repeat"] * len(glows)
-    image = ", ".join(layers) if layers else "none"
-    size = ", ".join(sizes) if sizes else "auto"
-    repeat = ", ".join(repeats) if repeats else "no-repeat"
+    status = "".join(f"--sk-{k.lower().replace(' ', '-')}:{pal[k]};" for k in
+                     ["Go", "Maybe", "Skip", "No data", "accent"])  # fmt: skip
     return f"""
 <style>
-:root {{ {_variables(pal)} }}
-.stApp {{
-  background-color: var(--sk-bg);
-  background-image: {image};
-  background-size: {size};
-  background-repeat: {repeat};
-  background-attachment: fixed;
-}}
-[data-testid="stHeader"] {{ background: transparent; }}
+:root {{ {status} --sk-ease: {EASE}; }}
+/* ---------- canvas ---------- */
+[data-testid="stHeader"] {{ background: transparent; pointer-events: none; }}
+[data-testid="stHeader"] * {{ pointer-events: auto; }}
+[data-testid="stDecoration"] {{ display: none; }}
 [data-testid="stMainBlockContainer"], .block-container {{
-  max-width: 1120px; padding-top: 2.2rem; padding-bottom: 3rem;
+  max-width: 1080px; padding-top: 1.25rem; padding-bottom: 4rem;
 }}
-h1, h2, h3 {{ letter-spacing: -0.01em; }}
-/* ---------- cards ---------- */
-.sk-card {{
-  background: linear-gradient(180deg, color-mix(in srgb, var(--sk-surface2) 88%, transparent),
-              color-mix(in srgb, var(--sk-surface) 92%, transparent));
-  border: 1px solid var(--sk-border); border-radius: 18px; padding: 18px 20px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.28);
+h1, h2, h3, h4 {{ letter-spacing: -0.025em; }}
+/* ---------- tokens derived from the text colour ---------- */
+.sk-muted {{ color: color-mix(in srgb, currentColor 60%, transparent); }}
+.sk-mono {{ font-family: "Geist Mono", ui-monospace, monospace; font-feature-settings: "tnum"; }}
+.sk-eyebrow {{ font-family: "Geist Mono", ui-monospace, monospace; font-size: .72rem; font-weight: 500;
+  letter-spacing: .08em; text-transform: uppercase; color: color-mix(in srgb, currentColor 55%, transparent); }}
+/* ---------- sticky top bar ---------- */
+.st-key-topbar {{
+  position: sticky; top: 0; z-index: 50; padding: 10px 0 8px; margin-bottom: 10px;
+  backdrop-filter: saturate(1.3) blur(14px); -webkit-backdrop-filter: saturate(1.3) blur(14px);
+  background: rgba(20,20,22,.82);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 9%, transparent);
 }}
-.sk-eyebrow {{ font-size: .72rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
-  color: var(--sk-muted); margin-bottom: 6px; }}
-.sk-muted {{ color: var(--sk-muted); }}
-.sk-brand {{ display:flex; align-items:center; gap:12px; margin-bottom: 4px; }}
-.sk-brand-name {{ font-family: Fraunces, serif; font-size: 1.7rem; font-weight: 600; line-height:1;
-  color: var(--sk-text); }}
-.sk-brand-tag {{ color: var(--sk-muted); font-size: .92rem; }}
+@media (prefers-color-scheme: light) {{ .st-key-topbar {{ background: rgba(246,246,244,.82); }} }}
+.sk-brand {{ display:flex; align-items:center; gap:10px; font-weight: 600; font-size: 1.02rem;
+  letter-spacing: -0.02em; white-space: nowrap; }}
+.sk-brand small {{ font-weight: 400; color: color-mix(in srgb, currentColor 50%, transparent); font-size: .8rem;
+  letter-spacing: 0; }}
+/* navigation: text tabs with an underline, not pills */
+.st-key-topbar [data-testid="stButtonGroup"] button {{
+  border: 0 !important; background: transparent !important; border-radius: 0 !important;
+  color: color-mix(in srgb, currentColor 58%, transparent) !important; padding: 6px 2px !important;
+  margin: 0 10px 0 0; box-shadow: inset 0 -1px 0 transparent;
+  transition: color 150ms ease, box-shadow 200ms var(--sk-ease), transform 160ms var(--sk-ease);
+}}
+.st-key-topbar [data-testid="stButtonGroup"] button[aria-checked="true"] {{
+  color: inherit !important; box-shadow: inset 0 -2px 0 currentColor;
+}}
+.st-key-topbar [data-testid="stButtonGroup"] button:active {{ transform: scale(0.97); }}
+@media (hover: hover) and (pointer: fine) {{
+  .st-key-topbar [data-testid="stButtonGroup"] button:hover {{ color: inherit !important; }}
+}}
 /* ---------- hero ---------- */
-.sk-hero {{ display:grid; grid-template-columns: 190px 1fr; gap: 28px; align-items:center; }}
-.sk-ring {{ width:176px; height:176px; border-radius:50%; display:grid; place-items:center;
-  background: conic-gradient(var(--c) calc(var(--p) * 1%), rgba(255,255,255,0.07) 0);
-  box-shadow: 0 0 46px color-mix(in srgb, var(--c) 30%, transparent); }}
-.sk-ring-in {{ width:146px; height:146px; border-radius:50%; background: var(--sk-surface);
-  display:grid; place-items:center; text-align:center; padding: 0 10px; }}
-.sk-ring-num {{ font-family: Fraunces, serif; font-size: 2.9rem; font-weight: 600; line-height:1;
-  color: var(--sk-text); }}
-.sk-ring-sub {{ font-size: .72rem; color: var(--sk-muted); line-height:1.25; margin-top:4px; }}
-.sk-headline {{ font-family: Fraunces, serif; font-size: 1.85rem; font-weight: 600; line-height:1.15;
-  margin: 8px 0 8px 0; color: var(--sk-text); }}
-.sk-lede {{ font-size: 1.02rem; line-height: 1.55; color: var(--sk-text); opacity:.92; }}
-.sk-pill {{ display:inline-block; padding: 3px 12px; border-radius: 999px; font-weight: 700;
-  font-size: .78rem; letter-spacing: .08em; color: #0B1020; background: var(--c); }}
-.sk-chip {{ display:inline-flex; align-items:center; gap:6px; padding: 4px 10px; margin: 8px 6px 0 0;
-  border-radius: 999px; font-size: .82rem; color: var(--sk-text);
-  background: color-mix(in srgb, var(--sk-surface2) 80%, transparent);
-  border: 1px solid var(--sk-border); }}
-.sk-note {{ margin-top: 12px; padding: 10px 12px; border-radius: 12px; font-size: .9rem;
-  background: color-mix(in srgb, var(--sk-accent) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--sk-accent) 35%, transparent); color: var(--sk-text); }}
-/* ---------- tiles ---------- */
-.sk-tiles {{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 14px 0 4px; }}
-.sk-tile {{ background: color-mix(in srgb, var(--sk-surface) 92%, transparent);
-  border: 1px solid var(--sk-border); border-radius: 16px; padding: 14px 16px; min-height: 118px; }}
-.sk-tile-value {{ font-size: 1.25rem; font-weight: 600; color: var(--sk-text); line-height:1.25; }}
-.sk-tile-sub {{ font-size: .82rem; color: var(--sk-muted); margin-top: 6px; line-height:1.35; }}
-.sk-tile-row {{ display:flex; align-items:center; gap: 12px; }}
-/* ---------- week strip ---------- */
-.sk-week {{ display:grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 10px; margin: 6px 0 8px; }}
-.sk-day {{ background: color-mix(in srgb, var(--sk-surface) 92%, transparent); border: 1px solid var(--sk-border);
-  border-top: 3px solid var(--c); border-radius: 16px; padding: 12px 10px; text-align:center; }}
-.sk-day-name {{ font-weight: 600; font-size: .92rem; color: var(--sk-text); }}
-.sk-day-date {{ font-size: .75rem; color: var(--sk-muted); }}
-.sk-day-p {{ font-family: Fraunces, serif; font-size: 1.7rem; font-weight: 600; color: var(--sk-text);
-  margin: 4px 0 2px; }}
-.sk-day-meta {{ font-size: .74rem; color: var(--sk-muted); line-height: 1.35; margin-top: 6px; }}
-.sk-dots {{ letter-spacing: 2px; color: var(--sk-accent); }}
-/* ---------- ranked list ---------- */
-.sk-rank {{ display:grid; grid-template-columns: 44px 1fr auto; gap: 14px; align-items:center;
-  padding: 12px 16px; margin-bottom: 10px; border-radius: 16px; border: 1px solid var(--sk-border);
-  border-left: 4px solid var(--c); background: color-mix(in srgb, var(--sk-surface) 92%, transparent); }}
-.sk-rank-n {{ font-family: Fraunces, serif; font-size: 1.5rem; color: var(--sk-muted); text-align:center; }}
-.sk-rank-name {{ font-weight: 600; font-size: 1.02rem; color: var(--sk-text); }}
-.sk-rank-p {{ font-family: Fraunces, serif; font-size: 1.6rem; font-weight: 600; color: var(--sk-text);
-  text-align:right; }}
-/* ---------- stats ---------- */
-.sk-stats {{ display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin: 8px 0 6px; }}
-.sk-stat-num {{ font-family: Fraunces, serif; font-size: 2.3rem; font-weight: 600; color: var(--sk-accent);
-  line-height: 1.05; }}
-.sk-stat-text {{ font-size: .92rem; color: var(--sk-text); margin-top: 6px; line-height: 1.4; }}
-.sk-stat-sub {{ font-size: .78rem; color: var(--sk-muted); margin-top: 6px; }}
-.sk-steps {{ display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }}
-.sk-step-n {{ width: 30px; height: 30px; border-radius: 50%; display:grid; place-items:center;
-  font-weight: 700; color: #0B1020; background: var(--sk-accent); margin-bottom: 10px; }}
-.sk-legend {{ display:flex; flex-wrap: wrap; gap: 14px; font-size: .8rem; color: var(--sk-muted); margin: 2px 0 6px; }}
-.sk-swatch {{ display:inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px;
-  vertical-align: -1px; background: var(--c); }}
-/* ---------- responsive ---------- */
-@media (max-width: 900px) {{
-  .sk-tiles {{ grid-template-columns: repeat(2, minmax(0,1fr)); }}
-  .sk-week {{ grid-template-columns: repeat(4, minmax(0,1fr)); }}
-  .sk-stats, .sk-steps {{ grid-template-columns: 1fr; }}
+.sk-hero {{ display:grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 48px; align-items: start;
+  padding: 16px 0 6px; }}
+.sk-display {{ font-size: clamp(4.2rem, 11vw, 6.6rem); font-weight: 350; line-height: .9; letter-spacing: -0.055em;
+  font-feature-settings: "tnum"; }}
+.sk-display sup {{ font-size: .42em; font-weight: 400; letter-spacing: -0.02em; vertical-align: .95em; margin-left: 2px; }}
+.sk-caption {{ margin-top: 10px; font-size: .9rem; color: color-mix(in srgb, currentColor 60%, transparent); }}
+.sk-meter {{ height: 3px; border-radius: 3px; margin-top: 16px; background: color-mix(in srgb, currentColor 10%, transparent);
+  overflow: hidden; }}
+.sk-meter > span {{ display:block; height:100%; border-radius: 3px; background: currentColor; opacity: .85;
+  transform-origin: left; animation: sk-grow 700ms var(--sk-ease) both 120ms; }}
+.sk-headline {{ font-size: clamp(1.55rem, 3vw, 2.05rem); font-weight: 500; letter-spacing: -0.03em; line-height: 1.15;
+  margin: 14px 0 10px; }}
+.sk-lede {{ font-size: 1.02rem; line-height: 1.6; max-width: 62ch; color: color-mix(in srgb, currentColor 78%, transparent); }}
+.sk-lede b {{ font-weight: 550; }}
+.sk-status {{ display:inline-flex; align-items:center; gap:8px; padding: 4px 10px 4px 9px; border-radius: 999px;
+  font-size: .8rem; font-weight: 500; border: 1px solid color-mix(in srgb, currentColor 14%, transparent); }}
+.sk-dot {{ width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 18%, transparent); }}
+.sk-note {{ display:flex; gap:10px; align-items:flex-start; margin-top: 16px; font-size: .9rem; line-height: 1.5;
+  color: color-mix(in srgb, currentColor 72%, transparent); max-width: 64ch; }}
+.sk-note svg {{ flex: none; margin-top: 2px; }}
+/* ---------- stat strip (hairline-divided, no boxes) ---------- */
+.sk-strip {{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr));
+  border-top: 1px solid color-mix(in srgb, currentColor 11%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 11%, transparent); margin: 26px 0 8px; }}
+.sk-strip.three {{ grid-template-columns: repeat(3, minmax(0,1fr)); }}
+.sk-stat {{ padding: 18px 20px 18px 0; }}
+.sk-stat + .sk-stat {{ padding-left: 20px; border-left: 1px solid color-mix(in srgb, currentColor 11%, transparent); }}
+.sk-stat-value {{ font-size: 1.22rem; font-weight: 500; letter-spacing: -0.02em; margin-top: 8px; line-height: 1.25;
+  display:flex; align-items:center; gap: 10px; }}
+.sk-stat-big {{ font-size: clamp(2.2rem, 5vw, 3rem); font-weight: 350; letter-spacing: -0.045em; line-height: 1;
+  margin-top: 10px; font-feature-settings: "tnum"; }}
+.sk-stat-sub {{ font-size: .84rem; line-height: 1.45; margin-top: 8px; color: color-mix(in srgb, currentColor 58%, transparent); }}
+/* ---------- list rows (Apple-Weather-style) ---------- */
+.sk-list {{ border-top: 1px solid color-mix(in srgb, currentColor 11%, transparent); margin: 8px 0 22px; }}
+.sk-row {{ display:grid; grid-template-columns: var(--cols); gap: 16px; align-items:center; padding: 14px 8px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 11%, transparent);
+  transition: background-color 150ms ease; }}
+@media (hover: hover) and (pointer: fine) {{
+  .sk-row:hover {{ background: color-mix(in srgb, currentColor 4%, transparent); }}
 }}
-@media (max-width: 640px) {{
-  .sk-hero {{ grid-template-columns: 1fr; justify-items: center; text-align: center; gap: 14px; }}
-  .sk-headline {{ font-size: 1.5rem; }}
-  .sk-week {{ grid-template-columns: repeat(2, minmax(0,1fr)); }}
-  [data-testid="stMainBlockContainer"], .block-container {{ padding-top: 1.2rem; }}
+.sk-row-title {{ font-weight: 500; letter-spacing: -0.01em; }}
+.sk-row-sub {{ font-size: .8rem; margin-top: 2px; color: color-mix(in srgb, currentColor 55%, transparent); }}
+.sk-row-p {{ font-size: 1.15rem; font-weight: 450; text-align: right; font-feature-settings: "tnum"; letter-spacing: -0.02em; }}
+.sk-bar {{ position: relative; height: 4px; border-radius: 4px; background: color-mix(in srgb, currentColor 10%, transparent); }}
+.sk-bar > span {{ position:absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--c);
+  transform-origin: left; animation: sk-grow 600ms var(--sk-ease) both; }}
+.sk-rank {{ font-family: "Geist Mono", ui-monospace, monospace; font-size: .8rem;
+  color: color-mix(in srgb, currentColor 45%, transparent); }}
+.sk-dots {{ font-family: "Geist Mono", ui-monospace, monospace; letter-spacing: 1px; font-size: .78rem;
+  color: color-mix(in srgb, currentColor 60%, transparent); white-space: nowrap; }}
+/* ---------- editorial steps + glossary ---------- */
+.sk-steps {{ display:grid; grid-template-columns: repeat(3, minmax(0,1fr));
+  border-top: 1px solid color-mix(in srgb, currentColor 11%, transparent); }}
+.sk-step {{ padding: 20px 22px 8px 0; }}
+.sk-step + .sk-step {{ padding-left: 22px; border-left: 1px solid color-mix(in srgb, currentColor 11%, transparent); }}
+.sk-step-n {{ font-family: "Geist Mono", ui-monospace, monospace; font-size: .75rem;
+  color: color-mix(in srgb, currentColor 50%, transparent); }}
+.sk-step-t {{ font-weight: 500; font-size: 1.05rem; letter-spacing: -0.02em; margin: 10px 0 6px; }}
+.sk-step-b {{ font-size: .9rem; line-height: 1.55; color: color-mix(in srgb, currentColor 65%, transparent); }}
+.sk-gloss {{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); column-gap: 40px; margin: 0; }}
+.sk-gloss > div {{ padding: 14px 0; border-top: 1px solid color-mix(in srgb, currentColor 11%, transparent); }}
+.sk-gloss dt {{ font-weight: 500; font-size: .95rem; }}
+.sk-gloss dd {{ margin: 4px 0 0; font-size: .88rem; line-height: 1.55; color: color-mix(in srgb, currentColor 62%, transparent); }}
+.sk-legend {{ display:flex; flex-wrap: wrap; gap: 6px 18px; font-size: .74rem; margin: 2px 0 8px;
+  font-family: "Geist Mono", ui-monospace, monospace; color: color-mix(in srgb, currentColor 58%, transparent); }}
+.sk-swatch {{ display:inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px;
+  vertical-align: -1px; background: var(--c); }}
+/* ---------- Streamlit elements, quieted ---------- */
+[data-testid="stExpander"] details {{ border: 0; border-top: 1px solid color-mix(in srgb, currentColor 11%, transparent);
+  border-radius: 0; background: transparent; }}
+[data-testid="stExpander"] summary {{ padding-left: 2px; padding-right: 2px; }}
+[data-testid="stTabs"] [data-baseweb="tab-list"] {{ gap: 18px; }}
+/* keyed sections (st.container(key="panel_...")): a hairline instead of a box */
+[class*="st-key-panel"] {{ border-top: 1px solid color-mix(in srgb, currentColor 11%, transparent);
+  padding-top: 22px; margin-top: 14px; }}
+/* info notes in the neutral voice; warnings and errors keep their colour so problems stand out */
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"]) {{
+  background: color-mix(in srgb, currentColor 4%, transparent) !important; color: inherit !important;
+  border: 1px solid color-mix(in srgb, currentColor 11%, transparent); }}
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"]) * {{ color: inherit !important; }}
+[data-testid="stMetricValue"] {{ letter-spacing: -0.03em; }}
+code {{ color: inherit !important; background: color-mix(in srgb, currentColor 7%, transparent) !important;
+  font-family: "Geist Mono", ui-monospace, monospace; font-size: .85em; }}
+/* ---------- motion ---------- */
+@keyframes sk-rise {{ from {{ opacity: 0; transform: translateY(8px); }} to {{ opacity: 1; transform: none; }} }}
+@keyframes sk-fade {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
+@keyframes sk-grow {{ from {{ transform: scaleX(0); }} to {{ transform: scaleX(1); }} }}
+.sk-rise {{ animation: sk-rise 460ms var(--sk-ease) both; }}
+.sk-d1 {{ animation-delay: 60ms; }} .sk-d2 {{ animation-delay: 120ms; }} .sk-d3 {{ animation-delay: 180ms; }}
+.sk-row {{ animation: sk-rise 420ms var(--sk-ease) both; }}
+.sk-row:nth-child(2) {{ animation-delay: 40ms; }} .sk-row:nth-child(3) {{ animation-delay: 80ms; }}
+.sk-row:nth-child(4) {{ animation-delay: 120ms; }} .sk-row:nth-child(5) {{ animation-delay: 160ms; }}
+.sk-row:nth-child(6) {{ animation-delay: 200ms; }} .sk-row:nth-child(7) {{ animation-delay: 240ms; }}
+[data-testid="stPlotlyChart"], [data-testid="stDataFrame"] {{ animation: sk-fade 500ms ease both 150ms; }}
+/* sections further down reveal as they scroll into view, where the browser supports it */
+@supports (animation-timeline: view()) {{
+  .sk-reveal {{ animation: sk-rise linear both; animation-timeline: view(); animation-range: entry 0% entry 60%; }}
+}}
+@media (prefers-reduced-motion: reduce) {{
+  .sk-rise, .sk-row, .sk-reveal, [data-testid="stPlotlyChart"], [data-testid="stDataFrame"] {{
+    animation: sk-fade 200ms ease both !important; }}
+  .sk-meter > span, .sk-bar > span {{ animation: none; }}
+}}
+/* ---------- small screens ---------- */
+@media (max-width: 860px) {{
+  /* the bar stacks into several rows on a phone; pinned, it would eat a quarter of the screen */
+  .st-key-topbar {{ position: static; backdrop-filter: none; -webkit-backdrop-filter: none; }}
+  .sk-hero {{ grid-template-columns: 1fr; gap: 10px; }}
+  .sk-strip, .sk-strip.three {{ grid-template-columns: repeat(2, minmax(0,1fr)); }}
+  .sk-stat:nth-child(3) {{ padding-left: 0; border-left: 0; }}
+  .sk-stat:nth-child(n+3) {{ border-top: 1px solid color-mix(in srgb, currentColor 11%, transparent); }}
+  .sk-steps {{ grid-template-columns: 1fr; }}
+  .sk-step + .sk-step {{ padding-left: 0; border-left: 0; border-top: 1px solid color-mix(in srgb, currentColor 11%, transparent); }}
+  .sk-gloss {{ grid-template-columns: 1fr; }}
+  .sk-hide-sm {{ display: none; }}
 }}
 {_night_overrides() if night_vision else ""}
 </style>
@@ -235,19 +269,17 @@ h1, h2, h3 {{ letter-spacing: -0.01em; }}
 
 
 def _night_overrides() -> str:
-    """Red-only display: recolour Streamlit's own widgets too, and drop every glow."""
+    """Red-only display: recolour Streamlit's own widgets too."""
     return """
 .stApp, [data-testid="stSidebar"] { background: #000 !important; }
-[data-testid="stHeader"] { background: transparent !important; }
-/* Streamlit paints a few widget parts in the theme's gold; make those red too. */
+.st-key-topbar { background: rgba(0,0,0,.85) !important; }
+.stApp *, [data-testid="stSidebar"] * { color: #ff3b30 !important; border-color: #3a0000 !important; }
+/* Streamlit paints a few widget parts in the theme's primary colour; make those red too. */
 [data-testid="stCheckbox"] label > div:first-of-type { background-color: #7f1d1d !important; }
-[data-testid="stButtonGroup"] button[aria-checked="true"] { background-color: rgba(255,59,48,0.14) !important; }
+[data-testid="stCheckbox"] label > div:first-of-type > div { background-color: #ff3b30 !important; }
 [data-testid="stSlider"] [role="group"] div { background-image: none !important; }
 [data-testid="stSlider"] [role="group"] div[role="slider"],
 [data-testid="stSlider"] [role="group"] > div > div { background-color: #ff3b30 !important; }
-.stApp *, [data-testid="stSidebar"] * { color: #ff3b30 !important; border-color: #3a0000 !important; }
-.sk-pill, .sk-step-n { color: #000 !important; }
-.sk-ring, .sk-card { box-shadow: none !important; }
 img { filter: grayscale(1) sepia(1) saturate(6) hue-rotate(-50deg) brightness(.6); }
 """
 

@@ -1,20 +1,33 @@
 [theme]
-base = "dark"
-# "Moonlight": deep night-sky navy, moonlight gold for actions, lunar blue for links.
-primaryColor = "#E8C872"
-backgroundColor = "#070B18"
-secondaryBackgroundColor = "#111831"
-textColor = "#E6E8F2"
-linkColor = "#9DB9FF"
-borderColor = "#24305A"
+# "Observatory": a calm monochrome system. Soft graphite / paper instead of pure black / white,
+# colour only where it carries meaning. Light and dark follow the viewer's system setting.
+font = "Geist:https://fonts.googleapis.com/css2?family=Geist:wght@300..700&display=swap, sans-serif"
+headingFont = "Geist:https://fonts.googleapis.com/css2?family=Geist:wght@300..700&display=swap, sans-serif"
+codeFont = "Geist Mono:https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400..600&display=swap, monospace"
+headingFontWeights = [500, 500, 500, 500, 500, 500]
+headingFontSizes = ["2.25rem", "1.5rem", "1.2rem", "1.05rem", "1rem", "0.9rem"]
+baseRadius = "0.5rem"
+buttonRadius = "0.5rem"
 showWidgetBorder = true
-baseRadius = "0.75rem"
-font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
-headingFont = "Fraunces:https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap, serif"
-metricValueFontWeight = 600
+metricValueFontWeight = 400
 
-[theme.sidebar]
-backgroundColor = "#0A1024"
+[theme.dark]
+backgroundColor = "#141416"
+secondaryBackgroundColor = "#1C1C1F"
+textColor = "#DCDCE0"
+primaryColor = "#DCDCE0"
+linkColor = "#DCDCE0"
+borderColor = "#2A2A2E"
+codeBackgroundColor = "#1C1C1F"
+
+[theme.light]
+backgroundColor = "#F6F6F4"
+secondaryBackgroundColor = "#ECECE9"
+textColor = "#232326"
+primaryColor = "#232326"
+linkColor = "#232326"
+borderColor = "#DEDEDA"
+codeBackgroundColor = "#ECECE9"
 
 [server]
 headless = true

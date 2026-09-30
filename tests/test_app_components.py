@@ -65,9 +65,14 @@ def test_user_text_is_escaped():
     assert ui.esc('a"b<') == "a&quot;b&lt;"
 
 
-def test_ring_handles_missing_probability():
-    assert "–" in ui.ring(None, "#fff", "chance") and "--p:0" in ui.ring(None, "#fff", "x")
-    assert "--p:42.0" in ui.ring(0.42, "#fff", "x")
+def test_meter_and_bar_clamp_and_handle_missing_probability():
+    assert "width:0.0%" in ui.meter(None) and "width:42.0%" in ui.meter(0.42)
+    assert "width:100.0%" in ui.bar(1.7, "#fff") and "width:0.0%" in ui.bar(-0.2, "#fff")
+
+
+def test_status_pill_carries_meaning_in_the_dot_not_the_text_colour():
+    html = ui.status("GO", "#5E9E80")
+    assert "--c:#5E9E80" in html and "sk-dot" in html and ">GO<" in html
 
 
 def test_duration_and_short_time():
@@ -108,15 +113,15 @@ def test_nights_that_have_ended_are_dropped():
     assert common.upcoming(None, DAWN) == []
 
 
-def test_background_layers_have_one_size_each():
-    """Regression: a shorter background-size list silently repeats and tiled the glows."""
-    css = theme.css(theme.MOON, False)
-    image = re.search(r"background-image: ([^;]+);", css).group(1)
-    size = re.search(r"background-size: ([^;]+);", css).group(1)
-    repeat = re.search(r"background-repeat: ([^;]+);", css).group(1)
-    n_layers = image.count("gradient(")
-    assert n_layers == len(size.split(",")) == len(repeat.split(","))
-    assert "radial-gradient" not in theme.css(theme.NIGHT, True).split("background-image:")[1][:20]
+def test_stylesheet_follows_the_active_theme_and_respects_reduced_motion():
+    """Colours derive from currentColor (so light, dark and night vision all work) and motion
+    has a reduced-motion fallback."""
+    css = theme.css(theme.MONO, False)
+    assert css.count("currentColor") > 20
+    assert "prefers-reduced-motion: reduce" in css and "cubic-bezier(0.23, 1, 0.32, 1)" in css
+    assert "@media (hover: hover) and (pointer: fine)" in css  # hover effects only with a mouse
+    night = theme.css(theme.NIGHT, True)
+    assert "#ff3b30" in night.lower() and "Streamlit paints" in night
 
 
 def test_place_names_are_friendly_and_details_come_from_config():

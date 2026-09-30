@@ -37,13 +37,6 @@ PAGES = {
     "Track Record": track_record.render,
     "How It Works": methodology.render,
 }
-ICONS = {
-    "Tonight": ":material/bedtime:",
-    "7 Nights": ":material/calendar_month:",
-    "Where to Go": ":material/explore:",
-    "Track Record": ":material/verified:",
-    "How It Works": ":material/menu_book:",
-}
 SLUGS = {name.lower().replace(" ", "-"): name for name in PAGES}
 # Old page names keep working in bookmarked links.
 SLUGS |= {
@@ -117,58 +110,60 @@ def get_forecast(
 
 
 def top_bar(sites) -> tuple[str, str, float | None, float | None, str, bool]:
-    """Brand, night-vision switch, location picker, and page navigation."""
+    """One sticky row: brand, page navigation, location, night vision. On a phone the columns
+    stack and the navigation wraps, so everything stays one tap away."""
     query = st.query_params
-    brand, switch = st.columns([4, 1.3], vertical_alignment="center")
-    brand.markdown(
-        ui.block(
-            '<div class="sk-brand">',
-            ui.moon_svg(200.0, 34),
-            '<div><div class="sk-brand-name">SkyTrust</div>',
-            '<div class="sk-brand-tag">Clear-sky forecasts for stargazers, with an honest '
-            "track record</div></div></div>",
-        ),
-        unsafe_allow_html=True,
-    )
     if "night_vision" not in st.session_state:  # first load: honour ?nv=1 from a bookmark
         st.session_state["night_vision"] = query.get("nv") == "1"
-    night_vision = switch.toggle(
-        "Night vision",
-        key="night_vision",
-        help="Dim red display that keeps your eyes dark-adapted at the telescope.",
-    )
-
     site_ids = [s.id for s in sites]
     options = [*site_ids, live.CUSTOM_ID]
     wanted = query.get("site", "SAC").upper()
     if "lat" in query and "lon" in query:
         wanted = live.CUSTOM_ID
-    labels = {s.id: site_option_label(s) for s in sites} | {live.CUSTOM_ID: "📍 Custom location…"}
-    where_col, nav_col = st.columns([1.25, 3], vertical_alignment="bottom")
-    site_id = where_col.selectbox(
-        "Location",
-        options,
-        index=options.index(wanted) if wanted in options else 0,
-        key="site",
-        format_func=labels.get,
-    )
+    labels = {s.id: site_option_label(s) for s in sites} | {live.CUSTOM_ID: "Custom location…"}
     start = SLUGS.get(query.get("page", ""), "Tonight")
-    page = nav_col.segmented_control(
-        "Page",
-        list(PAGES),
-        default=None if "page" in st.session_state else start,
-        required=True,
-        key="page",
-        format_func=lambda p: f"{ICONS[p]} {p}",
-        label_visibility="hidden",
-        width="stretch",
-        wrap=True,  # on a phone the five pages flow onto two lines instead of off-screen
-    )
+
+    with st.container(key="topbar"):
+        brand, nav, where, switch = st.columns(
+            [1.05, 3.4, 1.35, 0.75], vertical_alignment="center", gap="small"
+        )
+        brand.markdown(
+            ui.block(
+                '<div class="sk-brand">',
+                ui.moon_svg(300.0, 18),
+                "<span>SkyTrust</span>",
+                "</div>",
+            ),
+            unsafe_allow_html=True,
+        )
+        page = nav.segmented_control(
+            "Page",
+            list(PAGES),
+            default=None if "page" in st.session_state else start,
+            required=True,
+            key="page",
+            label_visibility="collapsed",
+            wrap=True,  # on a phone the five pages flow onto two lines instead of off-screen
+        )
+        site_id = where.selectbox(
+            "Location",
+            options,
+            index=options.index(wanted) if wanted in options else 0,
+            key="site",
+            format_func=labels.get,
+            label_visibility="collapsed",
+        )
+        night_vision = switch.toggle(
+            ":material/dark_mode:",
+            key="night_vision",
+            help="Night vision: a dim red display that keeps your eyes dark-adapted at the "
+            "telescope.",
+        )
     lat = lon = None
     name = ""
     if site_id == live.CUSTOM_ID:
         (la0, la1), (lo0, lo1) = live.CUSTOM_BOUNDS["lat"], live.CUSTOM_BOUNDS["lon"]
-        with st.container(border=True):
+        with st.container(key="panel_custom"):
             c1, c2, c3 = st.columns([1, 1, 1.4])
             lat = c1.number_input(
                 "Latitude", la0, la1, float(query.get("lat", DEFAULT_CUSTOM["lat"])), 0.01,
@@ -203,7 +198,7 @@ def sync_url(page: str, site_id: str, lat, lon, name: str, night_vision: bool) -
 def main() -> None:
     st.set_page_config(
         page_title="SkyTrust · clear-sky forecasts for stargazers",
-        page_icon="🌙",
+        page_icon=":material/dark_mode:",
         layout="wide",
         initial_sidebar_state="collapsed",
     )

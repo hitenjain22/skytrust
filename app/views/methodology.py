@@ -42,24 +42,22 @@ def thirty_seconds(ctx: Context) -> str:
          f"{split['test_end']:%B %Y}, nights it never saw, and keeps logging every forecast "
          "before the night to score later."),
     ]  # fmt: skip
-    cards = "".join(
-        ui.card(
-            f'<div class="sk-step-n">{i}</div><div style="font-weight:600;margin-bottom:6px">'
-            f'{ui.esc(t)}</div><div class="sk-muted" style="font-size:.9rem">{ui.esc(b)}</div>'
-        )
+    cells = "".join(
+        f'<div class="sk-step"><div class="sk-step-n">0{i}</div>'
+        f'<div class="sk-step-t">{ui.esc(t)}</div><div class="sk-step-b">{ui.esc(b)}</div></div>'
         for i, (t, b) in enumerate(steps, 1)
     )
-    return f'<div class="sk-steps">{cards}</div>'
+    return f'<div class="sk-steps sk-rise">{cells}</div>'
 
 
 def sections(text: str) -> None:
     """First section in full; every later "### " section folded into an expander, so the page
     stays scannable while keeping all the detail."""
     first, *rest = text.strip().split("\n### ")
-    st.markdown(first)
+    st.markdown(first.replace("### ", "#### ", 1))  # sits under "The full methodology"
     for part in rest:
         title, _, body = part.partition("\n")
-        with st.expander(title.strip()):
+        with st.expander(title.strip(), icon=":material/chevron_right:"):
             st.markdown(body)
 
 
@@ -72,11 +70,10 @@ def render(ctx: Context) -> None:
     st.header("How SkyTrust works")
     st.markdown(thirty_seconds(ctx), unsafe_allow_html=True)
     st.subheader("Glossary")
-    cols = st.columns(3)
-    for i, (term, meaning) in enumerate(GLOSSARY.items()):
-        cols[i % 3].markdown(
-            f"**{term}**  \n<span class='sk-muted'>{meaning}</span>", unsafe_allow_html=True
-        )
+    terms = "".join(
+        f"<div><dt>{ui.esc(t)}</dt><dd>{ui.esc(m)}</dd></div>" for t, m in GLOSSARY.items()
+    )
+    st.markdown(f'<dl class="sk-gloss sk-reveal">{terms}</dl>', unsafe_allow_html=True)
     st.subheader("The full methodology")
     text = f"""
 ### The problem
@@ -134,7 +131,7 @@ afterwards (the forward test on the Track Record page).
     caveats = list(report.CAVEATS)
     if ctx.metrics:
         caveats = report.data_caveats(report.MetricsView(ctx.metrics)) + caveats
-    with st.expander("Caveats: what this can't tell you"):
+    with st.expander("Caveats: what this can't tell you", icon=":material/info:"):
         for c in caveats:
             st.markdown(f"- {c}")
     st.markdown("""

@@ -1,5 +1,5 @@
-"""Page 2: the next 7 nights. A week strip of cards (like a weather app), then the hour-by-hour
-cloud grid (like a Clear Sky Chart, but with a colour key and 12-hour times)."""
+"""Page 2: the next 7 nights. A list in the style of a 10-day weather forecast (one quiet row per
+night with a probability bar), then the hour-by-hour cloud grid with a labelled scale."""
 
 from __future__ import annotations
 
@@ -11,33 +11,33 @@ from views import components as ui
 from views.common import Context, day_label, lead_phrase, short_time
 from views.tonight import show, unavailable
 
-TRUST_TEXT = {
-    "High": "high trust",
-    "Medium": "medium trust",
-    "Low": "low trust",
-    "Unknown": "trust unknown",
-}
+TRUST_TEXT = {"High": "high trust", "Medium": "medium trust", "Low": "low trust"}
+COLS = "minmax(120px, 1.3fr) 26px minmax(60px, 2fr) 52px 96px"
 
 
-def day_card(ctx: Context, n, i: int) -> str:
+def night_row(ctx: Context, n, i: int) -> str:
     tz, pal = ctx.site.timezone, ctx.palette
-    color = pal[n.verdict]
     bw = n.best_window
     window = (
         f"{short_time(bw.start_utc, tz)}–{short_time(bw.until_utc, tz)}"
         if bw
         else "no clear window"
     )
-    return ui.block(
-        f'<div class="sk-day" style="--c:{color}">',
-        f'<div class="sk-day-name">{day_label(n.night_date, i, ctx.now_utc, tz)}</div>',
-        f'<div class="sk-day-date">{pd.Timestamp(n.night_date):%b %-d}</div>',
-        f'<div style="margin:8px 0 2px">{ui.moon_svg(n.moon_phase_deg, 30)}</div>',
-        f'<div class="sk-day-p">{"–" if n.p_usable is None else f"{n.p_usable:.0%}"}</div>',
-        ui.pill(n.verdict.upper(), color),
-        f'<div class="sk-day-meta">{window}<br>{n.moon_illum or 0:.0%} Moon<br>',
-        f"{ui.trust_dots(n.trust)} {TRUST_TEXT.get(n.trust, '')}</div>",
-        "</div>",
+    sub = (
+        f"{pd.Timestamp(n.night_date):%b %-d} · {window} · {ui.trust_dots(n.trust)} "
+        f'<span class="sk-hide-sm">{TRUST_TEXT.get(n.trust, "")}</span>'
+    )
+    p = "–" if n.p_usable is None else f"{n.p_usable:.0%}"
+    return ui.row(
+        [
+            f'<div><div class="sk-row-title">{day_label(n.night_date, i, ctx.now_utc, tz)}</div>'
+            f'<div class="sk-row-sub">{sub}</div></div>',
+            ui.moon_svg(n.moon_phase_deg, 20),
+            ui.bar(n.p_usable, pal[n.verdict]),
+            f'<div class="sk-row-p">{p}</div>',
+            f'<div style="text-align:right">{ui.status(n.verdict.upper(), pal[n.verdict])}</div>',
+        ],
+        COLS,
     )
 
 
@@ -47,11 +47,12 @@ def render(ctx: Context) -> None:
         return
     nights, tz, pal = ctx.nights, ctx.site.timezone, ctx.palette
     st.caption(
-        "Chance of a usable night (3+ clear dark hours in a row). Forecasts further ahead are "
-        "measurably less reliable: the dots show how well SkyTrust did at that range in testing."
+        "Chance of a usable night (3+ clear dark hours in a row). Accuracy fades with distance: "
+        "the dots show how well SkyTrust did at that range in testing."
     )
-    cards = "".join(day_card(ctx, n, i) for i, n in enumerate(nights))
-    st.markdown(f'<div class="sk-week">{cards}</div>', unsafe_allow_html=True)
+    st.markdown(
+        ui.rows([night_row(ctx, n, i) for i, n in enumerate(nights)]), unsafe_allow_html=True
+    )
 
     st.subheader("Cloud cover, hour by hour")
     labels = [
@@ -60,11 +61,11 @@ def render(ctx: Context) -> None:
     ]
     show(charts.outlook_grid(nights, ctx.forecast.hourly, tz, pal, labels))
     st.caption(
-        "Each cell is the typical (median) forecast cloud cover for that dark hour, in %. "
-        "Dark navy = clear, white = overcast; blank = not astronomically dark."
+        "Typical (median) forecast cloud cover for each dark hour, in %. Dark = clear, "
+        "light = overcast; blank = not astronomically dark."
     )
 
-    with st.expander("📋 Night-by-night details"):
+    with st.expander("Night-by-night details", icon=":material/table_rows:"):
         rows = []
         for i, n in enumerate(nights):
             bw = n.best_window

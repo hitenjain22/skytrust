@@ -1,9 +1,10 @@
-"""Small HTML building blocks (cards, tiles, the probability ring, the Moon icon).
+"""Small HTML building blocks for the Observatory design system.
 
 Each function returns an HTML string for `st.markdown(..., unsafe_allow_html=True)`. Streamlit's
 Markdown parser turns indented lines into code blocks and blank lines into paragraph breaks, so
 every snippet is collapsed onto one line by `block()`. Anything a user can type (a custom
-location's name) goes through `esc()`.
+location's name) goes through `esc()`. Colours come from `currentColor` (see theme.py), except
+status dots, which take a palette colour.
 """
 
 from __future__ import annotations
@@ -48,7 +49,8 @@ def moon_svg(phase_deg: float | None, size: int = 44) -> str:
 
     The lit area is bounded by the disk's edge (a half circle) and the terminator, an ellipse
     whose half-width is r * |cos(phase)|. A crescent's terminator bulges toward the lit edge, a
-    gibbous Moon's away from it; the SVG arc sweep flags encode exactly that.
+    gibbous Moon's away from it; the SVG arc sweep flags encode exactly that. Drawn in the
+    current text colour, so it matches whichever theme is showing.
     """
     r, c = size / 2 - 1, size / 2
     if phase_deg is None or math.isnan(phase_deg):
@@ -67,52 +69,63 @@ def moon_svg(phase_deg: float | None, size: int = 44) -> str:
     return (
         f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" role="img" '
         f'aria-label="{phase_name(phase_deg)}">'
-        f'<circle cx="{c}" cy="{c}" r="{r:.2f}" fill="var(--sk-moon_shadow)" '
-        f'stroke="var(--sk-border)" stroke-width="1"/>'
-        f'<path d="{lit}" fill="var(--sk-moon)"/></svg>'
+        f'<circle cx="{c}" cy="{c}" r="{r:.2f}" fill="currentColor" fill-opacity=".12" '
+        f'stroke="currentColor" stroke-opacity=".22" stroke-width="1"/>'
+        f'<path d="{lit}" fill="currentColor" fill-opacity=".86"/></svg>'
     )
 
 
 # ---------- pieces ----------
 
 
-def pill(text: str, color: str) -> str:
-    return f'<span class="sk-pill" style="--c:{color}">{esc(text)}</span>'
+def status(text: str, color: str) -> str:
+    """A quiet status pill: hairline outline, text in the body colour, meaning in a small dot."""
+    dot = f'<span class="sk-dot" style="--c:{color}"></span>'
+    return f'<span class="sk-status">{dot}{esc(text)}</span>'
 
 
-def chip(text: str) -> str:
-    return f'<span class="sk-chip">{text}</span>'
+# Older name used by some callers.
+pill = status
 
 
-def ring(p: float | None, color: str, sub: str) -> str:
-    """Donut gauge filled to `p` (0-1), with the percentage in the middle."""
-    value = "–" if p is None else f"{p:.0%}"
-    fill = 0 if p is None else round(p * 100, 1)
+def meter(p: float | None) -> str:
+    """Thin track filled to p (0-1)."""
+    width = 0 if p is None else max(0.0, min(1.0, p)) * 100
+    fill = f'<span style="width:{width:.1f}%"></span>'
+    return f'<div class="sk-meter" aria-hidden="true">{fill}</div>'
+
+
+def bar(p: float | None, color: str) -> str:
+    width = 0 if p is None else max(0.0, min(1.0, p)) * 100
+    return f'<div class="sk-bar"><span style="width:{width:.1f}%;--c:{color}"></span></div>'
+
+
+def stat(label: str, value: str, sub: str = "", big: bool = False, icon: str = "") -> str:
+    cls = "sk-stat-big" if big else "sk-stat-value"
     return block(
-        f'<div class="sk-ring" style="--p:{fill};--c:{color}"><div class="sk-ring-in"><div>',
-        f'<div class="sk-ring-num">{value}</div><div class="sk-ring-sub">{esc(sub)}</div>',
-        "</div></div></div>",
+        '<div class="sk-stat">',
+        f'<div class="sk-eyebrow">{esc(label)}</div>',
+        f'<div class="{cls}">{icon}<span>{value}</span></div>',
+        f'<div class="sk-stat-sub">{sub}</div>' if sub else "",
+        "</div>",
     )
 
 
-def tile(label: str, value: str, sub: str = "", icon: str = "") -> str:
-    head = f'<div class="sk-eyebrow">{esc(label)}</div>'
-    body = f'<div class="sk-tile-value">{value}</div>'
-    if icon:
-        body = f'<div class="sk-tile-row">{icon}<div>{body}</div></div>'
-    return f'<div class="sk-tile">{head}{body}<div class="sk-tile-sub">{sub}</div></div>'
+def strip(items: list[str], three: bool = False) -> str:
+    return f'<div class="sk-strip{" three" if three else ""} sk-rise sk-d2">{"".join(items)}</div>'
 
 
-def tiles(items: list[str]) -> str:
-    return f'<div class="sk-tiles">{"".join(items)}</div>'
+def row(cells: list[str], cols: str) -> str:
+    """One list row; `cols` is a CSS grid-template-columns value."""
+    return f'<div class="sk-row" style="--cols:{cols}">{"".join(cells)}</div>'
 
 
-def card(inner: str) -> str:
-    return f'<div class="sk-card">{inner}</div>'
+def rows(items: list[str]) -> str:
+    return f'<div class="sk-list">{"".join(items)}</div>'
 
 
 def legend(items: list[tuple[str, str]]) -> str:
-    """Colour key shown next to every colour-coded chart (the classic Clear Sky Chart flaw is
+    """Colour key shown under every colour-coded chart (the classic Clear Sky Chart flaw is
     colour with no key)."""
     spans = "".join(
         f'<span><span class="sk-swatch" style="--c:{c}"></span>{esc(t)}</span>' for t, c in items
@@ -120,13 +133,11 @@ def legend(items: list[tuple[str, str]]) -> str:
     return f'<div class="sk-legend">{spans}</div>'
 
 
-def stat(number: str, text: str, sub: str = "") -> str:
-    return (
-        f'<div class="sk-card"><div class="sk-stat-num">{number}</div>'
-        f'<div class="sk-stat-text">{text}</div><div class="sk-stat-sub">{sub}</div></div>'
-    )
+def eyebrow(text: str) -> str:
+    return f'<div class="sk-eyebrow">{esc(text)}</div>'
 
 
 def trust_dots(level: str) -> str:
     filled = {"High": 3, "Medium": 2, "Low": 1}.get(level, 0)
-    return f'<span class="sk-dots">{"●" * filled}{"○" * (3 - filled)}</span>'
+    dots = "●" * filled + "○" * (3 - filled)
+    return f'<span class="sk-dots" title="{esc(level)} trust">{dots}</span>'

@@ -1,5 +1,7 @@
-"""Plotly figures for the app, in the Moonlight theme. Times are the site's local time zone,
-12-hour clock (24-hour times are a common complaint about astronomy weather apps)."""
+"""Plotly figures for the app, in the Observatory design system. Text, grid and background come
+from Streamlit's active chart theme (so charts are right in light and dark); only data colours are
+set here. Times are the site's local time zone, 12-hour clock (24-hour times are a common
+complaint about astronomy weather apps)."""
 
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ LABEL_POSITIONS = {
     "BIH": "middle right",
     "FAT": "bottom right",
 }
-FONT = "Inter, system-ui, sans-serif"
+FONT = "Geist, system-ui, sans-serif"
 
 
 def _local(ts, tz: str):
@@ -38,28 +40,29 @@ def _layout(
     time_axis: bool = False,
     legend: bool = True,
 ) -> go.Figure:
+    """Quiet chart chrome: no title box, faint horizontal grid only, no axis lines. Colours for
+    text and background are left to the Streamlit theme unless the palette pins them (night
+    vision)."""
+    font = {"family": FONT, "size": 12} | ({"color": pal["text"]} if pal.get("text") else {})
     fig.update_layout(
-        title={"text": title, "font": {"size": 14, "color": pal["text"]}, "x": 0, "xanchor": "left"}
+        title={"text": title, "font": {"size": 13, "family": FONT}, "x": 0, "xanchor": "left"}
         if title
         else None,
         height=height,
-        margin={"l": 8, "r": 8, "t": 44 if title else 12, "b": 8},
+        margin={"l": 4, "r": 4, "t": 40 if title else 10, "b": 4},
         paper_bgcolor=pal["paper"],
         plot_bgcolor=pal["paper"],
-        font={"color": pal["text"], "family": FONT, "size": 12},
-        legend={"orientation": "h", "y": -0.18, "x": 0, "yanchor": "top", "font": {"size": 11}},
+        font=font,
+        legend={"orientation": "h", "y": -0.2, "x": 0, "yanchor": "top", "font": {"size": 11}},
         showlegend=legend,
         hovermode="x unified",
-        hoverlabel={
-            "bgcolor": pal["surface"],
-            "bordercolor": pal["border"],
-            "font": {"family": FONT},
-        },
+        hoverlabel={"font": {"family": FONT}}
+        | ({"bgcolor": pal["surface"], "bordercolor": pal["border"]} if pal.get("surface") else {}),
     )
-    fig.update_xaxes(gridcolor=pal["grid"], zeroline=False, linecolor=pal["border"])
+    fig.update_xaxes(showgrid=False, zeroline=False, showline=False, ticks="")
     if time_axis:
         fig.update_xaxes(tickformat="%-I %p", hoverformat="%-I:%M %p")
-    fig.update_yaxes(gridcolor=pal["grid"], zeroline=False, **(yaxis or {}))
+    fig.update_yaxes(gridcolor=pal["grid"], zeroline=False, showline=False, **(yaxis or {}))
     return fig
 
 
@@ -71,6 +74,24 @@ def _night_slice(hourly: pd.DataFrame, night) -> pd.DataFrame:
 
 def median_cover(hourly: pd.DataFrame, column: str = "cloud_cover") -> pd.Series:
     return hourly.pivot_table(index="time", columns="model", values=column).median(axis=1)
+
+
+def rgba(hex_color: str, alpha: float) -> str:
+    h = hex_color.lstrip("#")
+    r, g, b = (int(h[i : i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+INK_ALPHA = {"Go": 0.92, "Maybe": 0.55, "Skip": 0.26, "No data": 0.15}
+
+
+def ink_level(p: float, pal: dict, go_at: float = 0.7, maybe_at: float = 0.4) -> str:
+    """One neutral ink at three brightnesses: bright = likely clear, faint = likely cloudy."""
+    if p is None or np.isnan(p):
+        level = "No data"
+    else:
+        level = "Go" if p >= go_at else "Maybe" if p >= maybe_at else "Skip"
+    return rgba(pal["ink"], INK_ALPHA[level])
 
 
 def level_color(p: float, pal: dict, go_at: float = 0.7, maybe_at: float = 0.4) -> str:
@@ -106,30 +127,23 @@ def night_chart(hourly: pd.DataFrame, night, tz: str, pal: dict, go_at=0.7, mayb
         x0=_local(night.dusk_utc, tz), x1=_local(night.dawn_utc, tz), fillcolor=pal["dark"],
         line_width=0, layer="below",
     )  # fmt: skip
-    if night.best_window:
-        bw = night.best_window
-        fig.add_shape(
-            type="rect", x0=_local(bw.start_utc - pd.Timedelta(minutes=30), tz),
-            x1=_local(bw.until_utc, tz), y0=0, y1=100, line={"color": pal["accent"], "width": 1.5},
-            fillcolor="rgba(0,0,0,0)", layer="below",
-        )  # fmt: skip
     fig.add_trace(
         go.Bar(
             x=_local(p.index, tz),
             y=p.to_numpy() * 100,
             name=name,
-            marker={"color": [level_color(v, pal, go_at, maybe_at) for v in p.to_numpy()],
-                    "line": {"width": 0}},
+            marker={"color": [ink_level(v, pal, go_at, maybe_at) for v in p.to_numpy()],
+                    "line": {"width": 0}, "cornerradius": 3},
             customdata=cloud,
             hovertemplate=hover + "<extra></extra>",
-            width=1000 * 60 * 60 * 0.72,
+            width=1000 * 60 * 60 * 0.62,
         )
     )  # fmt: skip
     # Moon-up band above the bars
     for a, b in getattr(night, "moon_up", []) or []:
         fig.add_shape(
-            type="rect", x0=_local(max(a, start), tz), x1=_local(min(b, end), tz), y0=104, y1=110,
-            fillcolor=pal["moon"], line_width=0, opacity=0.85,
+            type="rect", x0=_local(max(a, start), tz), x1=_local(min(b, end), tz), y0=105, y1=107.5,
+            fillcolor=pal["moon"], line_width=0, opacity=0.6,
         )  # fmt: skip
     if getattr(night, "moon_up", None):
         first = max(night.moon_up[0][0], start)
@@ -274,7 +288,9 @@ def outlook_grid(nights, hourly: pd.DataFrame, tz: str, pal: dict, labels: list[
 # ---------- Where ----------
 
 
-def site_map(table: pd.DataFrame, pal: dict, go_at: float, maybe_at: float) -> go.Figure:
+def site_map(
+    table: pd.DataFrame, pal: dict, go_at: float, maybe_at: float, light: bool = False
+) -> go.Figure:
     """One marker per site coloured like its verdict. One trace per site, because a map trace
     can't place each label differently, and neighbours (Auburn / Truckee) would hide each other."""
     fig = go.Figure()
@@ -288,14 +304,22 @@ def site_map(table: pd.DataFrame, pal: dict, go_at: float, maybe_at: float) -> g
                 mode="markers+text",
                 text=[label],
                 textposition=LABEL_POSITIONS.get(r["site"], "top right"),
-                textfont={"color": pal["text"], "size": 13},
-                marker={"size": 18, "color": level_color(p, pal, go_at, maybe_at), "opacity": 0.95},
+                textfont={
+                    "color": pal.get("text") or ("#2A2A2E" if light else "#D5D5DA"),
+                    "size": 12,
+                    "family": FONT,
+                },
+                marker={"size": 13, "color": level_color(p, pal, go_at, maybe_at), "opacity": 0.95},
                 hovertemplate="%{text}<extra></extra>",
             )
         )
     fig.update_layout(
-        map={"style": "carto-darkmatter", "center": {"lat": 38.0, "lon": -120.0}, "zoom": 5.3},
-        height=420,
+        map={
+            "style": "carto-positron" if light else "carto-darkmatter",
+            "center": {"lat": 38.1, "lon": -119.9},
+            "zoom": 5.9,
+        },
+        height=360,
         margin={"l": 0, "r": 0, "t": 0, "b": 0},
         paper_bgcolor=pal["paper"],
         showlegend=False,

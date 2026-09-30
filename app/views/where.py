@@ -55,18 +55,24 @@ def tonight_table(ctx: Context) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("p", ascending=False, na_position="last")
 
 
+COLS = "28px minmax(0, 2.2fr) minmax(60px, 1.6fr) 52px 96px"
+
+
 def rank_row(i: int, r: pd.Series, pal: dict) -> str:
     color = pal[r["verdict"]]
-    p = "–" if pd.isna(r["p"]) else f"{r['p']:.0%}"
-    moon = "" if r["phase"] is None or pd.isna(r["phase"]) else ui.moon_svg(r["phase"], 16)
-    return ui.block(
-        f'<div class="sk-rank" style="--c:{color}"><div class="sk-rank-n">{i}</div><div>',
-        f'<div class="sk-rank-name">{ui.esc(r["place"])} ',
-        f"{ui.pill(r['verdict'].upper(), color)}</div>",
-        f'<div class="sk-muted" style="font-size:.84rem">{ui.esc(r["area"])} · best window '
-        f"{ui.esc(r['window'])} · {moon} "
-        f"{'' if pd.isna(r['moon_free']) else int(r['moon_free'])} moon-free h</div>",
-        f'</div><div class="sk-rank-p">{p}</div></div>',
+    p = None if pd.isna(r["p"]) else float(r["p"])
+    moon_free = "" if pd.isna(r["moon_free"]) else f" · {int(r['moon_free'])} moon-free h"
+    return ui.row(
+        [
+            f'<div class="sk-rank">{i:02d}</div>',
+            f'<div><div class="sk-row-title">{ui.esc(r["place"])}</div>'
+            f'<div class="sk-row-sub">{ui.esc(r["area"])} · {ui.esc(r["window"])}{moon_free}'
+            "</div></div>",
+            ui.bar(p, color),
+            f'<div class="sk-row-p">{"–" if p is None else f"{p:.0%}"}</div>',
+            f'<div style="text-align:right">{ui.status(r["verdict"].upper(), color)}</div>',
+        ],
+        COLS,
     )
 
 
@@ -75,14 +81,12 @@ def render(ctx: Context) -> None:
     st.caption("Tonight's chance of a usable night at every site, best first.")
     table = tonight_table(ctx)
     pal = ctx.palette
-    left, right = st.columns([1, 1.15], gap="medium")
-    with left:
-        rows = "".join(rank_row(i + 1, r, pal) for i, (_, r) in enumerate(table.iterrows()))
-        st.markdown(rows, unsafe_allow_html=True)
-    with right:
-        v = ctx.settings.raw["verdict"]
-        show(charts.site_map(table, pal, v["go"], v["maybe"]))
-    with st.expander("📋 All sites as a table"):
+    rows = [rank_row(i + 1, r, pal) for i, (_, r) in enumerate(table.iterrows())]
+    st.markdown(ui.rows(rows), unsafe_allow_html=True)
+    v = ctx.settings.raw["verdict"]
+    light = st.context.theme.type == "light"
+    show(charts.site_map(table, pal, v["go"], v["maybe"], light=light))
+    with st.expander("All sites as a table", icon=":material/table_rows:"):
         shown = table.assign(
             chance=table["p"].map(lambda p: None if pd.isna(p) else round(100 * p)),
             moon=table["illum"].map(lambda x: "–" if pd.isna(x) else f"{x:.0%}"),

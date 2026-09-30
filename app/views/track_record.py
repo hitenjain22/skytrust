@@ -30,12 +30,14 @@ def report_card(v: report.MetricsView) -> str:
         ci = ""
         if not pd.isna(blend.get("false_clear_rate_lo")):
             lo, hi = 1 - blend["false_clear_rate_hi"], 1 - blend["false_clear_rate_lo"]
-            ci = f"95% range {lo:.0%}–{hi:.0%}. "
+            ci = f" (95% range {lo:.0%}–{hi:.0%})"
         cards.append(
             ui.stat(
+                "“Go” calls that held",
                 _share(blend),
-                "of the nights SkyTrust said “go” (1 day ahead) really were usable.",
-                f"{ci}Guessing from the season alone: {_share(clim)}.",
+                f"of the nights it called “go” one day ahead were usable{ci}. Guessing from the "
+                f"season alone: {_share(clim)}.",
+                big=True,
             )
         )
     leads = v.lead_list("primary")
@@ -47,30 +49,34 @@ def report_card(v: report.MetricsView) -> str:
     if any(v.diff("primary", ld, "blend", "nbm_lr") is not None for ld in leads):
         cards.append(
             ui.stat(
-                f"{len(wins)} of {len(leads)}",
+                "Versus NOAA",
+                f"{len(wins)}<span class='sk-muted'>/{len(leads)}</span>",
                 f"forecast ranges ({leads[0]}–{leads[-1]} days ahead) where it beat NOAA’s own "
-                "National Blend of Models, with 95% confidence.",
-                "Same test nights for both, scored with the Brier score.",
+                "National Blend of Models with 95% confidence, on the same nights.",
+                big=True,
             )
         )
     sat = v.rec("goes", lead, "blend_primary")
     if sat is not None:
         cards.append(
             ui.stat(
+                "Satellite check",
                 _share(sat),
-                "of its “go” calls were confirmed by the GOES-18 weather satellite.",
-                "An independent check the model never trained on.",
+                "of its “go” calls were confirmed by the GOES-18 weather satellite, an "
+                "independent check the model never trained on.",
+                big=True,
             )
         )
     elif blend is not None:
         cards.append(
             ui.stat(
+                "Skill score",
                 f"{blend['bss']:.2f}",
-                "skill score vs the seasonal average (0 = no better, 1 = perfect).",
-                "Brier Skill Score, 1 day ahead.",
+                "vs the seasonal average (0 = no better, 1 = perfect), one day ahead.",
+                big=True,
             )
         )
-    return f'<div class="sk-stats">{"".join(cards)}</div>'
+    return ui.strip(cards, three=True)
 
 
 def render(ctx: Context) -> None:
@@ -92,7 +98,7 @@ def render(ctx: Context) -> None:
         "level for each night. Error bars: 95% confidence intervals."
     )
 
-    with st.container(border=True):
+    with st.container(key="panel_forward"):
         forward_panel.render(ctx.forward_summary)
 
     st.subheader("The full backtest")
@@ -112,10 +118,15 @@ def render(ctx: Context) -> None:
         ),
     )
     leads = v.lead_list(label)
-    lead = c2.select_slider("Days ahead (lead)", options=leads, value=leads[0], key="lead")
+    lead = (
+        c2.segmented_control(
+            "Days ahead (lead)", leads, default=leads[0], required=True, key="lead"
+        )
+        or leads[0]
+    )
 
-    with st.container(border=True):
-        st.markdown("**Takeaways**")
+    with st.container(key="panel_takeaways"):
+        st.markdown(ui.eyebrow("Takeaways"), unsafe_allow_html=True)
         for line in report.takeaways(v, label, lead):
             st.markdown(f"- {line}")
 
@@ -138,7 +149,7 @@ def render(ctx: Context) -> None:
                 "the share of a perfect forecast's benefit you'd get by going out when P ≥ α."
             )
 
-    with st.expander("By site and season"):
+    with st.expander("By site and season", icon=":material/table_rows:"):
         st.dataframe(report.breakdown_table(v, label, lead, "site"), width="stretch")
         st.dataframe(report.breakdown_table(v, label, lead, "season"), width="stretch")
         st.caption("Subsets spanning fewer than 8 weeks get no confidence interval.")
