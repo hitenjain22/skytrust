@@ -64,7 +64,7 @@ flowchart LR
 | ECMWF calibrated (B4) | 0.494 [0.426, 0.567] | 13.0% [10.0%, 16.5%] | 0.920 |
 | Climatology (B1) | 0.000 [0.000, 0.000] | 35.0% [28.2%, 42.9%] | 0.632 |
 
-_Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` (commit `545d11d`). 95% CIs from a week-block bootstrap. Full results: [docs/RESULTS.md](docs/RESULTS.md)._
+_Auto-generated from `artifacts/metrics.json` by `python -m skytrust report` (commit `ca566b3`). 95% CIs from a week-block bootstrap. Full results: [docs/RESULTS.md](docs/RESULTS.md)._
 
 <!-- RESULTS:END -->
 
