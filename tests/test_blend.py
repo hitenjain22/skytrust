@@ -179,3 +179,18 @@ def test_report_blend_details(trained):
     site = report.breakdown_table(v, "primary", 1, "site")
     assert "BSS blend" in site.columns and "false-clear blend" in site.columns
     assert "model-spread coefficient" in report.spread_sentence(v)
+
+
+def test_resume_bullets_use_only_metrics_numbers(trained, tmp_path):
+    import re
+
+    metrics = trained[2]
+    bullets = report.resume_bullets(metrics)
+    assert len(bullets) == 3
+    v = report.MetricsView(metrics)
+    blend_rec = v.rec("primary", 1, "blend")
+    assert f"{blend_rec['false_clear_rate']:.1%}" in bullets[0]
+    assert f"{blend_rec['bss']:.2f}" in bullets[1]
+    text = report.write_resume_bullets(metrics, tmp_path / "r.md").read_text()
+    assert "Every number below comes from that file" in text
+    assert re.search(r"\d+ weather models", bullets[0])

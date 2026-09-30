@@ -134,6 +134,8 @@ def cmd_report(args: argparse.Namespace) -> int:
     print(f"Wrote {path} and figures in {path.parent / 'figures'}")
     if report.update_readme(metrics):
         print("Updated the README results block")
+    if report.resume_bullets(metrics):
+        print(f"Wrote {report.write_resume_bullets(metrics)}")
     return 0
 
 
