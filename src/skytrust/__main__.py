@@ -8,6 +8,8 @@ import logging
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 from skytrust.config import load_settings, load_sites
 from skytrust.data.http import HttpClient
 
@@ -294,6 +296,25 @@ def cmd_spatial(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_statewide(args: argparse.Namespace) -> int:
+    from skytrust import dataset, statewide
+
+    settings = load_settings()
+    if args.rebuild or not statewide.NETWORK_DATASET.exists():
+        df = statewide.build(settings)
+        dataset.validate_dataset(df)
+        statewide.NETWORK_DATASET.parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(statewide.NETWORK_DATASET, index=False)
+        print(
+            f"Wrote {statewide.NETWORK_DATASET} ({len(df):,} rows, {df['site'].nunique()} stations)"
+        )
+    df = pd.read_parquet(statewide.NETWORK_DATASET)
+    path = statewide.save(statewide.run(df, settings))
+    models = statewide.train_final(df, settings, root=statewide.CANDIDATE_DIR)
+    print(f"Wrote {path} and the statewide blend candidates in {models[0].parent}")
+    return 0
+
+
 def cmd_hourly(args: argparse.Namespace) -> int:
     from skytrust import hourly
 
@@ -397,6 +418,11 @@ def build_parser() -> argparse.ArgumentParser:
     wf.set_defaults(func=cmd_walkforward)
     sp = sub.add_parser("spatial", help="Leave-one-site-out test of the site-agnostic blend")
     sp.set_defaults(func=cmd_spatial)
+    sw = sub.add_parser(
+        "statewide", help="Accuracy at the statewide network (leave-one-region-out) + candidates"
+    )
+    sw.add_argument("--rebuild", action="store_true", help="rebuild the network dataset first")
+    sw.set_defaults(func=cmd_statewide)
     hr = sub.add_parser("hourly", help="Hourly P(clear) model: build, train, evaluate")
     hr.set_defaults(func=cmd_hourly)
     tr = sub.add_parser("train", help="Fit the blend per label x lead (train years only) -> JSON")
