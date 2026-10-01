@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from skytrust import report
-from views import charts, forward_panel
+from views import charts, forward_panel, statewide_view
 from views import components as ui
 from views.common import Context
 from views.tonight import show
@@ -101,6 +101,7 @@ def render(ctx: Context, standalone: bool = True) -> None:
 
     with st.container(key="panel_forward"):
         forward_panel.render(ctx.forward_summary)
+    statewide_view.render(ctx)
 
     st.markdown(
         ui.section(

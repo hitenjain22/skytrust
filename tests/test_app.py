@@ -395,3 +395,39 @@ def test_modules_left_over_from_before_a_deploy_are_reloaded(offline, monkeypatc
         for k in [k for k in sys.modules if k.split(".")[0] in ours]:
             del sys.modules[k]
         sys.modules.update(saved)
+
+
+def test_statewide_accuracy_section(offline, monkeypatch, tmp_path, synthetic_built, fast_settings):
+    """With statewide results the Accuracy page shows them and Tonight, for a place without its
+    own record, lists the nearest stations; without them it says the test is still running."""
+    from skytrust import inference
+    from test_statewide import synthetic_result
+
+    api_up(monkeypatch)
+    monkeypatch.setattr(inference, "STATEWIDE_PATH", tmp_path / "absent.json")
+    at = visit("Accuracy")
+    assert not at.exception, at.exception
+    assert any("statewide test is still running" in i.value for i in at.info)
+
+    path = tmp_path / "statewide.json"
+    result = synthetic_result(synthetic_built[0], fast_settings)
+    path.write_text(json.dumps(inference_clean(result)))
+    monkeypatch.setattr(inference, "STATEWIDE_PATH", path)
+    st.cache_data.clear()
+    at = visit("Accuracy")
+    assert not at.exception, at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "Across California" in html and "“Go” calls that held" in html
+    assert "Nearest stations to Los Angeles" in html
+
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params.update({"page": "tonight", "site": "davis"})
+    at.run()
+    assert not at.exception, at.exception
+    assert any("never seen" in m.value and "SAC" in m.value for m in at.markdown)
+
+
+def inference_clean(obj):
+    from skytrust import evaluate
+
+    return evaluate._clean(obj)

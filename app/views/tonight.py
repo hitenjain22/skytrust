@@ -15,10 +15,12 @@ from views.common import (  # noqa: F401  (show/unavailable re-exported for othe
     agreement_text,
     duration,
     esc,
+    held_with_ci,
     moon_advice,
     night_summary,
     short_time,
     show,
+    station_label,
     unavailable,
     with_ci,
 )
@@ -226,6 +228,22 @@ def reliability_details(night, site_label: str) -> None:
     record = night.track_record
     if not record:
         st.caption("No backtest metrics available.")
+        return
+    if record.get("kind") == "statewide":
+        o = record["overall"]
+        lines = [
+            f"- **{esc(station_label(s))}**, {s['distance_km']:.0f} km away: “go” calls that held "
+            f"{held_with_ci(s)}, skill {with_ci(s, 'bss', 'num')} ({s['n']} nights)"
+            for s in record.get("near", [])
+        ]
+        st.markdown(
+            f"{esc(site_label)} has no weather station in SkyTrust's test, so it uses the version "
+            "of the model built for any place in California. Here is how that version did at the "
+            "weather stations nearest you, each scored as a place it had **never seen** (2026, "
+            f"lead {night.lead}):\n\n" + "\n".join(lines) + "\n\n"
+            f"Across all {record['n_stations']} stations: “go” calls that held {held_with_ci(o)}, "
+            f"skill vs the seasonal average {with_ci(o, 'bss', 'num')}."
+        )
         return
     if record.get("kind") == "unseen":
         o = record["overall"]

@@ -66,9 +66,11 @@ def test_predictions_and_scores_have_every_method(synthetic_built, fast_settings
     assert {"brier", "bss", "false_clear_rate", "brier_lo", "brier_hi"} <= set(m)
     assert set(result["stations"]) == {"SAC", "BIH"} and set(result["regions"]) == {"STO", "VEF"}
     paired = result["subsets"]["all"]["paired"]
-    assert {"statewide_minus_equal_weight", "statewide_minus_best_single", "loro_minus_loso"} <= set(
-        paired
-    )
+    assert {
+        "statewide_minus_equal_weight",
+        "statewide_minus_best_single",
+        "loro_minus_loso",
+    } <= set(paired)
 
 
 def test_evaluation_rows_need_every_member(synthetic_built, fast_settings):
@@ -85,3 +87,39 @@ def test_evaluation_rows_need_every_member(synthetic_built, fast_settings):
 def test_other_labels_score_too(synthetic_built, fast_settings, label):
     preds = statewide.predictions(synthetic_built[0], fast_settings, label, 1, REGIONS, loso=False)
     assert "statewide_loso" not in preds and preds["statewide_loro"].notna().all()
+
+
+def synthetic_result(df, settings) -> dict:
+    """A statewide.json in the shape `statewide.run` writes, from the synthetic dataset (one
+    lead, primary label) - for testing the readers without the real network."""
+    from skytrust import network
+
+    preds = statewide.predictions(df, settings, "primary", 1, REGIONS, loso=True)
+    stations = [s for s in network.load_network_table() if s["id"] in REGIONS]
+    return {
+        "stations": stations,
+        "region_names": network.REGION_NAMES,
+        "labels": {"primary": [{"lead": 1, **statewide.score(preds, settings, {"SAC"})}]},
+    }
+
+
+def test_place_record_lists_the_nearest_stations(synthetic_built, fast_settings, tmp_path):
+    import json
+
+    from skytrust import inference
+
+    path = tmp_path / "statewide.json"
+    result = synthetic_result(synthetic_built[0], fast_settings)
+    path.write_text(json.dumps(statewide.evaluate._clean(result)))
+    # Davis: 0.038° of latitude (4.2 km) and 0.2455° of longitude (21.4 km at 38.5°N) from
+    # Sacramento Executive, so 21.8 km; Bishop is ~300 km away
+    davis = (38.5449, -121.7405)
+    rec = inference.place_record(*davis, lead=1, path=path)
+    assert rec["kind"] == "statewide" and rec["n_stations"] == 2
+    assert [s["id"] for s in rec["near"]] == ["SAC", "BIH"]
+    assert rec["near"][0]["distance_km"] == pytest.approx(21.8, abs=0.2)
+    assert {"bss", "false_clear_rate", "n"} <= set(rec["near"][0])
+    # no statewide results yet: the five-airport leave-one-site-out record
+    assert inference.place_record(*davis, lead=1, path=tmp_path / "absent.json") == (
+        inference.unseen_site_record(1)
+    )

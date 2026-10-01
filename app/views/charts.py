@@ -716,3 +716,65 @@ def dome_polar(glow: dict, pal: dict, height: int = 360) -> go.Figure:
         showlegend=False,
     )
     return fig
+
+
+# ---------- statewide accuracy ----------
+
+# Dim to bright starlight gold: low skill recedes into the dark map, high skill stands out. One
+# hue with rising lightness reads the same for colour-blind viewers.
+SKILL_SCALE = [[0.0, "#4B4231"], [0.5, "#A88A4E"], [1.0, "#F6DFA6"]]
+
+
+def station_skill_map(
+    stations: pd.DataFrame, pal: dict, here: tuple[float, float, str] | None = None
+) -> go.Figure:
+    """Every network station coloured by forecast skill (BSS, scored as a never-seen place).
+
+    `stations` columns: lat, lon, label (hover text), bss."""
+    fig = go.Figure(
+        go.Scattermap(
+            lat=stations["lat"],
+            lon=stations["lon"],
+            mode="markers",
+            text=stations["label"],
+            hovertemplate="%{text}<extra></extra>",
+            marker={
+                "size": 13,
+                "color": stations["bss"].clip(0, 1),
+                "colorscale": SKILL_SCALE,
+                "cmin": 0,
+                "cmax": 1,
+                "opacity": 0.95,
+                "colorbar": {
+                    "title": {"text": "Skill", "font": {"size": 11}},
+                    "tickvals": [0, 0.5, 1],
+                    "ticktext": ["0 (season)", "0.5", "1 (perfect)"],
+                    "thickness": 10,
+                    "len": 0.5,
+                    "x": 0.98,
+                    "tickfont": {"size": 10},
+                },
+            },
+        )
+    )
+    if here is not None:
+        fig.add_trace(
+            go.Scattermap(
+                lat=[here[0]],
+                lon=[here[1]],
+                mode="markers+text",
+                text=[here[2]],
+                textposition="top right",
+                textfont={"color": "#E6E6EA", "size": 12, "family": MAP_FONT},
+                marker={"size": 11, "color": pal["accent"], "symbol": "circle"},
+                hovertemplate="%{text}<extra></extra>",
+            )
+        )
+    fig.update_layout(
+        map={"style": "carto-darkmatter", "center": {"lat": 37.2, "lon": -119.4}, "zoom": 4.6},
+        height=520,
+        margin={"l": 0, "r": 0, "t": 0, "b": 0},
+        paper_bgcolor=pal["paper"],
+        showlegend=False,
+    )
+    return fig

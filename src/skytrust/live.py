@@ -382,7 +382,7 @@ def _forecast_night(
     record = (
         track_record(ctx.metrics, ctx.site.id, lead, ctx.records)
         if ctx.variant == "primary"
-        else inference.unseen_site_record(lead)
+        else inference.place_record(ctx.site.lat, ctx.site.lon, lead)
     )
     ev = ctx.moon_events
     near = (ev["time_utc"] >= dusk - pd.Timedelta(hours=6)) & (

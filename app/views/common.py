@@ -186,6 +186,30 @@ def with_ci(d: dict | None, metric: str, kind: str = "pct") -> str:
     return f"{fmt(d[metric])} ({fmt(lo)}–{fmt(hi)})"
 
 
+def held_with_ci(d: dict | None) -> str:
+    """Share of "go" calls that held (1 - false-clear rate), with its 95% range."""
+    if not d or d.get("false_clear_rate") is None or pd.isna(d.get("false_clear_rate")):
+        return "–"
+    text = f"{1 - d['false_clear_rate']:.0%}"
+    lo, hi = d.get("false_clear_rate_lo"), d.get("false_clear_rate_hi")
+    if lo is None or pd.isna(lo):
+        return text
+    return f"{text} ({1 - hi:.0%}–{1 - lo:.0%})"
+
+
+def station_label(station: dict) -> str:
+    """'LAX, near El Segundo': the station code and the town it sits by (from the gazetteer)."""
+    from skytrust import gazetteer
+
+    gaz = gazetteer.load()
+    if gaz is None:
+        return f"{station['id']} weather station"
+    where = gaz.describe(station["lat"], station["lon"])  # "Near El Segundo" or "Bishop"
+    if where.startswith("Near "):
+        where = "near " + where[5:]
+    return f"{station['id']}, {where}"
+
+
 def day_label(night_date: dt.date, index: int, now_utc: pd.Timestamp | None, tz: str) -> str:
     """'Tonight', 'Tomorrow', or 'Fri'. Index 0 is always tonight (or the night in progress)."""
     if index == 0:

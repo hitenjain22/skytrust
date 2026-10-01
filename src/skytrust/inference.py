@@ -137,6 +137,7 @@ def load_forward_summary(url: str | None, local: Path | None = None) -> dict | N
 
 
 SPATIAL_PATH = ARTIFACTS / "spatial.json"
+STATEWIDE_PATH = ARTIFACTS / "statewide.json"
 
 
 def unseen_site_record(lead: int, path: Path = SPATIAL_PATH) -> dict | None:
@@ -148,3 +149,58 @@ def unseen_site_record(lead: int, path: Path = SPATIAL_PATH) -> dict | None:
     if entry is None:
         return None
     return {"overall": entry["methods"]["geo_unseen"], "site": None, "kind": "unseen"}
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: np.ndarray, lon2: np.ndarray) -> np.ndarray:
+    la1, la2 = np.radians(lat1), np.radians(lat2)
+    h = (
+        np.sin((la2 - la1) / 2) ** 2
+        + np.cos(la1) * np.cos(la2) * np.sin(np.radians(lon2 - lon1) / 2) ** 2
+    )
+    return 2 * 6371.0 * np.arcsin(np.sqrt(np.clip(h, 0, 1)))
+
+
+def place_record(
+    lat: float, lon: float, lead: int, n_near: int = 3, path: Path | None = None
+) -> dict | None:
+    """The honest track record for a place that isn't an evaluated airport: how the forecast for
+    new places did at the statewide network's stations, each scored as a place the model had
+    never seen (leave-one-region-out), the nearest ones first. Falls back to the five-airport
+    leave-one-site-out record when the statewide evaluation hasn't been run."""
+    path = path or STATEWIDE_PATH  # looked up at call time (tests point it elsewhere)
+    if not path.exists():
+        return unseen_site_record(lead)
+    result = json.loads(path.read_text())
+    method = result.get("shipped_method", "statewide_loro")
+    entry = next((e for e in result["labels"]["primary"] if e["lead"] == lead), None)
+    if entry is None:
+        return unseen_site_record(lead)
+    stations = result["stations"]
+    d = _haversine_km(
+        lat, lon, np.array([s["lat"] for s in stations]), np.array([s["lon"] for s in stations])
+    )
+    near = []
+    for i in np.argsort(d)[:n_near]:
+        s = stations[int(i)]
+        rec = entry["stations"].get(s["id"])
+        if rec is None or method not in rec["methods"]:
+            continue
+        near.append(
+            {
+                "id": s["id"],
+                "lat": s["lat"],
+                "lon": s["lon"],
+                "region": s["region"],
+                "distance_km": float(d[int(i)]),
+                "n": rec["n"],
+                **rec["methods"][method],
+            }
+        )
+    overall = entry["subsets"]["all"]["methods"][method]
+    return {
+        "overall": overall,
+        "site": None,
+        "near": near,
+        "n_stations": entry["subsets"]["all"]["n_stations"],
+        "kind": "statewide",
+    }
