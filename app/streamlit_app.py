@@ -23,10 +23,10 @@ except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from skytrust import inference, lightpollution, live  # noqa: E402
-from skytrust.config import load_settings, load_sites  # noqa: E402
+from skytrust.config import CONFIG_DIR, load_settings, load_sites  # noqa: E402
 from views import components as ui  # noqa: E402
 from views import methodology, outlook, theme, tonight, track_record, where  # noqa: E402
-from views.common import Context, footer, site_option_label  # noqa: E402
+from views.common import Context, fingerprint, footer, site_option_label  # noqa: E402
 
 log = logging.getLogger("skytrust.app")
 
@@ -47,9 +47,12 @@ SLUGS |= {
 DEFAULT_CUSTOM = {"lat": 37.7306, "lon": -119.5738, "name": "Glacier Point"}
 
 
+STATIC_FILES = (CONFIG_DIR / "settings.yaml", CONFIG_DIR / "sites.yaml", inference.METRICS_PATH)
+
+
 @st.cache_resource(show_spinner=False)
-def load_static():
-    """Settings, sites, and backtest metrics: read once per server process."""
+def _load_static(version: str):
+    """Settings, sites, and backtest metrics, cached per version of the files they come from."""
     settings = load_settings()
     sites = load_sites()
     try:
@@ -59,10 +62,18 @@ def load_static():
     return settings, sites, metrics
 
 
+def load_static():
+    return _load_static(fingerprint(*STATIC_FILES))
+
+
 @st.cache_resource(show_spinner=False)
-def load_light_pollution():
-    """The regional light-pollution grid (artifacts/light_pollution.npz): read once per server."""
+def _load_light_pollution(version: str):
     return lightpollution.load()
+
+
+def load_light_pollution():
+    """The regional light-pollution grid, re-read whenever the artifact changes."""
+    return _load_light_pollution(fingerprint(lightpollution.GRID_PATH))
 
 
 @st.cache_data(ttl=60 * 60, show_spinner="Reading the latest forecasts…")
@@ -226,8 +237,8 @@ def main() -> None:
     except Exception as exc:  # show a message instead of a stack trace
         log.exception("page %s failed", page)
         st.error(
-            f"Something went wrong drawing this page ({type(exc).__name__}). "
-            "Other pages should still work."
+            f"Something went wrong drawing this page ({type(exc).__name__}: {exc}). "
+            "Other pages should still work; reloading usually helps after an update."
         )
     footer()
 

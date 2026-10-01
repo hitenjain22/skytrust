@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -289,3 +290,18 @@ def conditions(night, light: dict | None, settings: Settings) -> list[tuple[str,
         f"{night.moon_free_hours} moon-free dark hour{'s' if night.moon_free_hours != 1 else ''}",
     )
     return [clear, dark, moon]
+
+
+def fingerprint(*paths: Path) -> str:
+    """Modification time and size of each file, as a cache key. Streamlit Cloud reloads the code
+    on a push without restarting the server, so anything cached per process must be keyed on
+    the files it was read from, or a new page can meet old data (that caused a KeyError on
+    Where to Go when the light-pollution settings were added)."""
+    parts = []
+    for p in paths:
+        try:
+            st_ = p.stat()
+            parts.append(f"{p.name}:{st_.st_mtime_ns}:{st_.st_size}")
+        except FileNotFoundError:
+            parts.append(f"{p.name}:missing")
+    return "|".join(parts)

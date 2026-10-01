@@ -143,3 +143,17 @@ def test_map_labels_for_neighbouring_sites_do_not_collide():
     positions = {t.text[0].split()[0]: t.textposition for t in fig.data}
     assert len(fig.data) == 3 and positions["Auburn"] != positions["Truckee"]
     assert fig.data[2].text[0].endswith("–")  # missing probability shown as a dash, not "nan%"
+
+
+def test_cache_fingerprint_changes_when_a_file_changes(tmp_path):
+    """Regression: Streamlit Cloud reloads code on a push without restarting, and a per-process
+    cache kept the old settings, so Where to Go raised KeyError('light_pollution')."""
+    import os
+
+    f = tmp_path / "settings.yaml"
+    f.write_text("a: 1\n")
+    before = common.fingerprint(f, tmp_path / "missing.json")
+    f.write_text("a: 1\nlight_pollution: {}\n")
+    os.utime(f, ns=(f.stat().st_atime_ns, f.stat().st_mtime_ns + 1_000_000))
+    after = common.fingerprint(f, tmp_path / "missing.json")
+    assert before != after and "missing.json:missing" in after
