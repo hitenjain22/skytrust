@@ -202,3 +202,17 @@ def test_dark_spots_on_the_local_map_do_not_pile_up_or_cover_the_site():
     assert df["lat"].tolist() == [39.21, 39.40]  # the darker of the close pair is the one kept
     assert df["position"].tolist() == ["bottom center", "top center"]  # south / north of the site
     assert where.label_side(39.32, -119.9, 39.32, -120.14) == "middle right"
+
+
+def test_map_labels_sit_beside_their_dots():
+    """Regression: map labels had no gap from their dot, which hid the end of 'Los Angeles'."""
+    from views import charts
+
+    assert charts.two_line_label("Los Angeles · city · 75%") == "Los Angeles<br>city · 75%"
+    assert charts.two_line_label("Davis") == "Davis"
+    lat, lon = charts.label_anchor(34.0, -118.0, "middle left", zoom=4.85, px=6)
+    assert lat == 34.0 and lon < -118.0
+    # 6 px at zoom 4.85 with 512-px tiles is 360 * 6 / (512 * 2**4.85) degrees of longitude
+    assert -118.0 - lon == pytest.approx(360 * 6 / (512 * 2**4.85))
+    lat, lon = charts.label_anchor(34.0, -118.0, "top center", zoom=4.85)
+    assert lat > 34.0 and lon == -118.0

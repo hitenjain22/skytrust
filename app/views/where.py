@@ -38,16 +38,34 @@ BAND_WORDS = {
 # ---------- tonight, every place ----------
 
 
+def ranked_sites(ctx: Context) -> list:
+    """The featured places, plus the chosen place when it isn't one of them (any town or ZIP
+    code typed in the menu), so people can see where their own sky stands."""
+    sites = list(ctx.sites)
+    if ctx.site.id not in {s.id for s in sites}:
+        sites.append(ctx.site)
+    return sites
+
+
+def _forecast(ctx: Context, site):
+    from skytrust import live
+
+    if live.is_custom(site):  # exact coordinates travel as lat/lon, not as an id
+        return ctx.forecast_for(live.CUSTOM_ID, site.lat, site.lon, site.name)
+    return ctx.forecast_for(site.id)
+
+
 def site_rows(ctx: Context) -> pd.DataFrame:
     rows = []
-    for site in ctx.sites:
-        forecast, _ = ctx.forecast_for(site.id)
+    for site in ranked_sites(ctx):
+        forecast, _ = _forecast(ctx, site)
         nights = upcoming(forecast, ctx.now_utc)
         sqm = ctx.sqm_at(site) if ctx.light is not None else None
         d = sky.darkness(sqm) if sqm is not None else None
         row = {
             "site": site.id,
             "place": place_name(site),
+            "yours": site.id == ctx.site.id,
             "area": place_detail(site),
             "lat": site.lat,
             "lon": site.lon,
@@ -122,7 +140,13 @@ def rank_row(i: int, r: pd.Series, pal: dict) -> str:
     return ui.row(
         [
             f'<div class="sk-rank">{i:02d}</div>',
-            f'<div class="sk-main"><div class="sk-row-title">{ui.esc(r["place"])}</div>'
+            f'<div class="sk-main"><div class="sk-row-title">{ui.esc(r["place"])}'
+            + (
+                ' <span class="sk-badge" style="--c:var(--sk-accent)">You</span>'
+                if r["yours"]
+                else ""
+            )
+            + "</div>"
             f'<div class="sk-row-sub">{ui.esc(r["area"])} · clearest {ui.esc(r["window"])}'
             "</div></div>",
             f'<div class="sk-grow">{ui.bar(p, color)}'
@@ -136,6 +160,16 @@ def rank_row(i: int, r: pd.Series, pal: dict) -> str:
 
 def marker_color(met: int, pal: dict) -> str:
     return pal["Go"] if met == 3 else pal["Maybe"] if met == 2 else pal["Skip"]
+
+
+def your_label_side(table: pd.DataFrame, r: pd.Series) -> str:
+    """The chosen place's label goes on the side away from the nearest other place, so the two
+    labels don't hide each other on the map."""
+    others = table[~table["yours"]]
+    d = lightpollution.haversine_km(r["lat"], r["lon"], others["lat"].to_numpy(),
+                                    others["lon"].to_numpy())  # fmt: skip
+    near = others.iloc[int(np.argmin(d))]
+    return label_side(r["lat"], r["lon"], near["lat"], near["lon"])
 
 
 def marker_label(r: pd.Series) -> str:
@@ -441,8 +475,16 @@ def render(ctx: Context) -> None:
                 "lat": table["lat"],
                 "lon": table["lon"],
                 "label": [marker_label(r) for _, r in table.iterrows()],
-                "color": [marker_color(m, pal) for m in table["met"]],
-                "position": [charts.LABEL_POSITIONS.get(s, "top right") for s in table["site"]],
+                "color": [
+                    pal["accent"] if y else marker_color(m, pal)
+                    for m, y in zip(table["met"], table["yours"], strict=True)
+                ],  # fmt: skip
+                "position": [
+                    your_label_side(table, r)
+                    if r["yours"]
+                    else charts.LABEL_POSITIONS.get(r["site"], "top right")
+                    for _, r in table.iterrows()
+                ],  # fmt: skip
             }
         )
         # whole state: San Francisco and Lake Tahoe to Joshua Tree and Los Angeles

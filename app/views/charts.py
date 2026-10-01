@@ -5,6 +5,8 @@ complaint about astronomy weather apps)."""
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -19,7 +21,7 @@ LABEL_POSITIONS = {  # chosen so neighbouring places' labels don't collide on th
     "yosemite": "middle right",
     "death-valley": "middle right",
     "santa-barbara": "bottom left",
-    "los-angeles": "bottom left",
+    "los-angeles": "middle left",
     "big-bear-lake": "top center",
     "joshua-tree": "middle right",
     "TRK": "top right",
@@ -571,6 +573,31 @@ GLOW_KEY = [
 ]
 
 
+def two_line_label(label: str) -> str:
+    """ "Name · tier · 75%" -> "Name" over "tier · 75%" (map labels otherwise wrap anywhere)."""
+    parts = label.split(" · ")
+    return parts[0] if len(parts) == 1 else parts[0] + "<br>" + " · ".join(parts[1:])
+
+
+def label_anchor(lat: float, lon: float, position: str, zoom: float, px: float = 6.0):
+    """A point `px` screen pixels from a marker on the side `position` names ("top left",
+    "middle right"...). Web Mercator with MapLibre's 512-pixel tiles: the world is 512·2^zoom
+    pixels wide, and a degree of
+    latitude covers 1/cos(lat) times more pixels than a degree of longitude."""
+    deg = px * 360.0 / (512.0 * 2**zoom)
+    vertical, horizontal = (position.split() + ["center"])[:2]
+    up = 1.7 * deg * math.cos(math.radians(lat))  # a little more room above/below the dot
+    if vertical == "top":
+        lat += up
+    elif vertical == "bottom":
+        lat -= up
+    if horizontal == "right":
+        lon += deg
+    elif horizontal == "left":
+        lon -= deg
+    return lat, lon
+
+
 def light_map(
     grid,
     overlay_png: bytes,
@@ -610,16 +637,32 @@ def light_map(
             )
         )
     for _, r in markers.iterrows():
+        text = two_line_label(r["label"])
         fig.add_trace(
             go.Scattermap(
                 lat=[r["lat"]],
                 lon=[r["lon"]],
-                mode="markers+text",
-                text=[r["label"]],
-                textposition=r["position"],
-                textfont={"color": "#E6E6EA", "size": 12, "family": MAP_FONT},
+                mode="markers",
+                text=[text],
                 marker={"size": 13, "color": r["color"], "opacity": 0.95},
                 hovertemplate="%{text}<extra></extra>",
+            )
+        )
+        # The label is drawn from a point nudged away from the dot: map labels get no gap of
+        # their own, so the dot covered the end of "Los Angeles". (The map engine trims spaces,
+        # so padding the text doesn't work; a text-only trace isn't drawn, hence the invisible
+        # marker.)
+        lat, lon = label_anchor(r["lat"], r["lon"], r["position"], zoom)
+        fig.add_trace(
+            go.Scattermap(
+                lat=[lat],
+                lon=[lon],
+                mode="markers+text",
+                text=[text],
+                textposition=r["position"],
+                textfont={"color": "#E6E6EA", "size": 12, "family": MAP_FONT},
+                marker={"size": 1, "opacity": 0},
+                hoverinfo="skip",
             )
         )
     fig.update_layout(
