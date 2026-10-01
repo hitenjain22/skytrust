@@ -110,9 +110,13 @@ def place_name(site: Site) -> str:
 
 
 def place_detail(site: Site) -> str:
-    """Region and elevation (from config/places.yaml), or coordinates for a custom spot."""
+    """Region (or county) and elevation, or coordinates for a custom spot. Elevation is left
+    out when it isn't known (a missing value must never print as "nan m")."""
     if site.terrain_class and site.terrain_class != "custom":
-        return f"{site.terrain_class} · {site.elevation_m:,.0f} m"
+        elev = site.elevation_m
+        if elev is None or pd.isna(elev):
+            return site.terrain_class
+        return f"{site.terrain_class} · {elev:,.0f} m"
     return f"{site.lat:.3f}, {site.lon:.3f}"
 
 
