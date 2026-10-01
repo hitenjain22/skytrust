@@ -1,0 +1,864 @@
+{
+ "source": "NASA/JPL Horizons API (https://ssd.jpl.nasa.gov/api/horizons.api), retrieved 2026-10-01",
+ "query": "EPHEM_TYPE=OBSERVER, CENTER=500@399 (geocentre), QUANTITIES=2, ANG_FORMAT=DEG, EXTRA_PREC=YES",
+ "frame": "airless apparent RA/Dec of the target centre, true equator and equinox of date (Horizons ephemeris DE441)",
+ "bodies": {
+  "199": {
+   "skyfield_key": "mercury",
+   "rows": [
+    {
+     "utc": "2026-10-02T04:00:00Z",
+     "ra_deg": 209.359149482,
+     "dec_deg": -14.009840149
+    },
+    {
+     "utc": "2026-10-02T05:00:00Z",
+     "ra_deg": 209.409721071,
+     "dec_deg": -14.033167278
+    }
+   ]
+  },
+  "299": {
+   "skyfield_key": "venus",
+   "rows": [
+    {
+     "utc": "2026-10-02T04:00:00Z",
+     "ra_deg": 213.62830686,
+     "dec_deg": -21.090915351
+    },
+    {
+     "utc": "2026-10-02T05:00:00Z",
+     "ra_deg": 213.628880986,
+     "dec_deg": -21.094706957
+    }
+   ]
+  },
+  "499": {
+   "skyfield_key": "mars",
+   "rows": [
+    {
+     "utc": "2026-10-02T04:00:00Z",
+     "ra_deg": 124.887189154,
+     "dec_deg": 20.639447069
+    },
+    {
+     "utc": "2026-10-02T05:00:00Z",
+     "ra_deg": 124.912528524,
+     "dec_deg": 20.634643146
+    }
+   ]
+  },
+  "599": {
+   "skyfield_key": "jupiter barycenter",
+   "rows": [
+    {
+     "utc": "2026-10-02T04:00:00Z",
+     "ra_deg": 142.407215888,
+     "dec_deg": 15.446376141
+    },
+    {
+     "utc": "2026-10-02T05:00:00Z",
+     "ra_deg": 142.414530701,
+     "dec_deg": 15.444149778
+    }
+   ]
+  },
+  "699": {
+   "skyfield_key": "saturn barycenter",
+   "rows": [
+    {
+     "utc": "2026-10-02T04:00:00Z",
+     "ra_deg": 11.622488693,
+     "dec_deg": 2.045858811
+    },
+    {
+     "utc": "2026-10-02T05:00:00Z",
+     "ra_deg": 11.619487589,
+     "dec_deg": 2.044564769
+    }
+   ]
+  },
+  "799": {
+   "skyfield_key": "uranus barycenter",
+   "rows": [
+    {
+     "utc": "2026-10-02T04:00:00Z",
+     "ra_deg": 63.621284326,
+     "dec_deg": 21.06975846
+    },
+    {
+     "utc": "2026-10-02T05:00:00Z",
+     "ra_deg": 63.620512325,
+     "dec_deg": 21.069630593
+    }
+   ]
+  },
+  "301": {
+   "skyfield_key": "moon",
+   "rows": [
+    {
+     "utc": "2026-10-02T04:00:00Z",
+     "ra_deg": 79.347360328,
+     "dec_deg": 27.901186215
+    },
+    {
+     "utc": "2026-10-02T05:00:00Z",
+     "ra_deg": 80.017283571,
+     "dec_deg": 27.923767463
+    }
+   ]
+  }
+ },
+ "moon_from_los_angeles": {
+  "site": "geodetic lon -118.2437, lat 34.0522, 96 m (CENTER=coord@399)",
+  "quantities": "2 (airless apparent RA/Dec), 4 (airless apparent azimuth/elevation)",
+  "rows": [
+   {
+    "utc": "2026-10-02T04:00:00Z",
+    "ra_deg": 80.084643722,
+    "dec_deg": 27.185140874,
+    "az_deg": 46.034169301,
+    "alt_deg": -11.079033974
+   },
+   {
+    "utc": "2026-10-02T07:00:00Z",
+    "ra_deg": 82.282445624,
+    "dec_deg": 27.509909116,
+    "az_deg": 69.211104856,
+    "alt_deg": 19.205960942
+   },
+   {
+    "utc": "2026-10-02T10:00:00Z",
+    "ra_deg": 83.979686528,
+    "dec_deg": 27.790338606,
+    "az_deg": 88.728477587,
+    "alt_deg": 54.444385494
+   }
+  ]
+ },
+ "moon_phase_2026": {
+  "query": "CENTER=500@399, QUANTITIES=10 (illuminated fraction, %), 24 (Sun-Target-Observer angle = phase angle), STEP_SIZE=61h",
+  "rows": [
+   {
+    "utc": "2026-01-01T00:00:00Z",
+    "illuminated_pct": 91.39877,
+    "phase_angle_deg": 34.104
+   },
+   {
+    "utc": "2026-01-03T13:00:00Z",
+    "illuminated_pct": 99.84497,
+    "phase_angle_deg": 4.5152
+   },
+   {
+    "utc": "2026-01-06T02:00:00Z",
+    "illuminated_pct": 90.62602,
+    "phase_angle_deg": 35.6618
+   },
+   {
+    "utc": "2026-01-08T15:00:00Z",
+    "illuminated_pct": 69.7536,
+    "phase_angle_deg": 66.7318
+   },
+   {
+    "utc": "2026-01-11T04:00:00Z",
+    "illuminated_pct": 45.2544,
+    "phase_angle_deg": 95.4457
+   },
+   {
+    "utc": "2026-01-13T17:00:00Z",
+    "illuminated_pct": 22.78868,
+    "phase_angle_deg": 122.9687
+   },
+   {
+    "utc": "2026-01-16T06:00:00Z",
+    "illuminated_pct": 6.46832,
+    "phase_angle_deg": 150.5274
+   },
+   {
+    "utc": "2026-01-18T19:00:00Z",
+    "illuminated_pct": 0.08964,
+    "phase_angle_deg": 176.5679
+   },
+   {
+    "utc": "2026-01-21T08:00:00Z",
+    "illuminated_pct": 6.45586,
+    "phase_angle_deg": 150.5664
+   },
+   {
+    "utc": "2026-01-23T21:00:00Z",
+    "illuminated_pct": 25.4026,
+    "phase_angle_deg": 119.4715
+   },
+   {
+    "utc": "2026-01-26T10:00:00Z",
+    "illuminated_pct": 52.58729,
+    "phase_angle_deg": 87.0335
+   },
+   {
+    "utc": "2026-01-28T23:00:00Z",
+    "illuminated_pct": 79.82597,
+    "phase_angle_deg": 53.3755
+   },
+   {
+    "utc": "2026-01-31T12:00:00Z",
+    "illuminated_pct": 97.21005,
+    "phase_angle_deg": 19.2252
+   },
+   {
+    "utc": "2026-02-03T01:00:00Z",
+    "illuminated_pct": 98.41913,
+    "phase_angle_deg": 14.4517
+   },
+   {
+    "utc": "2026-02-05T14:00:00Z",
+    "illuminated_pct": 85.02271,
+    "phase_angle_deg": 45.5405
+   },
+   {
+    "utc": "2026-02-08T03:00:00Z",
+    "illuminated_pct": 63.38072,
+    "phase_angle_deg": 74.4791
+   },
+   {
+    "utc": "2026-02-10T16:00:00Z",
+    "illuminated_pct": 39.48093,
+    "phase_angle_deg": 102.1434
+   },
+   {
+    "utc": "2026-02-13T05:00:00Z",
+    "illuminated_pct": 17.9329,
+    "phase_angle_deg": 129.8882
+   },
+   {
+    "utc": "2026-02-15T18:00:00Z",
+    "illuminated_pct": 3.35871,
+    "phase_angle_deg": 158.8743
+   },
+   {
+    "utc": "2026-02-18T07:00:00Z",
+    "illuminated_pct": 0.71866,
+    "phase_angle_deg": 170.2796
+   },
+   {
+    "utc": "2026-02-20T20:00:00Z",
+    "illuminated_pct": 12.83925,
+    "phase_angle_deg": 138.0102
+   },
+   {
+    "utc": "2026-02-23T09:00:00Z",
+    "illuminated_pct": 37.16115,
+    "phase_angle_deg": 104.8803
+   },
+   {
+    "utc": "2026-02-25T22:00:00Z",
+    "illuminated_pct": 65.8687,
+    "phase_angle_deg": 71.4939
+   },
+   {
+    "utc": "2026-02-28T11:00:00Z",
+    "illuminated_pct": 89.2346,
+    "phase_angle_deg": 38.3033
+   },
+   {
+    "utc": "2026-03-03T00:00:00Z",
+    "illuminated_pct": 99.7277,
+    "phase_angle_deg": 5.9767
+   },
+   {
+    "utc": "2026-03-05T13:00:00Z",
+    "illuminated_pct": 95.40036,
+    "phase_angle_deg": 24.7737
+   },
+   {
+    "utc": "2026-03-08T02:00:00Z",
+    "illuminated_pct": 79.60565,
+    "phase_angle_deg": 53.6962
+   },
+   {
+    "utc": "2026-03-10T15:00:00Z",
+    "illuminated_pct": 57.4531,
+    "phase_angle_deg": 81.4282
+   },
+   {
+    "utc": "2026-03-13T04:00:00Z",
+    "illuminated_pct": 33.56616,
+    "phase_angle_deg": 109.1865
+   },
+   {
+    "utc": "2026-03-15T17:00:00Z",
+    "illuminated_pct": 12.66266,
+    "phase_angle_deg": 138.305
+   },
+   {
+    "utc": "2026-03-18T06:00:00Z",
+    "illuminated_pct": 0.82551,
+    "phase_angle_deg": 169.5685
+   },
+   {
+    "utc": "2026-03-20T19:00:00Z",
+    "illuminated_pct": 4.04579,
+    "phase_angle_deg": 156.7977
+   },
+   {
+    "utc": "2026-03-23T08:00:00Z",
+    "illuminated_pct": 23.05058,
+    "phase_angle_deg": 122.6178
+   },
+   {
+    "utc": "2026-03-25T21:00:00Z",
+    "illuminated_pct": 50.93343,
+    "phase_angle_deg": 88.9301
+   },
+   {
+    "utc": "2026-03-28T10:00:00Z",
+    "illuminated_pct": 77.67911,
+    "phase_angle_deg": 56.3837
+   },
+   {
+    "utc": "2026-03-30T23:00:00Z",
+    "illuminated_pct": 95.25214,
+    "phase_angle_deg": 25.1658
+   },
+   {
+    "utc": "2026-04-02T12:00:00Z",
+    "illuminated_pct": 99.75141,
+    "phase_angle_deg": 5.7204
+   },
+   {
+    "utc": "2026-04-05T01:00:00Z",
+    "illuminated_pct": 91.60755,
+    "phase_angle_deg": 33.6843
+   },
+   {
+    "utc": "2026-04-07T14:00:00Z",
+    "illuminated_pct": 74.00633,
+    "phase_angle_deg": 61.309
+   },
+   {
+    "utc": "2026-04-10T03:00:00Z",
+    "illuminated_pct": 50.8825,
+    "phase_angle_deg": 88.9887
+   },
+   {
+    "utc": "2026-04-12T16:00:00Z",
+    "illuminated_pct": 26.53333,
+    "phase_angle_deg": 117.9883
+   },
+   {
+    "utc": "2026-04-15T05:00:00Z",
+    "illuminated_pct": 6.96978,
+    "phase_angle_deg": 149.3796
+   },
+   {
+    "utc": "2026-04-17T18:00:00Z",
+    "illuminated_pct": 0.22363,
+    "phase_angle_deg": 174.5827
+   },
+   {
+    "utc": "2026-04-20T07:00:00Z",
+    "illuminated_pct": 11.30142,
+    "phase_angle_deg": 140.7162
+   },
+   {
+    "utc": "2026-04-22T20:00:00Z",
+    "illuminated_pct": 35.92264,
+    "phase_angle_deg": 106.3541
+   },
+   {
+    "utc": "2026-04-25T09:00:00Z",
+    "illuminated_pct": 63.85561,
+    "phase_angle_deg": 73.9104
+   },
+   {
+    "utc": "2026-04-27T22:00:00Z",
+    "illuminated_pct": 86.33049,
+    "phase_angle_deg": 43.3929
+   },
+   {
+    "utc": "2026-04-30T11:00:00Z",
+    "illuminated_pct": 98.36817,
+    "phase_angle_deg": 14.6731
+   },
+   {
+    "utc": "2026-05-03T00:00:00Z",
+    "illuminated_pct": 98.31337,
+    "phase_angle_deg": 14.9293
+   },
+   {
+    "utc": "2026-05-05T13:00:00Z",
+    "illuminated_pct": 87.13065,
+    "phase_angle_deg": 42.0496
+   },
+   {
+    "utc": "2026-05-08T02:00:00Z",
+    "illuminated_pct": 67.39739,
+    "phase_angle_deg": 69.64
+   },
+   {
+    "utc": "2026-05-10T15:00:00Z",
+    "illuminated_pct": 42.6282,
+    "phase_angle_deg": 98.4774
+   },
+   {
+    "utc": "2026-05-13T04:00:00Z",
+    "illuminated_pct": 18.06102,
+    "phase_angle_deg": 129.6972
+   },
+   {
+    "utc": "2026-05-15T17:00:00Z",
+    "illuminated_pct": 2.072,
+    "phase_angle_deg": 163.4425
+   },
+   {
+    "utc": "2026-05-18T06:00:00Z",
+    "illuminated_pct": 3.26626,
+    "phase_angle_deg": 159.1808
+   },
+   {
+    "utc": "2026-05-20T19:00:00Z",
+    "illuminated_pct": 21.8554,
+    "phase_angle_deg": 124.2591
+   },
+   {
+    "utc": "2026-05-23T08:00:00Z",
+    "illuminated_pct": 48.69733,
+    "phase_angle_deg": 91.493
+   },
+   {
+    "utc": "2026-05-25T21:00:00Z",
+    "illuminated_pct": 74.09062,
+    "phase_angle_deg": 61.1934
+   },
+   {
+    "utc": "2026-05-28T10:00:00Z",
+    "illuminated_pct": 92.08856,
+    "phase_angle_deg": 32.6677
+   },
+   {
+    "utc": "2026-05-30T23:00:00Z",
+    "illuminated_pct": 99.66201,
+    "phase_angle_deg": 6.6621
+   },
+   {
+    "utc": "2026-06-02T12:00:00Z",
+    "illuminated_pct": 95.81745,
+    "phase_angle_deg": 23.607
+   },
+   {
+    "utc": "2026-06-05T01:00:00Z",
+    "illuminated_pct": 81.36863,
+    "phase_angle_deg": 51.1469
+   },
+   {
+    "utc": "2026-06-07T14:00:00Z",
+    "illuminated_pct": 58.70486,
+    "phase_angle_deg": 79.9748
+   },
+   {
+    "utc": "2026-06-10T03:00:00Z",
+    "illuminated_pct": 32.10891,
+    "phase_angle_deg": 110.9644
+   },
+   {
+    "utc": "2026-06-12T16:00:00Z",
+    "illuminated_pct": 9.1816,
+    "phase_angle_deg": 144.7183
+   },
+   {
+    "utc": "2026-06-15T05:00:00Z",
+    "illuminated_pct": 0.17641,
+    "phase_angle_deg": 175.1871
+   },
+   {
+    "utc": "2026-06-17T18:00:00Z",
+    "illuminated_pct": 10.17734,
+    "phase_angle_deg": 142.7972
+   },
+   {
+    "utc": "2026-06-20T07:00:00Z",
+    "illuminated_pct": 33.25369,
+    "phase_angle_deg": 109.5699
+   },
+   {
+    "utc": "2026-06-22T20:00:00Z",
+    "illuminated_pct": 59.43697,
+    "phase_angle_deg": 79.1197
+   },
+   {
+    "utc": "2026-06-25T09:00:00Z",
+    "illuminated_pct": 81.69684,
+    "phase_angle_deg": 50.6553
+   },
+   {
+    "utc": "2026-06-27T22:00:00Z",
+    "illuminated_pct": 95.95929,
+    "phase_angle_deg": 23.1876
+   },
+   {
+    "utc": "2026-06-30T11:00:00Z",
+    "illuminated_pct": 99.70133,
+    "phase_angle_deg": 6.2701
+   },
+   {
+    "utc": "2026-07-03T00:00:00Z",
+    "illuminated_pct": 91.83953,
+    "phase_angle_deg": 33.2019
+   },
+   {
+    "utc": "2026-07-05T13:00:00Z",
+    "illuminated_pct": 73.23221,
+    "phase_angle_deg": 62.3154
+   },
+   {
+    "utc": "2026-07-08T02:00:00Z",
+    "illuminated_pct": 47.14501,
+    "phase_angle_deg": 93.273
+   },
+   {
+    "utc": "2026-07-10T15:00:00Z",
+    "illuminated_pct": 20.16442,
+    "phase_angle_deg": 126.6314
+   },
+   {
+    "utc": "2026-07-13T04:00:00Z",
+    "illuminated_pct": 2.46364,
+    "phase_angle_deg": 161.9339
+   },
+   {
+    "utc": "2026-07-15T17:00:00Z",
+    "illuminated_pct": 2.50925,
+    "phase_angle_deg": 161.7765
+   },
+   {
+    "utc": "2026-07-18T06:00:00Z",
+    "illuminated_pct": 19.01846,
+    "phase_angle_deg": 128.2927
+   },
+   {
+    "utc": "2026-07-20T19:00:00Z",
+    "illuminated_pct": 43.43017,
+    "phase_angle_deg": 97.5511
+   },
+   {
+    "utc": "2026-07-23T08:00:00Z",
+    "illuminated_pct": 67.93224,
+    "phase_angle_deg": 68.9811
+   },
+   {
+    "utc": "2026-07-25T21:00:00Z",
+    "illuminated_pct": 87.53146,
+    "phase_angle_deg": 41.3509
+   },
+   {
+    "utc": "2026-07-28T10:00:00Z",
+    "illuminated_pct": 98.58764,
+    "phase_angle_deg": 13.6454
+   },
+   {
+    "utc": "2026-07-30T23:00:00Z",
+    "illuminated_pct": 98.22833,
+    "phase_angle_deg": 15.3034
+   },
+   {
+    "utc": "2026-08-02T12:00:00Z",
+    "illuminated_pct": 85.32447,
+    "phase_angle_deg": 45.054
+   },
+   {
+    "utc": "2026-08-05T01:00:00Z",
+    "illuminated_pct": 61.80588,
+    "phase_angle_deg": 76.3438
+   },
+   {
+    "utc": "2026-08-07T14:00:00Z",
+    "illuminated_pct": 33.40126,
+    "phase_angle_deg": 109.3869
+   },
+   {
+    "utc": "2026-08-10T03:00:00Z",
+    "illuminated_pct": 9.54305,
+    "phase_angle_deg": 144.0074
+   },
+   {
+    "utc": "2026-08-12T16:00:00Z",
+    "illuminated_pct": 0.01361,
+    "phase_angle_deg": 178.6592
+   },
+   {
+    "utc": "2026-08-15T05:00:00Z",
+    "illuminated_pct": 7.82674,
+    "phase_angle_deg": 147.5126
+   },
+   {
+    "utc": "2026-08-17T18:00:00Z",
+    "illuminated_pct": 27.6056,
+    "phase_angle_deg": 116.6108
+   },
+   {
+    "utc": "2026-08-20T07:00:00Z",
+    "illuminated_pct": 51.82625,
+    "phase_angle_deg": 87.9067
+   },
+   {
+    "utc": "2026-08-22T20:00:00Z",
+    "illuminated_pct": 74.84207,
+    "phase_angle_deg": 60.206
+   },
+   {
+    "utc": "2026-08-25T09:00:00Z",
+    "illuminated_pct": 92.29563,
+    "phase_angle_deg": 32.2254
+   },
+   {
+    "utc": "2026-08-27T22:00:00Z",
+    "illuminated_pct": 99.92702,
+    "phase_angle_deg": 3.0905
+   },
+   {
+    "utc": "2026-08-30T11:00:00Z",
+    "illuminated_pct": 94.30707,
+    "phase_angle_deg": 27.6127
+   },
+   {
+    "utc": "2026-09-02T00:00:00Z",
+    "illuminated_pct": 75.29152,
+    "phase_angle_deg": 59.6164
+   },
+   {
+    "utc": "2026-09-04T13:00:00Z",
+    "illuminated_pct": 47.65884,
+    "phase_angle_deg": 92.6836
+   },
+   {
+    "utc": "2026-09-07T02:00:00Z",
+    "illuminated_pct": 20.26119,
+    "phase_angle_deg": 126.4934
+   },
+   {
+    "utc": "2026-09-09T15:00:00Z",
+    "illuminated_pct": 2.92122,
+    "phase_angle_deg": 160.3126
+   },
+   {
+    "utc": "2026-09-12T04:00:00Z",
+    "illuminated_pct": 1.32748,
+    "phase_angle_deg": 166.7732
+   },
+   {
+    "utc": "2026-09-14T17:00:00Z",
+    "illuminated_pct": 13.94063,
+    "phase_angle_deg": 136.1567
+   },
+   {
+    "utc": "2026-09-17T06:00:00Z",
+    "illuminated_pct": 34.99992,
+    "phase_angle_deg": 107.4595
+   },
+   {
+    "utc": "2026-09-19T19:00:00Z",
+    "illuminated_pct": 58.87654,
+    "phase_angle_deg": 79.7731
+   },
+   {
+    "utc": "2026-09-22T08:00:00Z",
+    "illuminated_pct": 80.93432,
+    "phase_angle_deg": 51.7763
+   },
+   {
+    "utc": "2026-09-24T21:00:00Z",
+    "illuminated_pct": 96.23429,
+    "phase_angle_deg": 22.3738
+   },
+   {
+    "utc": "2026-09-27T10:00:00Z",
+    "illuminated_pct": 99.28142,
+    "phase_angle_deg": 9.7307
+   },
+   {
+    "utc": "2026-09-29T23:00:00Z",
+    "illuminated_pct": 86.93179,
+    "phase_angle_deg": 42.3889
+   },
+   {
+    "utc": "2026-10-02T12:00:00Z",
+    "illuminated_pct": 62.17258,
+    "phase_angle_deg": 75.9111
+   },
+   {
+    "utc": "2026-10-05T01:00:00Z",
+    "illuminated_pct": 33.51046,
+    "phase_angle_deg": 109.2543
+   },
+   {
+    "utc": "2026-10-07T14:00:00Z",
+    "illuminated_pct": 10.64262,
+    "phase_angle_deg": 141.9153
+   },
+   {
+    "utc": "2026-10-10T03:00:00Z",
+    "illuminated_pct": 0.40636,
+    "phase_angle_deg": 172.6853
+   },
+   {
+    "utc": "2026-10-12T16:00:00Z",
+    "illuminated_pct": 4.39136,
+    "phase_angle_deg": 155.8125
+   },
+   {
+    "utc": "2026-10-15T05:00:00Z",
+    "illuminated_pct": 19.59975,
+    "phase_angle_deg": 127.4489
+   },
+   {
+    "utc": "2026-10-17T18:00:00Z",
+    "illuminated_pct": 41.41651,
+    "phase_angle_deg": 99.886
+   },
+   {
+    "utc": "2026-10-20T07:00:00Z",
+    "illuminated_pct": 65.43186,
+    "phase_angle_deg": 72.0212
+   },
+   {
+    "utc": "2026-10-22T20:00:00Z",
+    "illuminated_pct": 86.8115,
+    "phase_angle_deg": 42.5846
+   },
+   {
+    "utc": "2026-10-25T09:00:00Z",
+    "illuminated_pct": 99.02619,
+    "phase_angle_deg": 11.3213
+   },
+   {
+    "utc": "2026-10-27T22:00:00Z",
+    "illuminated_pct": 95.64797,
+    "phase_angle_deg": 24.0876
+   },
+   {
+    "utc": "2026-10-30T11:00:00Z",
+    "illuminated_pct": 76.25988,
+    "phase_angle_deg": 58.3215
+   },
+   {
+    "utc": "2026-11-02T00:00:00Z",
+    "illuminated_pct": 48.47391,
+    "phase_angle_deg": 91.7489
+   },
+   {
+    "utc": "2026-11-04T13:00:00Z",
+    "illuminated_pct": 22.27453,
+    "phase_angle_deg": 123.6738
+   },
+   {
+    "utc": "2026-11-07T02:00:00Z",
+    "illuminated_pct": 5.04885,
+    "phase_angle_deg": 154.0249
+   },
+   {
+    "utc": "2026-11-09T15:00:00Z",
+    "illuminated_pct": 0.29821,
+    "phase_angle_deg": 173.7426
+   },
+   {
+    "utc": "2026-11-12T04:00:00Z",
+    "illuminated_pct": 7.79619,
+    "phase_angle_deg": 147.5779
+   },
+   {
+    "utc": "2026-11-14T17:00:00Z",
+    "illuminated_pct": 24.8259,
+    "phase_angle_deg": 120.2336
+   },
+   {
+    "utc": "2026-11-17T06:00:00Z",
+    "illuminated_pct": 47.78621,
+    "phase_angle_deg": 92.538
+   },
+   {
+    "utc": "2026-11-19T19:00:00Z",
+    "illuminated_pct": 72.46367,
+    "phase_angle_deg": 63.3004
+   },
+   {
+    "utc": "2026-11-22T08:00:00Z",
+    "illuminated_pct": 92.6181,
+    "phase_angle_deg": 31.5257
+   },
+   {
+    "utc": "2026-11-24T21:00:00Z",
+    "illuminated_pct": 99.72192,
+    "phase_angle_deg": 6.049
+   },
+   {
+    "utc": "2026-11-27T10:00:00Z",
+    "illuminated_pct": 88.68834,
+    "phase_angle_deg": 39.3111
+   },
+   {
+    "utc": "2026-11-29T23:00:00Z",
+    "illuminated_pct": 64.34164,
+    "phase_angle_deg": 73.3333
+   },
+   {
+    "utc": "2026-12-02T12:00:00Z",
+    "illuminated_pct": 36.94356,
+    "phase_angle_deg": 105.1356
+   },
+   {
+    "utc": "2026-12-05T01:00:00Z",
+    "illuminated_pct": 14.67194,
+    "phase_angle_deg": 134.9518
+   },
+   {
+    "utc": "2026-12-07T14:00:00Z",
+    "illuminated_pct": 2.13725,
+    "phase_angle_deg": 163.182
+   },
+   {
+    "utc": "2026-12-10T03:00:00Z",
+    "illuminated_pct": 1.19772,
+    "phase_angle_deg": 167.4392
+   },
+   {
+    "utc": "2026-12-12T16:00:00Z",
+    "illuminated_pct": 11.3972,
+    "phase_angle_deg": 140.5434
+   },
+   {
+    "utc": "2026-12-15T05:00:00Z",
+    "illuminated_pct": 30.56737,
+    "phase_angle_deg": 112.873
+   },
+   {
+    "utc": "2026-12-17T18:00:00Z",
+    "illuminated_pct": 55.37247,
+    "phase_angle_deg": 83.8311
+   },
+   {
+    "utc": "2026-12-20T07:00:00Z",
+    "illuminated_pct": 80.56813,
+    "phase_angle_deg": 52.3084
+   },
+   {
+    "utc": "2026-12-22T20:00:00Z",
+    "illuminated_pct": 97.53455,
+    "phase_angle_deg": 18.0624
+   },
+   {
+    "utc": "2026-12-25T09:00:00Z",
+    "illuminated_pct": 97.31893,
+    "phase_angle_deg": 18.8535
+   },
+   {
+    "utc": "2026-12-27T22:00:00Z",
+    "illuminated_pct": 79.67212,
+    "phase_angle_deg": 53.6018
+   },
+   {
+    "utc": "2026-12-30T11:00:00Z",
+    "illuminated_pct": 53.63459,
+    "phase_angle_deg": 85.8318
+   }
+  ]
+ }
+}
