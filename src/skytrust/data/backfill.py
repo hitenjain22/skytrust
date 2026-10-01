@@ -51,7 +51,10 @@ def fetch_source(
     last_night: dt.date,
     today: dt.date,
     refresh: bool = False,
+    members_only: bool = False,
 ) -> FetchSummary:
+    """`members_only` skips the benchmark models (NBM) for Previous Runs: the statewide network
+    only needs the blend's members."""
     if source not in SOURCES:
         raise ValueError(f"unknown source {source!r}")
     summary = FetchSummary(source, first_night, last_night)
@@ -78,7 +81,7 @@ def fetch_source(
                     today=today,
                 )
             else:
-                for model in settings.forecast_models:
+                for model in settings.models if members_only else settings.forecast_models:
                     openmeteo.fetch_prevruns(
                         client, settings, site, model, first_night, next_day, refresh, today=today
                     )

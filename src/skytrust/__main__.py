@@ -38,21 +38,68 @@ def cmd_validate_sites(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_network_select(args: argparse.Namespace) -> int:
+    from skytrust import network
+    from skytrust.data import iem
+
+    settings = load_settings()
+    cfg = settings.raw["network"]
+    client = HttpClient(settings.http)
+    src = settings.sources
+    payload = iem.fetch_network(client, src["iem_network_url"], src["iem_network"])
+    stations = network.stations_from_geojson(payload)
+    by_id = {s.id: s for s in stations}
+    airports_ids = {s.id for s in load_sites()}
+    seeds = [by_id[sid] for sid in sorted(airports_ids)]
+    seeds += [by_id[sid] for sid in cfg.get("metro_seeds", []) if sid not in {s.id for s in seeds}]
+    pool = network.candidates(stations, cfg, settings.history_start)
+    quota = network.quotas(stations, cfg)
+    passes = network.CoverageCheck(client, settings, settings.raw["split"]["test_end"])
+    seeds = [s for s in seeds if s.id in airports_ids or passes(s)]
+    chosen = network.select(pool, seeds, quota, cfg["km_per_m"], passes)
+    airports = {s.id for s in load_sites()}
+    path = network.write_network_yaml(
+        chosen,
+        airports,
+        passes.results,
+        quota,
+    )
+    print(f"Quotas per NWS region: {quota}")
+    for s in chosen:
+        cov = passes.results.get(s.id)
+        tag = "evaluated airport" if s.id in airports else f"coverage {cov:.1%}"
+        print(f"  {s.region}  {s.id:<4} {s.name:<32} {s.elevation_m:>6.0f} m  {tag}")
+    print(f"Wrote {path} ({len(chosen)} stations)")
+    return 0
+
+
 def cmd_fetch(args: argparse.Namespace) -> int:
+    import dataclasses
+
     from skytrust.data.backfill import default_last_night, fetch_source
 
     settings = load_settings()
-    sites = load_sites()
+    http = settings.http
+    if args.network:
+        from skytrust import network
+
+        sites = network.load_network()
+        http = dataclasses.replace(http, polite_delay_s=settings.raw["network"]["polite_delay_s"])
+    else:
+        sites = load_sites()
     if args.site:
         sites = tuple(s for s in sites if s.id == args.site.upper())
         if not sites:
-            print(f"Unknown site {args.site!r}; see config/sites.yaml")
+            print(f"Unknown site {args.site!r}; see config/sites.yaml (or network.yaml)")
             return 2
     today = dt.datetime.now(dt.UTC).date()
     first = args.start or settings.history_start
     last = args.end or default_last_night(settings, today)
-    client = HttpClient(settings.http)
-    summary = fetch_source(client, settings, sites, args.source, first, last, today, args.refresh)
+    client = HttpClient(http)
+    summary = fetch_source(
+        client, settings, sites, args.source, first, last, today, args.refresh,
+        members_only=args.network,
+    )  # fmt: skip
     print(
         f"{args.source}: nights {first}..{last}, sites {[s.id for s in sites]}, "
         f"network requests: {summary.network_requests}"
@@ -174,6 +221,29 @@ def cmd_build_light_pollution(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build_places(args: argparse.Namespace) -> int:
+    import json
+
+    from skytrust import gazetteer
+
+    settings = load_settings()
+    client = HttpClient(settings.http)
+    got = gazetteer.download(client)
+    if got:
+        print(f"Downloaded {', '.join(got)} into {gazetteer.RAW}")
+    table, _ = gazetteer.build()
+    elevations = gazetteer.fetch_elevations(settings.http, table["lat"], table["lon"])
+    table, report = gazetteer.build(elevations=elevations, om_sample=gazetteer.open_meteo_sample())
+    path = gazetteer.save(table)
+    (gazetteer.RAW / "crosscheck_report.json").write_text(json.dumps(report, indent=1))
+    print(
+        f"Wrote {path} ({report['n_total']:,} places: {report['n_incorporated']} cities and "
+        f"towns, {report['n_communities']:,} communities, {report['n_zip']:,} ZIP codes); "
+        f"cross-checks in {gazetteer.RAW / 'crosscheck_report.json'}"
+    )
+    return 0
+
+
 SKY_SOURCES = {
     "hip_main.dat": "https://cdsarc.cds.unistra.fr/ftp/cats/I/239/hip_main.dat",
     "constellations.lines.json": "d3-celestial data/ (github.com/ofrohn/d3-celestial)",
@@ -288,7 +358,16 @@ def build_parser() -> argparse.ArgumentParser:
     fe.add_argument("--start", type=_date, help="first night, YYYY-MM-DD (default: history_start)")
     fe.add_argument("--end", type=_date, help="last night, YYYY-MM-DD (default: today - 2 days)")
     fe.add_argument("--refresh", action="store_true", help="bypass the disk cache")
+    fe.add_argument(
+        "--network",
+        action="store_true",
+        help="the statewide network (config/network.yaml), member models only, slower pace",
+    )
     fe.set_defaults(func=cmd_fetch)
+    ns = sub.add_parser(
+        "network-select", help="Choose the statewide verification network -> network.yaml"
+    )
+    ns.set_defaults(func=cmd_network_select)
     bd = sub.add_parser(
         "build-dataset", help="Labels + features -> dataset.parquet, DATA_QUALITY.md"
     )
@@ -308,6 +387,10 @@ def build_parser() -> argparse.ArgumentParser:
         "build-sky", help="Star, constellation and Milky Way catalogues for the app"
     )
     sk.set_defaults(func=cmd_build_sky)
+    pl = sub.add_parser(
+        "build-places", help="Every California place and ZIP code for the location menu"
+    )
+    pl.set_defaults(func=cmd_build_places)
     se = sub.add_parser("sensitivity", help="Re-run everything for 9 cloud definitions")
     se.set_defaults(func=cmd_sensitivity)
     wf = sub.add_parser("walkforward", help="Monthly refit-and-forecast evaluation from 2025")
