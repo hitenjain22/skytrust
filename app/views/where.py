@@ -143,7 +143,7 @@ def rank_row(i: int, r: pd.Series, pal: dict) -> str:
             f'<div class="sk-main"><div class="sk-row-title">{ui.esc(r["place"])}'
             + (
                 ' <span class="sk-badge" style="--c:var(--sk-accent)">You</span>'
-                if r["yours"]
+                if r.get("yours", False)
                 else ""
             )
             + "</div>"
@@ -481,7 +481,7 @@ def render(ctx: Context) -> None:
                 ],  # fmt: skip
                 "position": [
                     your_label_side(table, r)
-                    if r["yours"]
+                    if r.get("yours", False)
                     else charts.LABEL_POSITIONS.get(r["site"], "top right")
                     for _, r in table.iterrows()
                 ],  # fmt: skip
