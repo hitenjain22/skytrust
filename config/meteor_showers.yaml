@@ -1,0 +1,134 @@
+# Major meteor showers, transcribed from the International Meteor Organization's
+# 2026 Meteor Shower Calendar (J. Rendtel, ed.; IMO INFO(3-25), DOI 10.13140/RG.2.2.36179.08480),
+# Table 5 "Working List of Visual Meteor Showers". Copy in data/raw/sky/cal2026_e.pdf.
+#
+#   active:   activity period (month-day), as listed for 2026
+#   peak_sol: solar longitude of the maximum (degrees, equinox J2000). Showers return at the same
+#             solar longitude each year, so the peak time for any year is computed from it.
+#   ra, dec:  radiant at maximum (degrees). zhr: zenithal hourly rate at maximum (ideal sky,
+#             radiant overhead, limiting magnitude 6.5). r: population index. speed: km/s.
+#   notes:    from the calendar's text, or NASA's shower pages
+#             (science.nasa.gov/solar-system/meteors-meteorites/<shower>/) where marked (NASA).
+# Included: every shower with ZHR >= 10, plus the Draconids and both Taurid branches (low rates
+# but well known: Draconid outbursts, slow bright Taurid fireballs).
+showers:
+- code: QUA
+  name: Quadrantids
+  active: [12-28, 01-12]
+  peak_sol: 283.15
+  ra: 230
+  dec: 49
+  speed: 41
+  r: 2.1
+  zhr: 80
+  notes: The peak lasts only a few hours (NASA). Parent body asteroid 2003 EH1 (NASA).
+- code: LYR
+  name: Lyrids
+  active: [04-14, 04-30]
+  peak_sol: 32.32
+  ra: 271
+  dec: 34
+  speed: 49
+  r: 2.1
+  zhr: 18
+- code: ETA
+  name: Eta Aquariids
+  active: [04-19, 05-28]
+  peak_sol: 45.5
+  ra: 338
+  dec: -1
+  speed: 66
+  r: 2.4
+  zhr: 50
+  notes: Debris of Halley's Comet, seen in the hours before dawn (NASA).
+- code: SDA
+  name: Southern Delta Aquariids
+  active: [07-12, 08-23]
+  peak_sol: 128
+  ra: 340
+  dec: -16
+  speed: 41
+  r: 2.5
+  zhr: 25
+- code: PER
+  name: Perseids
+  active: [07-17, 08-24]
+  peak_sol: 140.0
+  ra: 48
+  dec: 58
+  speed: 59
+  r: 2.2
+  zhr: 100
+  notes: Debris of Comet 109P/Swift-Tuttle.
+- code: DRA
+  name: Draconids
+  active: [10-06, 10-10]
+  peak_sol: 195.4
+  ra: 262
+  dec: 54
+  speed: 20
+  r: 2.6
+  zhr: 5
+  notes: Exceptionally slow meteors. Usually weak, but it has produced
+    meteor storms (1933, 1946) and outbursts (2011, 2018). Parent comet 21P/Giacobini-Zinner.
+- code: ORI
+  name: Orionids
+  active: [10-02, 11-07]
+  peak_sol: 208
+  ra: 95
+  dec: 16
+  speed: 66
+  r: 2.5
+  zhr: 20
+  notes: Debris of Halley's Comet (NASA). Fast meteors; activity can stay similar for several nights
+    around the peak.
+- code: STA
+  name: Southern Taurids
+  active: [09-20, 11-20]
+  peak_sol: 223
+  ra: 52
+  dec: 15
+  speed: 27
+  r: 2.3
+  zhr: 7
+  notes: Slow and often bright meteors. Part of the Comet 2P/Encke complex.
+- code: NTA
+  name: Northern Taurids
+  active: [10-20, 12-10]
+  peak_sol: 230
+  ra: 58
+  dec: 22
+  speed: 29
+  r: 2.3
+  zhr: 5
+  notes: Slow and often bright, with a broad maximum lasting about ten days.
+- code: LEO
+  name: Leonids
+  active: [11-06, 11-30]
+  peak_sol: 235.27
+  ra: 152
+  dec: 22
+  speed: 71
+  r: 2.5
+  zhr: 15
+  notes: The fastest meteors in the IMO list (71 km/s). Parent comet 55P/Tempel-Tuttle.
+- code: GEM
+  name: Geminids
+  active: [12-04, 12-20]
+  peak_sol: 262.2
+  ra: 112
+  dec: 33
+  speed: 35
+  r: 2.6
+  zhr: 150
+  notes: The best and most reliable shower of the year, known for bright meteors and fireballs;
+    the radiant is up from mid-evening.
+- code: URS
+  name: Ursids
+  active: [12-17, 12-26]
+  peak_sol: 270.7
+  ra: 217
+  dec: 76
+  speed: 33
+  r: 2.8
+  zhr: 10

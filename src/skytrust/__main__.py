@@ -174,6 +174,32 @@ def cmd_build_light_pollution(args: argparse.Namespace) -> int:
     return 0
 
 
+SKY_SOURCES = {
+    "hip_main.dat": "https://cdsarc.cds.unistra.fr/ftp/cats/I/239/hip_main.dat",
+    "constellations.lines.json": "d3-celestial data/ (github.com/ofrohn/d3-celestial)",
+    "constellations.json": "d3-celestial data/",
+    "mw.json": "d3-celestial data/",
+    "messier.json": "d3-celestial data/",
+    "dsos.bright.json": "d3-celestial data/",
+}
+
+
+def cmd_build_sky(args: argparse.Namespace) -> int:
+    from skytrust import skycatalog
+
+    missing = [name for name in SKY_SOURCES if not (skycatalog.RAW / name).exists()]
+    if missing:
+        where = "; ".join(f"{n} <- {SKY_SOURCES[n]}" for n in missing)
+        print(f"Missing inputs in {skycatalog.RAW}: {where} (see docs/DATA_NOTES.md §13).",
+              file=sys.stderr)  # fmt: skip
+        return 2
+    skycatalog.build_all()
+    print(
+        f"Wrote the star, constellation, Milky Way and deep-sky catalogues to {skycatalog.SKY_DIR}"
+    )
+    return 0
+
+
 def cmd_sensitivity(args: argparse.Namespace) -> int:
     from skytrust import sensitivity
 
@@ -278,6 +304,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     lp.add_argument("--atlas", help="path to World_Atlas_2015.tif (default: data/raw/...)")
     lp.set_defaults(func=cmd_build_light_pollution)
+    sk = sub.add_parser(
+        "build-sky", help="Star, constellation and Milky Way catalogues for the app"
+    )
+    sk.set_defaults(func=cmd_build_sky)
     se = sub.add_parser("sensitivity", help="Re-run everything for 9 cloud definitions")
     se.set_defaults(func=cmd_sensitivity)
     wf = sub.add_parser("walkforward", help="Monthly refit-and-forecast evaluation from 2025")

@@ -1,0 +1,77 @@
+# Well-known California places offered in the app. Coordinates and elevation (SRTM3 'dem')
+# from GeoNames cities1000 (CC BY 4.0); `name` is how the place is shown, `geonames_id` the
+# source record. How dark each one is comes from the light-pollution grid at run time.
+# Regenerate: see docs/DATA_NOTES.md section 13.
+places:
+- id: los-angeles
+  name: Los Angeles
+  region: Southern California
+  lat: 34.0522
+  lon: -118.2437
+  elevation_m: 96.0
+  geonames_id: 5368361
+  timezone: America/Los_Angeles
+- id: san-francisco
+  name: San Francisco
+  region: Bay Area
+  lat: 37.7749
+  lon: -122.4194
+  elevation_m: 28.0
+  geonames_id: 5391959
+  timezone: America/Los_Angeles
+- id: sacramento
+  name: Sacramento
+  region: Central Valley
+  lat: 38.5816
+  lon: -121.4944
+  elevation_m: 14.0
+  geonames_id: 5389489
+  timezone: America/Los_Angeles
+- id: santa-barbara
+  name: Santa Barbara
+  region: Central Coast
+  lat: 34.4208
+  lon: -119.6982
+  elevation_m: 16.0
+  geonames_id: 5392952
+  timezone: America/Los_Angeles
+- id: big-bear-lake
+  name: Big Bear Lake
+  region: San Bernardino Mountains
+  lat: 34.2439
+  lon: -116.9114
+  elevation_m: 2061.0
+  geonames_id: 5328163
+  timezone: America/Los_Angeles
+- id: joshua-tree
+  name: Joshua Tree
+  region: Mojave Desert
+  lat: 34.1347
+  lon: -116.3131
+  elevation_m: 836.0
+  geonames_id: 5361298
+  timezone: America/Los_Angeles
+- id: lake-tahoe
+  name: Lake Tahoe
+  region: South Lake Tahoe, Sierra Nevada
+  lat: 38.9332
+  lon: -119.9844
+  elevation_m: 1902.0
+  geonames_id: 5397664
+  timezone: America/Los_Angeles
+- id: yosemite
+  name: Yosemite Valley
+  region: Sierra Nevada
+  lat: 37.7407
+  lon: -119.5779
+  elevation_m: 1227.0
+  geonames_id: 7262586
+  timezone: America/Los_Angeles
+- id: death-valley
+  name: Death Valley
+  region: Mojave Desert
+  lat: 36.2396
+  lon: -116.8113
+  elevation_m: -70.0
+  geonames_id: 12523068
+  timezone: America/Los_Angeles
