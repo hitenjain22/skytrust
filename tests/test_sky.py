@@ -109,3 +109,57 @@ def test_city_versus_dark_desert_on_one_night():
     # the Milky Way's arc is described in compass words and named constellations
     band = dv["milky_way"]["band"]
     assert len(band["ends"]) == 2 and "Cygnus" in band["through"]
+
+
+def test_star_extinction_uses_a_real_airmass_near_the_horizon():
+    """Regression: a star's own extinction used K&S's sky-glow airmass, which tops out at 5 at
+    the horizon, so stars low in the sky were dimmed far too little (0.72 instead of 1.86
+    magnitudes at 5° altitude). Kasten & Young (1989) values: 1 at the zenith, 1.994 at 60°
+    from it, 10.31 at 85°, 37.9 at the horizon."""
+    x = sky.extinction_airmass(np.array([0.0, 60.0, 85.0, 90.0]))
+    assert x == pytest.approx([1.0, 1.994, 10.31, 37.92], abs=0.01)
+    assert float(sky.airmass(90.0)) == pytest.approx(5.0)  # K&S's, still used for sky glow
+    # a natural sky, 5° up: the faintest visible star is ~1.9 mag brighter than at the zenith
+    # from the extra air alone (plus the brighter sky near the horizon)
+    drop = float(sky.faintest_visible(90.0, 22.0)) - float(sky.faintest_visible(5.0, 22.0))
+    assert drop > 0.2 * (10.31 - 1)
+
+
+def test_browser_visibility_tables_match_the_physics():
+    """The live chart interpolates sky.limit_table; across light pollution, Moon heights and
+    phases, the lookup stays within 0.05 mag of the exact model for 99% of the sky (and the
+    largest error, beside a bright Moon where nothing faint shows, stays under 0.2 mag)."""
+    rng = np.random.default_rng(7)
+    worst99, worst = 0.0, 0.0
+    for zen in (17.2, 19.4, 21.9):
+        for moon_alt in (-3.0, 4.0, 35.0, 80.0):
+            for phase in (0.0, 70.0, 140.0):
+                table = sky.limit_table(zen, moon_alt, phase)
+                alt, sep = rng.uniform(0, 90, 3000), rng.uniform(0.5, 180, 3000)
+                exact = sky.faintest_visible(alt, zen, {"alt": moon_alt, "sep": sep,
+                                                        "phase_angle": phase})  # fmt: skip
+                err = np.abs(exact - sky.interpolate_limit(table, alt, sep))[exact > -1.5]
+                worst99, worst = max(worst99, np.percentile(err, 99)), max(worst, err.max())
+    assert worst99 < 0.05 and worst < 0.2
+    # without the Moon the table doesn't depend on the distance from it
+    flat = sky.limit_table(20.0, -1.0, 0.0)
+    assert np.allclose(flat, flat[:, :1])
+
+
+def test_moon_position_from_ra_dec_of_date_matches_skyfield():
+    """The browser places the Moon and planets from their RA/Dec of date and the local
+    sidereal time; that must reproduce Skyfield's topocentric altitude/azimuth (parallax
+    included: up to 1° for the Moon)."""
+    obs = sky.Observer(LA)
+    times = pd.date_range("2026-10-02 04:00", periods=5, freq="2h", tz="UTC")
+    for body in ("moon", "jupiter barycenter"):
+        ra, dec = obs.radec_of_date(body, times)
+        alt, az = [], []
+        for k in range(len(times)):
+            a, z = obs.altaz_from_radec([ra[k]], [dec[k]], times[k : k + 1])
+            alt.append(a[0, 0])
+            az.append(z[0, 0])
+        ref = obs.body(body, times)
+        assert np.allclose(alt, ref["alt"], atol=0.01)
+        dz = (np.array(az) - ref["az"] + 180) % 360 - 180
+        assert np.all(np.abs(dz * np.cos(np.radians(alt))) < 0.01)

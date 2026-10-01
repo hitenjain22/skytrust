@@ -3,86 +3,13 @@ where to look, the Milky Way, and where to look when the Moon is up."""
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 
 from skytrust import sky
 from views import components as ui
-from views import lookup
+from views import lookup, skylive
 from views.common import Context, esc
-
-MODES = {"Your sky": "here", "A perfectly dark sky": "dark"}
-KIND_ORDER = {
-    "moon": 0,
-    "planet": 1,
-    "star": 2,
-    "pattern": 3,
-    "cluster": 4,
-    "galaxy": 4,
-    "nebula": 4,
-}
-
-
-def time_options(dusk: pd.Timestamp, dawn: pd.Timestamp, tz: str) -> dict[str, pd.Timestamp]:
-    """'Dusk', each whole hour of darkness, 'Dawn' -> UTC time."""
-    out = {f"Dusk {lookup.clock(dusk, tz)}": dusk}
-    t = dusk.tz_convert(tz).ceil("h")
-    while t < dawn.tz_convert(tz) - pd.Timedelta(minutes=20):
-        if (t - dusk.tz_convert(tz)) >= pd.Timedelta(minutes=20):
-            out[lookup.clock(t, tz)] = t.tz_convert("UTC")
-        t += pd.Timedelta(hours=1)
-    out[f"Dawn {lookup.clock(dawn, tz)}"] = dawn - pd.Timedelta(minutes=5)
-    return out
-
-
-def default_choice(options: dict[str, pd.Timestamp], now: pd.Timestamp | None) -> str:
-    """Now if the night is under way, else about two hours after dark."""
-    keys, times = list(options), list(options.values())
-    target = times[0] + pd.Timedelta(hours=2)
-    if now is not None and times[0] <= now <= times[-1]:
-        target = now
-    return keys[int(np.argmin([abs((t - target).total_seconds()) for t in times]))]
-
-
-def up_now(guide: dict, i: int, zenith_sqm: float) -> list[tuple[sky.SkyItem, float, float, bool]]:
-    """Everything in the guide that is above the horizon at time index i, with its position then
-    and whether it shows to the eye at that moment."""
-    out = []
-    for it in guide["items"]:
-        a, z = float(it.track_alt[i]), float(it.track_az[i])
-        if a <= 3:
-            continue
-        seen = it.kind == "moon" or sky.is_visible(
-            a, z, it.vis_mag, it.extended, zenith_sqm, guide["moon"], i
-        )
-        out.append((it, a, z, seen))
-    out.sort(key=lambda r: (KIND_ORDER.get(r[0].kind, 5), r[0].mag if r[0].mag is not None else 9))
-    return out
-
-
-def object_row(it: sky.SkyItem, alt: float, az: float, seen: bool) -> str:
-    where = sky.where_words(alt, az)
-    tag = (
-        '<span class="sk-badge" style="--c:var(--sk-go)">Visible</span>'
-        if seen
-        else '<span class="sk-badge" title="Too faint to see from here now">Too faint</span>'
-    )
-    if it.kind == "moon":
-        sub = it.note  # "75% lit"
-    elif it.kind in ("pattern", "cluster", "galaxy", "nebula") and it.note:
-        sub = lookup.cap(it.note)
-    else:
-        sub = lookup.KIND_LABELS.get(it.kind, "")
-    return ui.row(
-        [
-            f'<div class="sk-main"><div class="sk-row-title">{esc(it.name)}</div>'
-            f'<div class="sk-row-sub">{esc(sub)}</div></div>',
-            f'<div class="sk-row-sub" style="font-size:.86rem">{esc(lookup.cap(where))}</div>',
-            f'<div style="text-align:right">{tag}</div>',
-        ],
-        "minmax(0,1.4fr) minmax(0,1fr) 96px",
-    )
 
 
 def render(ctx: Context) -> None:
@@ -96,52 +23,17 @@ def render(ctx: Context) -> None:
             f"The sky tonight over {ctx.site_label}",
             f"{esc(d.title)} sky here "
             f"({esc(lookup.uncap(sky.brightness_words(d.times_natural)))}): "
-            f"{esc(lookup.uncap(d.verdict))}. Pick a time to see what's up.",
+            f"{esc(lookup.uncap(d.verdict))}. Slide through the night to see what's up.",
             f"Sky guide · {dusk.tz_convert(tz):%a %b %-d}",
         ),
         unsafe_allow_html=True,
     )
-    options = time_options(dusk, dawn, tz)
-    c1, c2 = st.columns([3, 1.3], vertical_alignment="bottom", gap="large")
-    choice = c1.select_slider(
-        "Time tonight", list(options), value=default_choice(options, ctx.now_utc), key="sky_time"
-    )
-    mode_label = c2.segmented_control("Show", list(MODES), default="Your sky", key="sky_mode")
-    t = options[choice]
-    mode = MODES[mode_label or "Your sky"]
-    i = int(np.argmin(np.abs((guide["times"] - t).total_seconds())))
-
-    left, right = st.columns([1.15, 1], gap="large")
-    with left:
-        svg, info = ctx.service("chart")(ctx.site, t.floor("min"), sqm, mode, True, True, False)
-        stars = lookup.fmt_count(info["stars"])
-        what = "you can see" if mode == "here" else "a perfectly dark sky would show"
-        st.markdown(
-            f'<div class="sk-chart">{svg}</div><div class="sk-chart-help">About {stars} stars '
-            f"{what} at {lookup.clock(t, tz)}. Hold it overhead with north at the top, or turn it "
-            "so the direction you face is at the bottom.</div>",
-            unsafe_allow_html=True,
-        )
-    with right:
-        rows = up_now(guide, i, sqm if mode == "here" else sky.NATURAL_SQM)
-        if mode == "dark":
-            rows = [(it, a, z, True) for it, a, z, _ in rows]
-        st.markdown(ui.eyebrow(f"Up at {lookup.clock(t, tz)}"), unsafe_allow_html=True)
-        best = [r for r in rows if r[0].kind in ("moon", "planet")]
-        stars_ = [r for r in rows if r[0].kind == "star"][:4]
-        shapes = [r for r in rows if r[0].kind == "pattern"][:4]
-        deep = [r for r in rows if r[0].kind in ("cluster", "galaxy", "nebula")][:4]
-        html = ""
-        for title, group in [
-            ("Moon and planets", best),
-            ("Brightest stars", stars_),
-            ("Star patterns", shapes),
-            ("Clusters, galaxies, nebulae", deep),
-        ]:
-            if group:
-                html += f'<div class="sk-eyebrow" style="margin-top:14px">{title}</div>'
-                html += ui.rows([object_row(*r) for r in group])
-        st.markdown(html, unsafe_allow_html=True)
+    start = dusk + pd.Timedelta(hours=2)
+    if ctx.now_utc is not None and dusk <= ctx.now_utc <= dawn:
+        start = ctx.now_utc  # the night is under way: open on now
+    # the chart, the time slider and the "Up at ..." list are drawn in the browser, so the sky
+    # follows the slider while it is dragged (views/skylive.py)
+    skylive.render(ctx.service("live")(ctx.site, dusk, dawn, sqm, min(start, dawn)))
 
     mw = guide["milky_way"]
     when, help_ = lookup.milky_way_text(mw, tz)

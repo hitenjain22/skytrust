@@ -204,9 +204,19 @@ def nl_to_mag(b):
 
 
 def airmass(zenith_deg):
-    """Airmass in K&S's formula; finite down to the horizon."""
+    """Airmass in K&S's formula; finite down to the horizon. Used only inside the K&S sky-
+    brightness model, which was calibrated with it (it reaches 5 at the horizon, where the real
+    air path is ~38 times the zenith one, so it must not be used for a star's own extinction)."""
     z = np.radians(np.clip(np.asarray(zenith_deg, dtype=float), 0, 90))
     return (1 - 0.96 * np.sin(z) ** 2) ** -0.5
+
+
+def extinction_airmass(zenith_deg):
+    """Relative air path towards a star (Kasten & Young 1989, Applied Optics 28:4735):
+    X = 1 / (cos z + 0.50572 (96.07995 - z)^-1.6364), z in degrees. 1 at the zenith, ~2 at 60°,
+    ~10.3 at 5° altitude and ~38 at the horizon (plane-parallel sec z diverges there)."""
+    z = np.clip(np.asarray(zenith_deg, dtype=float), 0, 90)
+    return 1.0 / (np.cos(np.radians(z)) + 0.50572 * (96.07995 - z) ** -1.6364)
 
 
 def moon_sky_nl(sep_deg, zenith_deg, moon_zenith_deg, phase_angle_deg, k=EXTINCTION_K):
@@ -234,10 +244,53 @@ def sky_brightness(alt_deg, zenith_sqm, moon=None, k=EXTINCTION_K):
 
 def faintest_visible(alt_deg, zenith_sqm, moon=None, k=EXTINCTION_K):
     """Catalogue magnitude of the faintest star visible at each altitude: the limiting magnitude
-    for the local sky brightness, minus the extinction an object there suffers."""
+    for the local sky brightness, minus the extra extinction an object there suffers compared
+    with the zenith (NELM is quoted for the zenith, so the zenith's own extinction is already in
+    it)."""
     alt = np.asarray(alt_deg, dtype=float)
     nelm = limiting_magnitude(sky_brightness(alt, zenith_sqm, moon, k))
-    return nelm - k * (airmass(90 - alt) - 1)
+    return nelm - k * (extinction_airmass(90 - alt) - 1)
+
+
+# ---------- visibility tables for the browser's live chart ----------
+# The Sky Guide's chart is redrawn in the browser while the time slider moves. The visibility
+# physics stays here, in one place: for each Moon state the faintest visible magnitude is
+# tabulated on an (altitude x distance-from-the-Moon) grid and the browser interpolates
+# bilinearly. Distance from the Moon is spaced tightly near the Moon, where the glare changes
+# fastest. `interpolate_limit` is the same lookup in Python, used to bound the error in tests.
+# Altitude steps are fine near the horizon, where the air path (and so the extinction) changes
+# fastest: from 38 airmasses at 0° to 10 at 5°.
+LIMIT_ALTS = np.array(
+    [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 10, 12, 14, 17, 20, 24, 28, 33, 40, 48, 56, 65,
+     75, 90.0]
+)  # fmt: skip
+# K&S's glare term changes formula at 10° from the Moon (a 28% step in the published equations),
+# so the grid has a node on each side of it rather than interpolating across the jump.
+LIMIT_SEPS = np.array(
+    [0.5, 1, 1.5, 2, 3, 4, 5, 6, 7, 8.5, 9.999, 10, 11.5, 13, 15, 17, 20, 24, 28, 35, 45, 55, 70,
+     85, 100, 120, 140, 160, 180.0]
+)  # fmt: skip
+
+
+def limit_table(zenith_sqm: float, moon_alt: float, phase_angle: float) -> np.ndarray:
+    """Faintest visible magnitude on the LIMIT_ALTS x LIMIT_SEPS grid with the Moon at
+    `moon_alt`; without the Moon (moon_alt <= 0) every column is the same."""
+    aa, ss = np.meshgrid(LIMIT_ALTS, LIMIT_SEPS, indexing="ij")
+    moon = {"alt": float(moon_alt), "sep": ss, "phase_angle": float(phase_angle)}
+    return np.asarray(faintest_visible(aa, zenith_sqm, moon), dtype=float)
+
+
+def interpolate_limit(table: np.ndarray, alt, sep) -> np.ndarray:
+    """Bilinear lookup in a limit_table (what the browser does)."""
+    alt = np.clip(np.asarray(alt, dtype=float), LIMIT_ALTS[0], LIMIT_ALTS[-1])
+    sep = np.clip(np.asarray(sep, dtype=float), LIMIT_SEPS[0], LIMIT_SEPS[-1])
+    i = np.clip(np.searchsorted(LIMIT_ALTS, alt, side="right") - 1, 0, len(LIMIT_ALTS) - 2)
+    j = np.clip(np.searchsorted(LIMIT_SEPS, sep, side="right") - 1, 0, len(LIMIT_SEPS) - 2)
+    fa = (alt - LIMIT_ALTS[i]) / (LIMIT_ALTS[i + 1] - LIMIT_ALTS[i])
+    fs = (sep - LIMIT_SEPS[j]) / (LIMIT_SEPS[j + 1] - LIMIT_SEPS[j])
+    top = table[i, j] * (1 - fs) + table[i, j + 1] * fs
+    bottom = table[i + 1, j] * (1 - fs) + table[i + 1, j + 1] * fs
+    return top * (1 - fa) + bottom * fa
 
 
 # ---------- catalogue ----------
@@ -395,6 +448,15 @@ class Observer:
         if name not in ("moon", "sun"):
             out["mag"] = np.atleast_1d(planetary_magnitude(self.eph["earth"].at(t).observe(target)))
         return out
+
+    def radec_of_date(self, name: str, utc: pd.DatetimeIndex) -> tuple[np.ndarray, np.ndarray]:
+        """Topocentric apparent RA/Dec of date (degrees) of a solar-system body: with the local
+        sidereal time these give exactly Skyfield's altitude/azimuth (no refraction), so the
+        browser can place the Moon and planets at any moment between the computed ones."""
+        t = self.times(utc)
+        app = self.observer.at(t).observe(self.eph[name]).apparent()
+        ra, dec, _ = app.radec(epoch="date")
+        return np.atleast_1d(ra._degrees), np.atleast_1d(dec.degrees)
 
     def moon(self, utc: pd.DatetimeIndex) -> dict:
         """The Moon plus its illuminated fraction and phase angle (Sun-Moon-Earth angle)."""

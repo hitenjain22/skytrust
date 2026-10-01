@@ -529,3 +529,80 @@ Hiten asked for the path that is easiest to understand and gives the most consis
   + how it works). Old links (`7-nights`, `track-record`, `how-it-works`, `site=sac`/`trk`) keep
   working.
 - **No new dependencies.**
+
+## 2026-10-01: accuracy measured across all of California (plan fixed before any result)
+- **Why:** the five evaluated airports are all inland Northern California. The app forecasts for
+  any place in the state, but nothing measured the forecasts on the coast (marine layer), in
+  Southern California or in the low deserts. Hiten asked for accuracy "spread all through
+  California" with several methods cross-checked.
+- **Stations (`config/network.yaml`, rule in `src/skytrust/network.py`):** 32 IEM ASOS stations.
+  The five airports and the main airports of the three largest metro areas (LAX, SFO, SAN) are
+  always in; the rest are chosen by a greedy maximin (farthest-point) design within a quota per
+  NWS forecast region (`max(2, round(online stations / 6))`), with height counted as distance
+  (1,000 m = 100 km) and the same night-coverage check as the original airports (>= 85 %). The
+  rule is code and config, not a hand-picked list. Alternatives: every station (~140; 6+ days of
+  downloads at the free API limits), hand-picked stations (open to cherry-picking), pure
+  farthest-point (skipped the Los Angeles basin and San Diego, where most users live).
+- **Data and definitions:** unchanged (SPEC §4): ASOS + ERA5, primary label = per-hour max, the
+  same train (2024-2025) / test (2026-01-01 -> 2026-08-31) split. The five blend members only;
+  NOAA's NBM stays a benchmark at the original airports. Downloads paced at 2.5 s per call and
+  split across two UTC days to stay well under Open-Meteo's free limits.
+- **Model:** a statewide site-agnostic blend: the geo blend's pipeline (no site one-hot), trained
+  on all 32 stations' training years, C tuned by the same date-based time-series CV.
+- **Evaluation, each method scored once on the test period:**
+  1. Leave-one-region-out (the 10 NWS regions): train on the other regions' stations, predict the
+     held-out region's test nights, so every station is scored as a place the model never saw.
+  2. Leave-one-station-out as a cross-check (if the two agree, the transfer is robust).
+  3. On identical nights: the current five-airport geo blend (for the 27 new stations also an
+     unseen-place forecast), the equal-weight average (no training), each single model
+     calibrated per region the same way, and climatology.
+  4. Skill reference: each station's training-years rate per month (SPEC's original B1; no
+     20-year history is downloaded for 32 stations). Brier, BSS, log loss, AUC, false-clear rate
+     at 0.5, week-block bootstrap CIs (1,000 resamples, fixed seed), per lead, statewide, per
+     region and per station; paired week-block differences for statewide vs five-airport geo
+     blend and vs the equal-weight average.
+  5. Label sensitivity: ASOS-only and ERA5-only labels, each trained and scored on its own.
+- **Shipping rule, decided now:** the statewide blend (fit on all 32 stations' training years)
+  replaces the five-airport geo blend for every place that isn't an evaluated airport, because it
+  has seen the climates where it's used. If it scores significantly *worse* than the five-airport
+  geo blend at the new stations, the old one stays and Hiten is told. The five airports keep their
+  site-aware blend, so the forward test's model is unchanged.
+- **In the app:** for any place, the record of the nearest stations (scored as never-seen places)
+  with distances, and a statewide map of where the forecasts work best and worst.
+
+## 2026-10-01: every place in California can be chosen
+- **Request:** "make it so that someone can just type in their city", for every city in the state,
+  with everything the nine featured places show.
+- **Data (`src/skytrust/gazetteer.py`, `artifacts/places_ca.json`, 276 KB):** all 1,619 Census
+  places (483 incorporated cities and towns + 1,136 census-designated communities), 140 GeoNames
+  neighbourhoods and communities that aren't census places (Hollywood, La Jolla, Furnace Creek),
+  and 1,802 ZIP codes. Town centres from USGS GNIS ("Populated Place"), because the Census point
+  is the middle of the boundary (San Francisco's lies in the Pacific). Heights from USGS 3DEP.
+  Every source is public; DATA_NOTES §14 has the cross-checks.
+- **Menu:** Streamlit's searchable select box (type-to-filter, a click switches immediately, no
+  Enter). Biggest places first, then ZIP codes, so the likeliest match tops the list. The custom
+  name box, which needed Enter and changed only the label (the reported bug), is gone; coordinates
+  are still possible ("Exact coordinates…") and are named after the nearest place.
+- **Every page works for every place:** forecasts use the site-agnostic blend, the sky and events
+  are computed for the point, light pollution comes from the grid, which covers the whole state.
+- **Rejected:** a geocoding API (a network call per keystroke, a key, and a third party seeing
+  what users type); a text box (needs Enter).
+
+## 2026-10-01: the Sky Guide's chart follows the slider while it's dragged
+- Streamlit sliders only report when released, so the chart moved to a browser component
+  (Streamlit components v2, no iframe). Python still computes every position and the visibility
+  physics, once per place and night; the browser only interpolates, rotates the sky with the
+  sidereal time and draws (~250 KB of data, redrawn within one screen refresh).
+- **One implementation of the physics:** visibility is tabulated in Python on an altitude ×
+  distance-from-the-Moon grid (`sky.limit_table`) and interpolated in the browser. A test bounds
+  the lookup error (99 % of the sky within 0.05 mag); the grid has nodes on both sides of the
+  10° jump in Krisciunas & Schaefer's published glare term.
+- **Cross-checked:** the browser chart and the Python chart agree to 0.14 units of 1,000 (0.03°)
+  on every named star and planet, and on the number of stars drawn (DATA_NOTES §15).
+
+## 2026-10-01: extinction uses a real airmass (calculation fix)
+- A star's own dimming used Krisciunas & Schaefer's airmass formula, which reaches only 5 at the
+  horizon (it is built for their scattered-light model), so stars low in the sky were dimmed too
+  little: 0.72 instead of 1.86 magnitudes at 5° altitude. Extinction now uses Kasten & Young
+  (1989); K&S's formula stays inside the sky-glow model it was calibrated with. Regression test
+  added.

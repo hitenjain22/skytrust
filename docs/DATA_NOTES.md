@@ -343,3 +343,66 @@ exponent 1; LM capped at 6.5). Assumed: extinction 0.20 mag/airmass (K&S: 0.172 
 et al.: 0.23 at Xinglong). Wikipedia's Bortle table lists naked-eye limits 0.3–1.2 mag fainter than
 the Schaefer formula at the same SQM: Bortle describes experienced observers, the formula a
 typical one; the app uses the formula and says so.
+
+## 14. Every place in California (the location menu), added 2026-10-01
+
+Built by `python -m skytrust build-places` (`src/skytrust/gazetteer.py`) into
+`artifacts/places_ca.json` (3,561 entries, 276 KB). Raw files in `data/raw/places/` (gitignored).
+
+| Source | What it gives | Licence |
+|---|---|---|
+| Census Bureau 2025 Gazetteer, places (`2025_Gaz_place_national.zip`) | the 1,619 California places: 462 cities, 21 towns (483 incorporated: the state's 482 plus Mountain House, incorporated in 2024), 1,136 census-designated places; boundary internal points, land area | public domain |
+| USGS GNIS Domestic Names, California (`DomesticNames_CA_Text.zip`) | county of each place (joined on the GNIS id the Census lists as ANSICODE: 1,619 of 1,619 matched) and the settlement's own point (feature class "Populated Place") | public domain |
+| GeoNames US dump (`US.zip`, `admin2Codes.txt`) | 83 named neighbourhoods (feature code PPLX with a population) and 57 communities that aren't census places; population of unincorporated places; SRTM heights (`dem`) | CC BY 4.0 |
+| Census Bureau Vintage 2024 estimates (`sub-est2024.csv`) | population of incorporated places (orders search results only) | public domain |
+| Census Bureau 2025 Gazetteer, ZCTAs | 1,802 ZIP code areas 900xx–961xx with internal points | public domain |
+| USGS 3DEP via the Elevation Point Query Service | terrain height at every point (1–10 m lidar/DEM) | public domain |
+
+**Town centres.** The Census internal point is the middle of a place's boundary, which can be far
+from town: San Francisco's is at 37.727, −123.032, in the Pacific (the city includes the Farallon
+Islands); GNIS's record for the City of Los Angeles sits in Woodland Hills. The point used is the
+GNIS "Populated Place" of the same name in the same county, if it lies within 2.5 "boundary
+radii" (radius of a circle with the place's land area; at least 3 km) of the internal point,
+otherwise the place's own GNIS point (1,444 places use a populated-place centre). The radius rule
+rejects same-name features nearby that are different places (San Simeon, East Whittier, Santa
+Susana, Calipatria, all 4–6 km away from tiny places) while keeping Anaheim's downtown (2.3 radii).
+
+**Cross-checks** (`data/raw/places/crosscheck_report.json`):
+- Centre vs boundary (independent of the point's source): median 0.47 boundary radii from the
+  internal point; 88.6 % within 1 radius, 98.9 % within 2. The 18 beyond 2 are San Francisco (the
+  islands) and small places within the 3 km floor.
+- GNIS vs GeoNames centres: median 0.0004 km, 98.1 % within 1 km, 1,491 matched. **Not an
+  independent check:** GeoNames copies its US populated places from GNIS, so this confirms the
+  join, not the coordinates. Five places differ by more than 5 km; each is a same-name feature that
+  the radius rule correctly did not use.
+- Heights: USGS 3DEP vs GeoNames SRTM: median |difference| 2.4 m, 95th percentile 13.3 m, 98.2 %
+  within 25 m (n = 1,631); USGS vs Open-Meteo (Copernicus 90 m DEM): median 1.5 m, 95th percentile
+  13.8 m (n = 601). GeoNames gives Furnace Creek 0 m; USGS −58.7 m (it is below sea level).
+
+**ZIP codes** are named after the place they most plausibly lie in: distance to each town centre
+divided by the town's boundary radius, preferring a city or town within 2 radii (so ZIP 90004 is
+"near Los Angeles", not "near West Hollywood", whose centre is closer; 95616 is "near Davis", not
+the UC Davis campus community).
+
+**Lesson:** Open-Meteo's elevation API counts every coordinate in a request as one call: 600
+points in six requests triggered HTTP 429 while the network backfill was running. Heights moved to
+the USGS service (one point per request, ~2 s each, four in parallel, ~30 minutes for all).
+
+## 15. The live sky chart (browser) vs the Python chart, added 2026-10-01
+
+The Sky Guide's chart is drawn in the browser from data computed in Python (`app/views/skylive.py`)
+and is checked against the Python chart (`app/views/skychart.py`, still used on Tonight) at the
+same moments: Death Valley and Los Angeles, three times of night, both modes, on 2026-10-01.
+- Every named star and planet drawn by both: largest position difference 0.14 units on the
+  1,000-unit chart (about 0.03° of sky).
+- Stars drawn: the browser's rounded count matches the Python count (e.g. Los Angeles 45/45, 41/42,
+  54/54; Death Valley "about 2,800" vs 2,771–2,855). The only star-level difference seen was one
+  borderline star (Alcor) in one frame, at the visibility limit.
+- Visibility tables: across light pollution 17.2–21.9 mag/arcsec², Moon heights −3° to 80° and
+  phases 0–140°, 99 % of the sky is within 0.05 mag of the exact model, worst case 0.15 mag
+  beside a bright Moon (test in `tests/test_sky.py`).
+- **K&S finding:** the published moonlight equations switch the Mie term from 10^(6.15−ρ/40) to
+  6.2×10⁷ρ⁻² below ρ = 10° from the Moon; the two differ by 28 % at 10° (7.9×10⁵ vs 6.2×10⁵). The
+  model keeps the published form; the browser table has nodes on both sides of 10°.
+- Smoothness: redrawing ~3,000 stars, the Milky Way and the figures takes about one screen refresh
+  in Chrome on the development Mac (frames measured over 40 slider positions).

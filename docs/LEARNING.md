@@ -867,3 +867,78 @@ answer depends on where you are (light pollution changes a shower from 1 to 20 m
 1. Why store a meteor shower's peak as a solar longitude rather than a date?
 2. How would you find every moment two planets come within 3° over four months, efficiently?
 3. The ZHR is 150; why might you only see 7 meteors an hour from a city?
+
+---
+
+## `skytrust/gazetteer.py`: every place in California
+
+**What:** A searchable list of every city, town, census community, named neighbourhood and ZIP
+code in California (3,561 entries), each with a town-centre point, county and terrain height,
+built from Census, USGS and GeoNames files and saved as one compact file the app reads.
+
+**Why:** People think in town names, not coordinates. Typing "Davis" or "95616" has to land on the
+right point, and every page (forecast, sky, light pollution, events) then works for it.
+
+**Key concepts:**
+- **Joining sources on a shared id, not on names:** the Census lists each place's USGS (GNIS) id,
+  so the join is exact (1,619 of 1,619), with no fuzzy name matching.
+- **"Where is a city?" is a modelling choice:** a boundary's internal point can be in the ocean
+  (San Francisco); the settlement point is what people mean. A scale-aware rule (distance in
+  boundary radii) decides when to trust it.
+- **Independent vs. dependent cross-checks:** GeoNames agrees with GNIS to 0.4 m, but only because
+  it copied GNIS; the real check is one that doesn't share the source (centre inside its own
+  boundary footprint; USGS heights vs. satellite heights).
+
+**Interview questions:**
+1. How did you make sure "Los Angeles" points at downtown and not the middle of its boundary?
+2. Two sources agree almost perfectly. Why might that not prove they're right?
+3. Why put 3,561 options in a select box instead of calling a geocoding API?
+
+---
+
+## `skytrust/network.py`: choosing stations so the result can't be cherry-picked
+
+**What:** Picks 32 airport weather stations across California's ten NWS forecast regions (the five
+original airports, LAX/SFO/SAN, and the rest by a farthest-point design) to measure forecast
+accuracy statewide.
+
+**Why:** The original five airports are all inland Northern California. Accuracy on the coast,
+in Southern California and in the deserts had never been measured, yet the app forecasts there.
+
+**Key concepts:**
+- **Space-filling (maximin) design:** add the candidate farthest from everything chosen so far;
+  it spreads stations evenly without anyone choosing them by hand.
+- **Stratification:** quotas per climate region guarantee every region is represented.
+- **Pre-registration:** the evaluation plan and the shipping rule were written down (DECISIONS)
+  before any result was seen, so the results can't steer the method.
+
+**Interview questions:**
+1. Why not just pick the 30 stations you think are most representative?
+2. Why count elevation as distance in the design?
+3. What's the difference between leave-one-station-out and leave-one-region-out, and why report
+   both?
+
+---
+
+## `app/views/skylive.py` + `skylive.js`: a chart that follows your finger
+
+**What:** The Sky Guide's star chart is redrawn in the browser as the time slider moves, from
+positions and visibility tables computed in Python once per place and night.
+
+**Why:** Streamlit widgets only report when released, so a server-drawn chart can't follow a
+drag. Moving the drawing to the browser (not the physics) makes it smooth with no server trips.
+
+**Key concepts:**
+- **Split the work by what changes:** the slow, physical part (apparent positions, sky
+  brightness) changes little over a night and is computed once; the fast part (rotating the sky
+  with sidereal time, projecting, drawing) runs per frame.
+- **Tabulate, then interpolate, with a measured error bound:** the visibility model lives only in
+  Python; the browser interpolates a table, and a test proves the lookup error is small (and found
+  the 10° jump in the published moonlight formula).
+- **Two implementations as a cross-check:** the browser and Python charts agree to 0.03° on every
+  named star; a disagreement would point to a bug in one of them.
+
+**Interview questions:**
+1. Why didn't you port the moonlight model to JavaScript?
+2. How do you get a star's altitude and azimuth without calling atan2 for each star every frame?
+3. How did you test JavaScript code from a Python test suite?

@@ -285,19 +285,76 @@ def test_where_to_go_ranks_every_place(offline, monkeypatch):
     assert not re.search(r"Bortle \d", html) and not re.search(r"\bB\d(\.5)?\b", html)
 
 
+def live_chart_data(at: AppTest) -> dict:
+    """The data the Sky Guide's live chart (a browser component) receives."""
+    found = [e for e in at.main if type(e).__name__ == "UnknownElement" and "json" in
+             {f.name for f, _ in e.proto.ListFields()}]  # fmt: skip
+    assert len(found) == 1, "the live sky chart is missing"
+    return json.loads(found[0].proto.json)
+
+
 def test_sky_guide_draws_the_sky_and_lists_what_is_up(offline, monkeypatch):
     api_up(monkeypatch)
     at = visit("Sky Guide")
     assert not at.exception, at.exception
     html = " ".join(m.value for m in at.markdown)
-    assert "<svg" in html and "The sky tonight over Los Angeles" in html
-    assert "Moon and planets" in html and "The Milky Way" in html
-    options = at.select_slider(key="sky_time").options
-    at.select_slider(key="sky_time").set_value(options[-1]).run()  # dawn
+    assert "The sky tonight over Los Angeles" in html and "The Milky Way" in html
+    data = live_chart_data(at)
+    assert data["place"] == "Los Angeles"
+    assert data["t0"] <= data["start"] <= data["t1"]
+    assert {"Moon", "Jupiter", "Saturn"} <= {i["n"] for i in data["items"]}
+    # switching place sends the new place's sky
+    at.selectbox(key="site").set_value("death-valley").run()
     assert not at.exception
-    at.segmented_control(key="sky_mode").set_value("A perfectly dark sky").run()
+    assert live_chart_data(at)["place"] == "Death Valley"
+
+
+def test_any_california_place_can_be_chosen(offline, monkeypatch):
+    """Regression for "you have to press Enter and it doesn't change": every town, community and
+    ZIP code in California is in the location menu, and choosing one switches the app."""
+    api_up(monkeypatch)
+    at = visit("Tonight")
+    at.selectbox(key="site").set_value("davis").run()
+    assert not at.exception, at.exception
+    assert at.query_params["site"] == ["davis"]
+    html = " ".join(m.value for m in at.markdown)
+    assert "Davis" in html and "chance of a clear night" in html
+    at.session_state["page"] = "Sky Guide"
+    at.run()
     assert not at.exception
-    assert "a perfectly dark sky would show" in " ".join(m.value for m in at.markdown)
+    assert live_chart_data(at)["place"] == "Davis"
+
+
+def test_zip_code_link(offline, monkeypatch):
+    api_up(monkeypatch)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params.update({"page": "where-to-go", "site": "zip-95616"})
+    at.run()
+    assert not at.exception, at.exception
+    assert at.selectbox(key="site").value == "zip-95616"
+    html = " ".join(m.value for m in at.markdown)
+    assert "How dark is it at ZIP 95616?" in html
+
+
+def test_coordinates_without_a_name_are_named_after_the_nearest_place(offline, monkeypatch):
+    import math
+
+    from skytrust.config import Site
+
+    api_up(monkeypatch)
+    monkeypatch.setattr(
+        live,
+        "custom_site",
+        lambda lat, lon, name, settings, client=None: Site(
+            f"CUSTOM_{lat:.3f}_{lon:.3f}", name, lat, lon, math.nan, "custom", "America/Los_Angeles"
+        ),
+    )
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params.update({"page": "sky-guide", "lat": "36.4500", "lon": "-117.6000"})
+    at.run()
+    assert not at.exception, at.exception
+    assert live_chart_data(at)["place"].startswith("Near ")
+    assert not any(w.key == "name" for w in at.text_input)  # no name box to press Enter in
 
 
 def test_events_page_lists_showers_with_places(offline, monkeypatch):
