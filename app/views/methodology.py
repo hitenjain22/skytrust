@@ -29,8 +29,16 @@ GLOSSARY = {
     "1 = perfect).",
     "Light pollution": "Artificial light scattered in the atmosphere that brightens the night "
     "sky. Often matters more for faint targets than a thin cloud.",
-    "Bortle scale": "A 1–9 scale of sky darkness: 1 is a pristine desert sky where the Milky Way "
-    "casts shadows, 9 an inner-city sky.",
+    "How dark (very dark … city)": "SkyTrust's five steps of sky darkness. They group the Bortle "
+    "scale's classes (1–3, 4–4.5, 5, 6–7, 8–9) so you don't need to learn it.",
+    "Limiting magnitude": "The faintest star you can see. Bigger numbers are fainter: about 6.5 "
+    "under a natural sky, 3–4 in a city.",
+    "Radiant": "The point a meteor shower's streaks seem to come from. Meteors appear all over the "
+    "sky; look 45–90° away from it for the longest trails.",
+    "ZHR": "Zenithal hourly rate: meteors an ideal observer would see in an hour under a perfect "
+    "sky with the radiant overhead. Real rates are lower.",
+    "Opposition": "When a planet is opposite the Sun in our sky: closest, brightest, and up all "
+    "night. The best time of the year to see it.",
     "Sky quality (SQM)": "Sky brightness in magnitudes per square arcsecond, measured with a sky "
     "quality meter. Higher is darker; about 22.0 is a natural sky.",
 }
@@ -67,20 +75,21 @@ def sections(text: str) -> None:
             st.markdown(body)
 
 
-def render(ctx: Context) -> None:
+def render(ctx: Context, standalone: bool = True) -> None:
     d = ctx.settings.raw["definitions"]
     split = ctx.settings.raw["split"]
     clim = ctx.settings.raw["climatology"]
     forward_start = ctx.settings.raw["forward"]["start_date"]
     models = ", ".join(f"{m.name}" for m in ctx.settings.models)
-    st.header("How SkyTrust works")
+    if standalone:
+        st.header("How SkyTrust works")
     st.markdown(thirty_seconds(ctx), unsafe_allow_html=True)
-    st.subheader("Glossary")
+    st.markdown(ui.section("Words you'll see", "", "Glossary"), unsafe_allow_html=True)
     terms = "".join(
         f"<div><dt>{ui.esc(t)}</dt><dd>{ui.esc(m)}</dd></div>" for t, m in GLOSSARY.items()
     )
     st.markdown(f'<dl class="sk-gloss sk-reveal">{terms}</dl>', unsafe_allow_html=True)
-    st.subheader("The full methodology")
+    st.markdown(ui.section("The full methodology", "", "Method"), unsafe_allow_html=True)
     text = f"""
 ### The problem
 Astrophotographers routinely check five or six forecasts before driving out, and the most common

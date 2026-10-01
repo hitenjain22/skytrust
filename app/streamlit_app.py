@@ -18,6 +18,7 @@ import re
 import sys
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 log = logging.getLogger("skytrust.app")
@@ -85,39 +86,50 @@ try:  # installed via `uv sync` locally; on a host that only installs dependenci
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from skytrust import inference, lightpollution, live, skyglow  # noqa: E402
-from skytrust.config import CONFIG_DIR, load_settings, load_sites  # noqa: E402
+from skytrust import events, inference, lightpollution, live, sky, skyglow  # noqa: E402
+from skytrust.config import CONFIG_DIR, Site, load_places, load_settings  # noqa: E402
+from views import accuracy, events_view, skychart, skyguide, theme, tonight, where  # noqa: E402
 from views import components as ui  # noqa: E402
-from views import methodology, outlook, theme, tonight, track_record, where  # noqa: E402
 from views.common import Context, fingerprint, footer, site_option_label  # noqa: E402
 
 stamp_modules()
 
 PAGES = {
     "Tonight": tonight.render,
-    "7 Nights": outlook.render,
+    "Sky Guide": skyguide.render,
+    "Events": events_view.render,
     "Where to Go": where.render,
-    "Track Record": track_record.render,
-    "How It Works": methodology.render,
+    "Accuracy": accuracy.render,
 }
 SLUGS = {name.lower().replace(" ", "-"): name for name in PAGES}
 # Old page names keep working in bookmarked links.
 SLUGS |= {
-    "7-night-outlook": "7 Nights",
+    "7-nights": "Tonight",
+    "7-night-outlook": "Tonight",
     "where-tonight": "Where to Go",
-    "methodology": "How It Works",
+    "track-record": "Accuracy",
+    "how-it-works": "Accuracy",
+    "methodology": "Accuracy",
 }
+DEFAULT_PLACE = "los-angeles"
+# Links from before the places replaced the airports keep their nearest place.
+OLD_SITES = {"sac": "sacramento", "trk": "lake-tahoe"}
 DEFAULT_CUSTOM = {"lat": 37.7306, "lon": -119.5738, "name": "Glacier Point"}
 
 
-STATIC_FILES = (CONFIG_DIR / "settings.yaml", CONFIG_DIR / "sites.yaml", inference.METRICS_PATH)
+STATIC_FILES = (
+    CONFIG_DIR / "settings.yaml",
+    CONFIG_DIR / "places.yaml",
+    CONFIG_DIR / "meteor_showers.yaml",
+    inference.METRICS_PATH,
+)
 
 
 @st.cache_resource(show_spinner=False)
 def _load_static(version: str):
-    """Settings, sites, and backtest metrics, cached per version of the files they come from."""
+    """Settings, places, and backtest metrics, cached per version of the files they come from."""
     settings = load_settings()
-    sites = load_sites()
+    sites = load_places()
     try:
         metrics = inference.load_metrics()
     except (FileNotFoundError, ValueError):
@@ -130,9 +142,12 @@ def load_static():
 
 
 LIGHT_FILES = (
-    lightpollution.GRID_PATH, lightpollution.BASE_PATH, skyglow.SOURCES_PATH,
-    skyglow.CITIES_PATH, skyglow.MODEL_PATH,
-)  # fmt: skip
+    lightpollution.GRID_PATH,
+    lightpollution.BASE_PATH,
+    skyglow.SOURCES_PATH,
+    skyglow.CITIES_PATH,
+    skyglow.MODEL_PATH,
+)
 
 
 @st.cache_resource(show_spinner=False)
@@ -202,6 +217,52 @@ def get_forecast(
         return None, f"unexpected error: {exc}"
 
 
+# ---------- cached sky computations (shared by every visitor in this process) ----------
+
+
+@st.cache_data(ttl=6 * 60 * 60, max_entries=64, show_spinner="Working out tonight's sky…")
+def cached_sky(site: Site, dusk: pd.Timestamp, dawn: pd.Timestamp, sqm: float) -> dict:
+    return sky.tonight(site, dusk, dawn, sqm)
+
+
+@st.cache_data(ttl=6 * 60 * 60, max_entries=256, show_spinner=False)
+def cached_chart(
+    site: Site, utc: pd.Timestamp, sqm: float, mode: str, labels: bool, lines: bool, compact: bool
+) -> tuple[str, dict]:
+    return skychart.sky_svg(site, utc, sqm, mode=mode, labels=labels, lines=lines, compact=compact)
+
+
+@st.cache_data(ttl=12 * 60 * 60, max_entries=32, show_spinner="Working out the coming sky events…")
+def _cached_events(site: Site, day: str, sqm: float) -> list:
+    _, places, _ = load_static()
+    grid = load_light_pollution()["grid"]
+    rated = [(p, _sqm(grid, p)) for p in places]
+    return events.upcoming(live.utcnow(), 120, site, sqm, rated)
+
+
+def _sqm(grid, site: Site) -> float:
+    p = lightpollution.point(grid, site.lat, site.lon) if grid is not None else None
+    return float(p["sqm"]) if p else sky.NATURAL_SQM
+
+
+def cached_events(site: Site, sqm: float) -> list:
+    """Events for the next four months, recomputed once a day (and per place)."""
+    return _cached_events(site, live.utcnow().tz_convert(site.timezone).date().isoformat(), sqm)
+
+
+def night_window(site: Site) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Tonight's dark window (or the one under way), without needing a weather forecast."""
+    now = live.utcnow()
+    w = events._dark_windows(site, now.tz_convert(site.timezone).date(), -18.0)
+    w = w[w["dawn_utc"] > now]
+    if w.empty:
+        w = events._dark_windows(
+            site, (now + pd.Timedelta(days=1)).tz_convert(site.timezone).date(), -18.0
+        )
+    row = w.iloc[0]
+    return row["dusk_utc"], row["dawn_utc"]
+
+
 def link_coords(query) -> tuple[float, float, bool]:
     """Latitude/longitude from a shared link, or the default spot if they're missing, not
     numbers, or outside the area SkyTrust covers. The flag says whether the link's were used."""
@@ -227,10 +288,15 @@ def top_bar(sites) -> tuple[str, str, float | None, float | None, str]:
     query = st.query_params
     site_ids = [s.id for s in sites]
     options = [*site_ids, live.CUSTOM_ID]
-    wanted = query.get("site", "SAC").upper()
+    wanted = query.get("site", DEFAULT_PLACE).lower()
+    wanted = OLD_SITES.get(wanted, wanted)
     if "lat" in query and "lon" in query:
         wanted = live.CUSTOM_ID
-    labels = {s.id: site_option_label(s) for s in sites} | {live.CUSTOM_ID: "Custom location…"}
+    grid = load_light_pollution()["grid"]
+    labels = {
+        s.id: site_option_label(s, sky.darkness(_sqm(grid, s)) if grid is not None else None)
+        for s in sites
+    } | {live.CUSTOM_ID: "Custom location…"}
     start = SLUGS.get(query.get("page", ""), "Tonight")
 
     with st.container(key="topbar"):
@@ -256,7 +322,7 @@ def top_bar(sites) -> tuple[str, str, float | None, float | None, str]:
         site_id = where.selectbox(
             "Location",
             options,
-            index=options.index(wanted) if wanted in options else 0,
+            index=options.index(wanted) if wanted in options else options.index(DEFAULT_PLACE),
             key="site",
             format_func=labels.get,
             label_visibility="collapsed",
@@ -284,8 +350,8 @@ def top_bar(sites) -> tuple[str, str, float | None, float | None, str]:
                 )
             )
             st.caption(
-                "Anywhere in the Pacific-time West. Uses the site-agnostic blend, whose accuracy "
-                "was measured at airports it had never seen."
+                "Anywhere in the Pacific-time West. Forecasts use the version of the model built "
+                "for new places, tested at airports it had never seen."
             )
     return page or "Tonight", site_id, lat, lon, name
 
@@ -303,7 +369,7 @@ def sync_url(page: str, site_id: str, lat, lon, name: str) -> None:
 
 def main() -> None:
     st.set_page_config(
-        page_title="SkyTrust · clear-sky forecasts for stargazers",
+        page_title="SkyTrust · stargazing forecasts for California",
         page_icon=":material/dark_mode:",
         layout="wide",
         initial_sidebar_state="collapsed",
@@ -318,9 +384,9 @@ def main() -> None:
         st.error(str(exc))
         return
     sync_url(page, site_id, lat, lon, name)
-    needs_live = page in ("Tonight", "7 Nights")
+    needs_live = page == "Tonight"
     forecast, error = get_forecast(site_id, lat, lon, name) if needs_live else (None, None)
-    summary = cached_forward_summary() if page == "Track Record" else None
+    summary = cached_forward_summary() if page == "Accuracy" else None
     ctx = Context(
         settings,
         site,
@@ -333,6 +399,7 @@ def main() -> None:
         get_forecast,
         live.utcnow(),
         load_light_pollution(),
+        {"sky": cached_sky, "chart": cached_chart, "events": cached_events, "night": night_window},
     )
     try:
         PAGES[page](ctx)

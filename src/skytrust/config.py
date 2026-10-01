@@ -100,6 +100,27 @@ def load_settings(path: Path | None = None) -> Settings:
 
 
 def load_sites(path: Path | None = None) -> tuple[Site, ...]:
+    """The five evaluated ASOS airports: training, testing and the track record."""
     path = path or CONFIG_DIR / "sites.yaml"
     raw = yaml.safe_load(path.read_text())
     return tuple(Site(**s) for s in raw["sites"])
+
+
+def load_places(path: Path | None = None) -> tuple[Site, ...]:
+    """The well-known California places the app offers (config/places.yaml). They were never
+    part of the evaluation, so forecasts there use the site-agnostic blend. `terrain_class`
+    carries the region name."""
+    path = path or CONFIG_DIR / "places.yaml"
+    raw = yaml.safe_load(path.read_text())
+    return tuple(
+        Site(
+            p["id"],
+            p["name"],
+            float(p["lat"]),
+            float(p["lon"]),
+            float(p["elevation_m"]),
+            p["region"],
+            p["timezone"],
+        )  # fmt: skip
+        for p in raw["places"]
+    )

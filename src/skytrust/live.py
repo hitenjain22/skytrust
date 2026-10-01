@@ -20,6 +20,7 @@ import logging
 import math
 import os
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -77,6 +78,20 @@ def custom_site(
 
 def is_custom(site: Site) -> bool:
     return site.id.startswith(CUSTOM_ID)
+
+
+@lru_cache(maxsize=1)
+def evaluated_site_ids() -> frozenset[str]:
+    from skytrust.config import load_sites
+
+    return frozenset(s.id for s in load_sites())
+
+
+def uses_site_blend(site: Site) -> bool:
+    """Only the evaluated airports have a blend and a track record of their own; every other
+    place (the app's California places, custom spots) gets the site-agnostic blend, whose
+    accuracy was measured at airports it had never seen."""
+    return site.id in evaluated_site_ids()
 
 
 def utcnow() -> pd.Timestamp:
@@ -443,7 +458,7 @@ def build_forecast(
         for short, g in hourly.groupby("model", sort=False)
     }
     median = hourly.pivot_table(index="time", columns="model", values="cloud_cover").median(axis=1)
-    variant = "geo" if is_custom(site) else "primary"
+    variant = "primary" if uses_site_blend(site) else "geo"
     covers = hourly.pivot_table(index="time", columns="model", values="cloud_cover")
     ctx = _Context(
         site,

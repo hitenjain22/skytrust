@@ -12,7 +12,16 @@ import plotly.graph_objects as go
 from skytrust.report import display_name
 
 PAD = pd.Timedelta(hours=1)
-LABEL_POSITIONS = {
+LABEL_POSITIONS = {  # chosen so neighbouring places' labels don't collide on the California map
+    "san-francisco": "bottom left",
+    "sacramento": "top left",
+    "lake-tahoe": "top right",
+    "yosemite": "middle right",
+    "death-valley": "middle right",
+    "santa-barbara": "bottom left",
+    "los-angeles": "bottom left",
+    "big-bear-lake": "top center",
+    "joshua-tree": "middle right",
     "TRK": "top right",
     "AUN": "top left",
     "SAC": "bottom left",
@@ -127,49 +136,77 @@ def night_chart(hourly: pd.DataFrame, night, tz: str, pal: dict, go_at=0.7, mayb
     fig = go.Figure()
     start, end = night.dusk_utc - PAD, night.dawn_utc + PAD
     fig.add_vrect(
-        x0=_local(night.dusk_utc, tz), x1=_local(night.dawn_utc, tz), fillcolor=pal["dark"],
-        line_width=0, layer="below",
-    )  # fmt: skip
+        x0=_local(night.dusk_utc, tz),
+        x1=_local(night.dawn_utc, tz),
+        fillcolor=pal["dark"],
+        line_width=0,
+        layer="below",
+    )
     fig.add_trace(
         go.Bar(
             x=_local(p.index, tz),
             y=p.to_numpy() * 100,
             name=name,
-            marker={"color": [ink_level(v, pal, go_at, maybe_at) for v in p.to_numpy()],
-                    "line": {"width": 0}, "cornerradius": 3},
+            marker={
+                "color": [ink_level(v, pal, go_at, maybe_at) for v in p.to_numpy()],
+                "line": {"width": 0},
+                "cornerradius": 3,
+            },
             customdata=cloud,
             hovertemplate=hover + "<extra></extra>",
             width=1000 * 60 * 60 * 0.62,
         )
-    )  # fmt: skip
+    )
     # Moon-up band above the bars
     for a, b in getattr(night, "moon_up", []) or []:
         fig.add_shape(
-            type="rect", x0=_local(max(a, start), tz), x1=_local(min(b, end), tz), y0=105, y1=107.5,
-            fillcolor=pal["moon"], line_width=0, opacity=0.6,
-        )  # fmt: skip
+            type="rect",
+            x0=_local(max(a, start), tz),
+            x1=_local(min(b, end), tz),
+            y0=105,
+            y1=107.5,
+            fillcolor=pal["moon"],
+            line_width=0,
+            opacity=0.6,
+        )
     if getattr(night, "moon_up", None):
         first = max(night.moon_up[0][0], start)
         fig.add_annotation(
-            x=_local(first, tz), y=113, text="Moon up", showarrow=False, xanchor="left",
+            x=_local(first, tz),
+            y=113,
+            text="Moon up",
+            showarrow=False,
+            xanchor="left",
             font={"size": 11, "color": pal["muted"]},
-        )  # fmt: skip
+        )
     for when, label, anchor in [
         (night.dusk_utc, "dark", "left"),
         (night.dawn_utc, "dawn", "right"),
     ]:
         fig.add_vline(x=_local(when, tz), line={"color": pal["accent2"], "width": 1, "dash": "dot"})
         fig.add_annotation(
-            x=_local(when, tz), y=97, text=f"{label} {when.tz_convert(tz):%-I:%M %p}",
-            showarrow=False, xanchor=anchor, xshift=4 if anchor == "left" else -4,
+            x=_local(when, tz),
+            y=97,
+            text=f"{label} {when.tz_convert(tz):%-I:%M %p}",
+            showarrow=False,
+            xanchor=anchor,
+            xshift=4 if anchor == "left" else -4,
             font={"size": 11, "color": pal["accent2"]},
-        )  # fmt: skip
+        )
     fig.update_xaxes(type="date", range=[_local(start, tz), _local(end, tz)])
     return _layout(
-        fig, pal, height=300, time_axis=True, legend=False,
-        yaxis={"range": [0, 118], "tickvals": [0, 25, 50, 75, 100], "ticksuffix": "%",
-               "title": {"text": "chance clear", "font": {"size": 11}}},
-    )  # fmt: skip
+        fig,
+        pal,
+        height=300,
+        time_axis=True,
+        legend=False,
+        yaxis={
+            "range": [0, 118],
+            "tickvals": [0, 25, 50, 75, 100],
+            "ticksuffix": "%",
+            "title": {"text": "chance clear", "font": {"size": 11}},
+        },
+    )
 
 
 def hourly_cloud(hourly: pd.DataFrame, night, tz: str, threshold: float, pal: dict) -> go.Figure:
@@ -197,9 +234,12 @@ def hourly_cloud(hourly: pd.DataFrame, night, tz: str, threshold: float, pal: di
         )
     )
     fig.add_vrect(
-        x0=_local(night.dusk_utc, tz), x1=_local(night.dawn_utc, tz), fillcolor=pal["dark"],
-        line_width=0, layer="below",
-    )  # fmt: skip
+        x0=_local(night.dusk_utc, tz),
+        x1=_local(night.dawn_utc, tz),
+        fillcolor=pal["dark"],
+        line_width=0,
+        layer="below",
+    )
     fig.add_hline(
         y=threshold * 100,
         line_dash="dash",
@@ -233,9 +273,12 @@ def cloud_layers(hourly: pd.DataFrame, night, tz: str, pal: dict) -> go.Figure:
             )
         )
     fig.add_vrect(
-        x0=_local(night.dusk_utc, tz), x1=_local(night.dawn_utc, tz), fillcolor=pal["dark"],
-        line_width=0, layer="below",
-    )  # fmt: skip
+        x0=_local(night.dusk_utc, tz),
+        x1=_local(night.dawn_utc, tz),
+        fillcolor=pal["dark"],
+        line_width=0,
+        layer="below",
+    )
     return _layout(
         fig,
         pal,
@@ -277,12 +320,16 @@ def outlook_grid(nights, hourly: pd.DataFrame, tz: str, pal: dict, labels: list[
             zmax=100,
             xgap=3,
             ygap=3,
-            colorbar={"title": {"text": "cloud %", "side": "right"}, "thickness": 10,
-                      "tickvals": [0, 50, 100], "outlinewidth": 0},
+            colorbar={
+                "title": {"text": "cloud %", "side": "right"},
+                "thickness": 10,
+                "tickvals": [0, 50, 100],
+                "outlinewidth": 0,
+            },
             hovertemplate="%{y}, %{x}: %{z:.0f}% cloud<extra></extra>",
             hoverongaps=False,
         )
-    )  # fmt: skip
+    )
     fig.update_yaxes(autorange="reversed", showgrid=False)
     fig.update_xaxes(showgrid=False, side="top")
     return _layout(fig, pal, height=46 * len(nights) + 60, legend=False)
@@ -351,27 +398,35 @@ def go_accuracy_by_lead(records: pd.DataFrame, pal: dict) -> go.Figure:
                 y=ok,
                 name="SkyTrust" if is_blend else "Guessing from the season",
                 mode="lines+markers",
-                line={"color": pal["methods"]["blend" if is_blend else "climatology"],
-                      "width": 3 if is_blend else 1.5, "dash": "solid" if is_blend else "dot"},
+                line={
+                    "color": pal["methods"]["blend" if is_blend else "climatology"],
+                    "width": 3 if is_blend else 1.5,
+                    "dash": "solid" if is_blend else "dot",
+                },
                 marker={"size": 8 if is_blend else 5},
                 error_y={
-                    "type": "data", "symmetric": False, "thickness": 1,
+                    "type": "data",
+                    "symmetric": False,
+                    "thickness": 1,
                     "array": (100 * (g["false_clear_rate"] - g["false_clear_rate_lo"])).fillna(0),
-                    "arrayminus": (
-                        100 * (g["false_clear_rate_hi"] - g["false_clear_rate"])
-                    ).fillna(0),
+                    "arrayminus": (100 * (g["false_clear_rate_hi"] - g["false_clear_rate"])).fillna(
+                        0
+                    ),
                 }
                 if is_blend
                 else None,
                 hovertemplate="%{x} day(s) ahead: %{y:.0f}% of 'go' nights were usable"
                 "<extra></extra>",
             )
-        )  # fmt: skip
+        )
     fig.update_xaxes(title="Days ahead", dtick=1)
     return _layout(
-        fig, pal, "When it said “go”, how often the night was usable", height=320,
+        fig,
+        pal,
+        "When it said “go”, how often the night was usable",
+        height=320,
         yaxis={"range": [50, 100], "ticksuffix": "%"},
-    )  # fmt: skip
+    )
 
 
 def false_clear_bars(records: pd.DataFrame, label: str, lead: int, pal: dict) -> go.Figure:
@@ -508,9 +563,9 @@ def value_curves(
 
 # Representative overlay colours (from lightpollution.OVERLAY_RGBA) for the map key.
 GLOW_KEY = [
-    ("pristine to slightly degraded (clear)", "rgba(0,0,0,0.0)"),
-    ("degraded near the horizon", "rgba(130,104,70,0.6)"),
-    ("polluted (up to ~2x natural)", "rgba(196,150,80,0.75)"),
+    ("dark: near natural", "rgba(0,0,0,0.0)"),
+    ("some light near the horizon", "rgba(130,104,70,0.6)"),
+    ("up to 2× natural", "rgba(196,150,80,0.75)"),
     ("Milky Way hidden", "rgba(238,202,128,0.85)"),
     ("city sky", "rgba(252,244,222,0.95)"),
 ]
@@ -535,30 +590,38 @@ def light_map(
 
     src = "data:image/png;base64," + base64.b64encode(overlay_png).decode()
     corners = [
-        [grid.west, grid.north], [grid.east, grid.north],
-        [grid.east, grid.south], [grid.west, grid.south],
-    ]  # fmt: skip
+        [grid.west, grid.north],
+        [grid.east, grid.north],
+        [grid.east, grid.south],
+        [grid.west, grid.south],
+    ]
     fig = go.Figure()
     for _, r in (spots if spots is not None else pd.DataFrame()).iterrows():
         fig.add_trace(
             go.Scattermap(
-                lat=[r["lat"]], lon=[r["lon"]], mode="markers+text", text=[r["label"]],
+                lat=[r["lat"]],
+                lon=[r["lon"]],
+                mode="markers+text",
+                text=[r["label"]],
                 textposition=r.get("position", "bottom center"),
                 textfont={"color": "#CFCFD4", "size": 11, "family": MAP_FONT},
                 marker={"size": 9, "color": "#CFCFD4", "symbol": "circle", "opacity": 0.9},
                 hovertemplate="%{text}<extra></extra>",
             )
-        )  # fmt: skip
+        )
     for _, r in markers.iterrows():
         fig.add_trace(
             go.Scattermap(
-                lat=[r["lat"]], lon=[r["lon"]], mode="markers+text", text=[r["label"]],
+                lat=[r["lat"]],
+                lon=[r["lon"]],
+                mode="markers+text",
+                text=[r["label"]],
                 textposition=r["position"],
                 textfont={"color": "#E6E6EA", "size": 12, "family": MAP_FONT},
                 marker={"size": 13, "color": r["color"], "opacity": 0.95},
                 hovertemplate="%{text}<extra></extra>",
             )
-        )  # fmt: skip
+        )
     fig.update_layout(
         map={
             "style": "carto-darkmatter",
@@ -580,7 +643,7 @@ def light_map(
                     "opacity": 0.95,
                 }
             ],
-        },  # fmt: skip
+        },
         height=height,
         margin={"l": 0, "r": 0, "t": 0, "b": 0},
         paper_bgcolor=pal["paper"],
@@ -589,18 +652,20 @@ def light_map(
     return fig
 
 
-def bortle_bar(shares: dict[str, float]) -> str:
-    """Stacked horizontal bar (HTML) of the area share in each Bortle band."""
+def bortle_bar(shares: dict[str, float], words: dict[str, str] | None = None) -> str:
+    """Stacked horizontal bar (HTML) of the area share in each darkness band; `words` relabels
+    the atlas's Bortle bands in plain language."""
     tones = {"1–3": 0.14, "4–4.5": 0.38, "5–6": 0.62, "7–9": 0.9}
+    name = (lambda k: words.get(k, k)) if words else (lambda k: f"Bortle {k}")
     segs = "".join(
-        f'<span title="Bortle {k}: {v:.0%}" style="width:{v * 100:.2f}%;'
+        f'<span title="{name(k)}: {v:.0%}" style="width:{v * 100:.2f}%;'
         f'background:color-mix(in srgb, currentColor {tones[k] * 100:.0f}%, transparent)"></span>'
         for k, v in shares.items()
         if v > 0
     )
     labels = "".join(
         f'<span><span class="sk-swatch" style="--c:color-mix(in srgb, currentColor '
-        f'{tones[k] * 100:.0f}%, transparent)"></span>Bortle {k} · {v:.0%}</span>'
+        f'{tones[k] * 100:.0f}%, transparent)"></span>{name(k)} · {v:.0%}</span>'
         for k, v in shares.items()
     )
     return f'<div class="sk-stack">{segs}</div><div class="sk-legend">{labels}</div>'
@@ -643,7 +708,7 @@ def dome_polar(glow: dict, pal: dict, height: int = 360) -> go.Figure:
                 "tickangle": 45,
                 "showline": False,
             },
-        },  # fmt: skip
+        },
         height=height,
         margin={"l": 30, "r": 30, "t": 20, "b": 20},
         paper_bgcolor=pal["paper"],

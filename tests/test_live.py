@@ -269,3 +269,19 @@ def test_hourly_clear_probabilities_come_from_the_shipped_hourly_model(forecast)
     assert night.hourly_clear is not None
     assert len(night.hourly_clear) == night.dark_hours
     assert night.hourly_clear.between(0, 1).all()
+
+
+def test_places_that_were_never_evaluated_use_the_unseen_site_blend(settings):
+    """The app's California places (Los Angeles, Death Valley, ...) have no track record of their
+    own, so they must get the site-agnostic blend and the unseen-site record, like a custom
+    location; only the five evaluated airports use their own blend and record."""
+    from conftest import FIXTURES
+    from skytrust.config import load_places, load_sites
+
+    payload = json.loads((FIXTURES / "openmeteo_forecast_SAC_live.json").read_text())
+    now = pd.Timestamp("2026-09-25 01:00", tz="UTC")
+    place = next(p for p in load_places() if p.id == "sacramento")
+    n = live.build_forecast(place, payload, now, now, settings).nights[0]
+    assert n.track_record is None or n.track_record.get("kind") == "unseen"
+    assert not live.uses_site_blend(place)
+    assert all(live.uses_site_blend(s) for s in load_sites())

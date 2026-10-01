@@ -4,6 +4,7 @@ with the live API down (with and without a saved last-good copy)."""
 from __future__ import annotations
 
 import json
+import re
 
 import pandas as pd
 import pytest
@@ -20,7 +21,7 @@ from skytrust.data.http import SourceUnavailableError
 pytestmark = pytest.mark.slow
 
 APP = str(REPO_ROOT / "app" / "streamlit_app.py")
-PAGES = ["Tonight", "7 Nights", "Where to Go", "Track Record", "How It Works"]
+PAGES = ["Tonight", "Sky Guide", "Events", "Where to Go", "Accuracy"]
 NOW = pd.Timestamp("2026-09-25 01:00", tz="UTC")
 
 
@@ -67,7 +68,9 @@ def test_tonight_shows_probability_and_verdict(offline, monkeypatch):
     api_up(monkeypatch)
     at = visit("Tonight")
     html = " ".join(m.value for m in at.markdown)
-    assert "chance of a usable night" in html
+    assert "chance of a clear night" in html
+    assert "Look up tonight" in html and "The week ahead" in html
+    assert "<svg" in html  # the picture of tonight's sky
     assert any(v in html for v in ["GO", "MAYBE", "SKIP"])
     assert "Open-Meteo" in " ".join(c.value for c in at.caption)
 
@@ -77,7 +80,7 @@ def test_api_down_without_saved_copy_never_crashes(page, offline, monkeypatch):
     api_down(monkeypatch)
     at = visit(page)
     assert not at.exception
-    if page in ("Tonight", "7 Nights"):
+    if page == "Tonight":
         assert any("unavailable" in w.value for w in at.warning)
 
 
@@ -94,7 +97,7 @@ def test_api_down_with_saved_copy_shows_as_of_banner(offline, monkeypatch):
 
 def test_track_record_label_toggle(offline, monkeypatch):
     api_up(monkeypatch)
-    at = visit("Track Record")
+    at = visit("Accuracy")
     at.radio(key="label").set_value("asos").run()
     assert not at.exception
     assert any("ASOS-only" in m.value for m in at.markdown)
@@ -106,30 +109,39 @@ def test_track_record_label_toggle(offline, monkeypatch):
 def test_site_switch(offline, monkeypatch):
     api_up(monkeypatch)
     at = visit("Tonight")
-    at.selectbox(key="site").set_value("BIH").run()
+    at.selectbox(key="site").set_value("death-valley").run()
     assert not at.exception
     html = " ".join(m.value for m in at.markdown)
-    assert "Bishop" in html and "Bortle" in html  # light pollution shows on Tonight
+    assert "Death Valley" in html and "Very dark" in html  # light pollution in plain words
+    assert "Bortle" not in html
 
 
 def test_deep_link_query_params(offline, monkeypatch):
     api_up(monkeypatch)
     at = AppTest.from_file(APP, default_timeout=60)
-    at.query_params["page"] = "track-record"
-    at.query_params["site"] = "bih"
+    at.query_params["page"] = "sky-guide"
+    at.query_params["site"] = "death-valley"
     at.run()
     assert not at.exception
-    assert at.session_state["page"] == "Track Record"
-    assert at.selectbox(key="site").value == "BIH"
+    assert at.session_state["page"] == "Sky Guide"
+    assert at.selectbox(key="site").value == "death-valley"
 
 
-def test_old_page_links_still_work(offline, monkeypatch):
+@pytest.mark.parametrize(
+    ("page", "site", "want_page", "want_site"),
+    [("methodology", "sac", "Accuracy", "sacramento"), ("track-record", "trk", "Accuracy",
+     "lake-tahoe"), ("7-nights", "bih", "Tonight", "los-angeles")],
+)  # fmt: skip
+def test_old_links_still_work(page, site, want_page, want_site, offline, monkeypatch):
+    """Bookmarks from before the redesign (old page names, airport codes) still open sensibly."""
     api_up(monkeypatch)
     at = AppTest.from_file(APP, default_timeout=60)
-    at.query_params["page"] = "methodology"  # renamed to "How It Works"
+    at.query_params["page"] = page
+    at.query_params["site"] = site
     at.run()
     assert not at.exception
-    assert at.session_state["page"] == "How It Works"
+    assert at.session_state["page"] == want_page
+    assert at.selectbox(key="site").value == want_site
 
 
 def test_moon_band_when_moon_is_still_up_at_the_chart_edge():
@@ -188,7 +200,7 @@ def test_live_verification_panel(offline, monkeypatch, n_verified, expected):
     path = offline / "summary.json"
     path.write_text(json.dumps(_summary(n_verified)))
     monkeypatch.setenv("SKYTRUST_FORWARD_SUMMARY", str(path))
-    at = visit("Track Record")
+    at = visit("Accuracy")
     assert not at.exception
     shown = " ".join([i.value for i in at.info] + [str(m.value) for m in at.metric])
     assert expected in shown
@@ -196,7 +208,7 @@ def test_live_verification_panel(offline, monkeypatch, n_verified, expected):
 
 def test_live_verification_unreachable_is_graceful(offline, monkeypatch):
     api_up(monkeypatch)
-    at = visit("Track Record")
+    at = visit("Accuracy")
     assert not at.exception
     assert any("isn't reachable" in i.value for i in at.info)
 
@@ -256,18 +268,49 @@ def test_bad_coordinates_in_a_shared_link_never_crash(lat, lon, offline, monkeyp
     assert any("couldn't be used" in w.value for w in at.warning)
 
 
-def test_where_tonight_ranks_every_site(offline, monkeypatch):
+def test_where_to_go_ranks_every_place(offline, monkeypatch):
+    from skytrust.config import load_places
+
     api_up(monkeypatch)
     at = visit("Where to Go")
     assert not at.exception, at.exception
-    assert any("Where should I go tonight?" in h.value for h in at.header)
-    assert len(at.dataframe) == 1 and len(at.dataframe[0].value) == 5
+    assert len(at.dataframe) == 1 and len(at.dataframe[0].value) == len(load_places())
     html = " ".join(m.value for m in at.markdown)
-    assert "Darkest within 50 km" in html and "Nearest Bortle 1–3 sky" in html
-    assert "Dark site" in html and "Moon down" in html  # the three conditions
-    assert any("Light pollution at Sacramento" in h.value for h in at.subheader)
-    assert any("City glow" in h.value for h in at.subheader)
-    assert "darkest part of the horizon" in html and "Since 2015" in html
+    assert "Where should I go tonight?" in html and "How dark is it at Los Angeles?" in html
+    assert "Darkest spot within 50 km" in html and "Nearest very dark sky" in html
+    assert "Dark sky" in html and "Moon down" in html  # the three conditions
+    assert "Glow on the horizon" in html and "darkest part of the horizon" in html
+    assert "Since 2015" in html
+    # places are described in plain words; "Bortle" appears only in the method notes
+    assert not re.search(r"Bortle \d", html) and not re.search(r"\bB\d(\.5)?\b", html)
+
+
+def test_sky_guide_draws_the_sky_and_lists_what_is_up(offline, monkeypatch):
+    api_up(monkeypatch)
+    at = visit("Sky Guide")
+    assert not at.exception, at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "<svg" in html and "The sky tonight over Los Angeles" in html
+    assert "Moon and planets" in html and "The Milky Way" in html
+    options = at.select_slider(key="sky_time").options
+    at.select_slider(key="sky_time").set_value(options[-1]).run()  # dawn
+    assert not at.exception
+    at.segmented_control(key="sky_mode").set_value("A perfectly dark sky").run()
+    assert not at.exception
+    assert "a perfectly dark sky would show" in " ".join(m.value for m in at.markdown)
+
+
+def test_events_page_lists_showers_with_places(offline, monkeypatch):
+    api_up(monkeypatch)
+    at = visit("Events")
+    assert not at.exception, at.exception
+    html = " ".join(m.value for m in at.markdown)
+    # late September 2026: the Draconids (Oct 9) and Orionids (Oct 21) are coming up
+    assert "Draconids peak" in html and "Orionids peak" in html
+    assert "Best places in California" in html and "Saturn at opposition" in html
+    at.segmented_control(key="ev_filter").set_value("Meteor showers").run()
+    assert not at.exception
+    assert "Saturn at opposition" not in " ".join(m.value for m in at.markdown)
 
 
 def test_modules_left_over_from_before_a_deploy_are_reloaded(offline, monkeypatch):
@@ -278,7 +321,7 @@ def test_modules_left_over_from_before_a_deploy_are_reloaded(offline, monkeypatc
     import types
 
     api_up(monkeypatch)
-    visit("How It Works")  # imports views.* normally
+    visit("Accuracy")  # imports views.* normally
     ours = ("views", "skytrust")
     saved = {k: m for k, m in sys.modules.items() if k.split(".")[0] in ours}
     real = sys.modules["views.common"]
@@ -288,7 +331,7 @@ def test_modules_left_over_from_before_a_deploy_are_reloaded(offline, monkeypatc
     stale.__skytrust_stamp__ = (0, 0)  # loaded from a file that has since changed
     sys.modules["views.common"] = stale
     try:
-        at = visit("How It Works")
+        at = visit("Accuracy")
         assert not at.exception
         assert sys.modules["views.common"] is not stale
     finally:  # put back the modules the other tests' monkeypatches are attached to

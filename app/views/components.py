@@ -1,4 +1,4 @@
-"""Small HTML building blocks for the Observatory design system.
+"""Small HTML building blocks for the Nightfall design system.
 
 Each function returns an HTML string for `st.markdown(..., unsafe_allow_html=True)`. Streamlit's
 Markdown parser turns indented lines into code blocks and blank lines into paragraph breaks, so
@@ -142,3 +142,78 @@ def trust_dots(level: str) -> str:
     filled = {"High": 3, "Medium": 2, "Low": 1}.get(level, 0)
     dots = "●" * filled + "○" * (3 - filled)
     return f'<span class="sk-dots" title="{esc(level)} trust">{dots}</span>'
+
+
+# ---------- cards and sections ----------
+
+GLYPHS = {
+    "planet": "●",
+    "moon": "◐",
+    "star": "✦",
+    "pattern": "✧",
+    "cluster": "⁂",
+    "galaxy": "◎",
+    "nebula": "☁",
+    "milkyway": "∿",
+    "meteor": "☄",
+    "event": "◷",
+    "eclipse": "◑",
+    "season": "◒",
+    "pairing": "◌",
+}
+
+
+def section(title: str, lede: str = "", label: str = "") -> str:
+    """A section opener: small label, serif title, one line of context."""
+    return block(
+        '<div class="sk-section sk-rise">',
+        eyebrow(label) if label else "",
+        f"<h2>{esc(title)}</h2>",
+        f"<p>{lede}</p>" if lede else "",
+        "</div>",
+    )
+
+
+def badge(text: str, color: str | None = None) -> str:
+    style = f' style="--c:{color}"' if color else ""
+    return f'<span class="sk-badge"{style}>{esc(text)}</span>'
+
+
+def card(
+    kind: str,
+    label: str,
+    title: str,
+    where: str = "",
+    body: str = "",
+    meta: str = "",
+    extra: str = "",
+) -> str:
+    """A 'look up' card: what kind of thing, its name, where to look, a line of help."""
+    glyph = f'<span class="sk-glyph" aria-hidden="true">{GLYPHS.get(kind, "✦")}</span>'
+    return block(
+        '<div class="sk-card sk-look">',
+        f'<div class="sk-kind">{glyph}{eyebrow(label)}</div>',
+        f"<h4>{esc(title)}</h4>",
+        f'<div class="sk-where">{where}</div>' if where else "",
+        f"<p>{body}</p>" if body else "",
+        f'<div class="sk-meta">{meta}</div>' if meta else "",
+        extra,
+        "</div>",
+    )
+
+
+def grid(items: list[str], n: int = 3) -> str:
+    return f'<div class="sk-grid" style="--n:{n}">{"".join(items)}</div>'
+
+
+def darkness_scale(key: str) -> str:
+    """Five segments from very dark (left) to city (right), the current one lit and named under
+    its segment; the ends are labelled so the direction is clear."""
+    order = ["very-dark", "dark", "suburban", "bright", "city"]
+    names = dict(zip(order, ["Very dark", "Dark", "Suburban", "Bright", "City"], strict=True))
+    i = order.index(key) if key in order else 0
+    cells = "".join(f'<div class="{"on" if k == key else ""}"></div>' for k in order)
+    align = "left" if i == 0 else "right" if i == 4 else "center"
+    label = (f'<div class="sk-scale-labels"><span style="grid-column:{i + 1};text-align:{align};'
+             f'color:var(--sk-accent)">{names[order[i]]}</span></div>')  # fmt: skip
+    return f'<div class="sk-scale">{cells}</div>{label}'

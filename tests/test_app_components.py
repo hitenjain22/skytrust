@@ -124,11 +124,15 @@ def test_stylesheet_follows_the_active_theme_and_respects_reduced_motion():
 
 
 def test_place_names_are_friendly_and_details_come_from_config():
-    from skytrust.config import load_sites
+    from skytrust import sky
+    from skytrust.config import load_places, load_sites
 
-    sites = {s.id: s for s in load_sites()}
-    assert common.place_name(sites["AUN"]) == "Auburn"  # not IEM's "AURBURN MUNICIPAL AIRPORT"
-    assert common.place_detail(sites["TRK"]) == "High Sierra · 1,798 m"
+    airports = {s.id: s for s in load_sites()}
+    assert common.place_name(airports["AUN"]) == "Auburn airport"  # not "AURBURN MUNICIPAL..."
+    places = {p.id: p for p in load_places()}
+    assert common.place_detail(places["death-valley"]) == "Mojave Desert · -70 m"
+    label = common.site_option_label(places["death-valley"], sky.darkness(21.98))
+    assert label == "Death Valley · very dark sky"
 
 
 def test_map_labels_for_neighbouring_sites_do_not_collide():
@@ -165,18 +169,19 @@ def test_change_since_2015_says_brighter_or_darker_in_words():
     here = {"bortle": "6", "level_name": "", "level_text": ""}
     change = {"artificial_ratio": 1.19, "delta_mag": -0.18, "sqm_base": 18.78, "bortle_base": "6"}
     html = where.change_stat({"here": here, "change": change})
-    assert "brighter" in html and "19% more" in html
+    assert "Brighter" in html and "19% more" in html
     darker = change | {"delta_mag": 0.04, "artificial_ratio": 0.9}
     html = where.change_stat({"here": here, "change": darker})
-    assert "darker" in html and "10% less" in html
+    assert "Darker" in html and "10% less" in html
 
 
 def test_site_without_light_data_shows_no_placeholder_text():
     from views import where
 
     pal = {"No data": "#888"}
-    r = pd.Series({"verdict": "No data", "p": None, "bortle": float("nan"), "sqm": float("nan"),
-                   "place": "Somewhere", "area": "", "window": "–", "conds": []})  # fmt: skip
+    r = pd.Series({"verdict": "No data", "p": None, "tier": None, "times": float("nan"),
+                   "sqm": float("nan"), "place": "Somewhere", "area": "", "window": "–",
+                   "conds": []})  # fmt: skip
     html = where.rank_row(1, r, pal) + where.marker_label(r)
     assert "nan" not in html and "None" not in html
 
@@ -193,6 +198,7 @@ def test_dark_spots_on_the_local_map_do_not_pile_up_or_cover_the_site():
         "nearest_dark": spot(39.32, -120.14, 21.49, 0.5),  # "right here": no separate dot
     }  # fmt: skip
     df = where.map_spots(report, 39.32, -120.14)
-    assert df["label"].tolist() == ["21.82 · B1", "21.72 · B1"]  # darkest of the close pair kept
+    assert df["label"].tolist() == ["very dark sky", "very dark sky"]  # 2 dots: close pair merged
+    assert df["lat"].tolist() == [39.21, 39.40]  # the darker of the close pair is the one kept
     assert df["position"].tolist() == ["bottom center", "top center"]  # south / north of the site
     assert where.label_side(39.32, -119.9, 39.32, -120.14) == "middle right"

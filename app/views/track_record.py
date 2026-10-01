@@ -79,8 +79,9 @@ def report_card(v: report.MetricsView) -> str:
     return ui.strip(cards, three=True)
 
 
-def render(ctx: Context) -> None:
-    st.header("How often has it been wrong?")
+def render(ctx: Context, standalone: bool = True) -> None:
+    if standalone:
+        st.header("How often has it been wrong?")
     if not ctx.metrics:
         st.warning("No backtest metrics found (artifacts/metrics.json).")
         return
@@ -94,15 +95,21 @@ def render(ctx: Context) -> None:
     st.markdown(report_card(v), unsafe_allow_html=True)
     show(charts.go_accuracy_by_lead(v.records, ctx.palette))
     st.caption(
-        "Accuracy fades the further ahead you look, which is why the 7-night view shows a trust "
-        "level for each night. Error bars: 95% confidence intervals."
+        "Accuracy fades the further ahead you look, which is why the week ahead on Tonight "
+        "shows a trust level for each night. Error bars: 95% confidence intervals."
     )
 
     with st.container(key="panel_forward"):
         forward_panel.render(ctx.forward_summary)
 
-    st.subheader("The full backtest")
-    st.caption("For the data-curious: every method, every truth source, every forecast range.")
+    st.markdown(
+        ui.section(
+            "The full backtest",
+            "For the data-curious: every method, every truth source, every forecast range.",
+            "Details",
+        ),
+        unsafe_allow_html=True,
+    )
     c1, c2 = st.columns(2)
     names = {"primary": "Primary", "asos": "ASOS only", "era5": "ERA5 only", "goes": "Satellite"}
     label = c1.radio(

@@ -8,8 +8,7 @@ import streamlit as st
 
 from views import charts
 from views import components as ui
-from views.common import Context, day_label, lead_phrase, short_time
-from views.tonight import show, unavailable
+from views.common import Context, day_label, lead_phrase, short_time, show, unavailable
 
 TRUST_TEXT = {"High": "high trust", "Medium": "medium trust", "Low": "low trust"}
 COLS = "minmax(120px, 1.3fr) 26px minmax(60px, 2fr) 52px 96px"
