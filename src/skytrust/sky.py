@@ -312,6 +312,9 @@ def where_words(alt: float, az: float) -> str:
     return h if h == "nearly overhead" else f"{h} in the {compass(az)}"
 
 
+_APPARENT: dict[tuple[str, pd.Timestamp], tuple[np.ndarray, np.ndarray]] = {}
+
+
 class Observer:
     """Altitude/azimuth of catalogue objects and solar-system bodies for a site."""
 
@@ -352,11 +355,25 @@ class Observer:
         x = np.sin(dec) * np.cos(self.lat) - np.cos(dec) * np.sin(self.lat) * np.cos(ha)
         return np.degrees(alt), np.degrees(np.arctan2(y, x)) % 360
 
-    def altaz(self, ra_deg, dec_deg, utc: pd.DatetimeIndex):
-        """(alt, az) for J2000 catalogue positions at each time (shape times × objects)."""
+    def altaz(self, ra_deg, dec_deg, utc: pd.DatetimeIndex, key: str | None = None):
+        """(alt, az) for J2000 catalogue positions at each time (shape times × objects).
+
+        `key` names a fixed set of positions (e.g. "stars") so their apparent coordinates can be
+        cached: precession, nutation and aberration don't depend on where the observer stands
+        and change by < 0.001° in two hours, so one computation serves every place."""
         utc = pd.DatetimeIndex(utc)
         mid = utc[0] + (utc[-1] - utc[0]) / 2
-        ra, dec = self.apparent_radec(ra_deg, dec_deg, mid)
+        if key is None:
+            ra, dec = self.apparent_radec(ra_deg, dec_deg, mid)
+        else:
+            slot = mid.floor("2h")
+            cached = _APPARENT.get((key, slot))
+            if cached is None or len(cached[0]) != len(np.atleast_1d(ra_deg)):
+                cached = self.apparent_radec(ra_deg, dec_deg, slot)
+                if len(_APPARENT) > 64:
+                    _APPARENT.clear()
+                _APPARENT[(key, slot)] = cached
+            ra, dec = cached
         return self.altaz_from_radec(ra, dec, utc)
 
     def body(self, name: str, utc: pd.DatetimeIndex) -> dict:
@@ -431,7 +448,7 @@ CORE_HALF_WIDTH = 10  # galactic longitudes within ±10° of the centre: the Sag
 def milky_way_band(obs: Observer, utc: pd.DatetimeIndex) -> dict:
     """Altitude/azimuth of the galactic equator (every 5° of longitude) at each time."""
     ra, dec = galactic_to_equatorial(GALACTIC_L, np.zeros_like(GALACTIC_L))
-    alt, az = obs.altaz(ra, dec, utc)
+    alt, az = obs.altaz(ra, dec, utc, key="galactic-equator")
     return {"l": GALACTIC_L, "alt": alt, "az": az, "ra": ra, "dec": dec}
 
 
@@ -588,7 +605,7 @@ def tonight(
         found.append(moon_item)
 
     stars = cat.stars[cat.stars["name"].notna() & (cat.stars["mag"] <= 1.6)]
-    alt, az = obs.altaz(stars["ra"].to_numpy(), stars["dec"].to_numpy(), times)
+    alt, az = obs.altaz(stars["ra"].to_numpy(), stars["dec"].to_numpy(), times, key="bright")
     for k, (_, s) in enumerate(stars.iterrows()):
         m = float(s["mag"])
         found.append(
@@ -602,7 +619,7 @@ def tonight(
         )
 
     d = cat.dsos
-    alt, az = obs.altaz(d["ra"].to_numpy(), d["dec"].to_numpy(), times)
+    alt, az = obs.altaz(d["ra"].to_numpy(), d["dec"].to_numpy(), times, key="dsos")
     for k, (_, o) in enumerate(d.iterrows()):
         item = SkyItem(
             o["name"],
@@ -766,7 +783,10 @@ def stars_visible_count(
     """How many stars a typical observer can see at the darkest moment of the night (the Moon
     lowest), from here and from a natural sky at the same moment."""
     i = int(np.argmin(moon["alt"]))
-    alt, az = obs.altaz(cat.stars["ra"].to_numpy(), cat.stars["dec"].to_numpy(), times[i : i + 1])
+    stars = cat.stars
+    alt, az = obs.altaz(
+        stars["ra"].to_numpy(), stars["dec"].to_numpy(), times[i : i + 1], key="stars"
+    )
     alt, az = alt[0], az[0]
     up = alt > 0
     mags = cat.stars["mag"].to_numpy()[up]

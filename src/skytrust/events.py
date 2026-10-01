@@ -176,19 +176,34 @@ def active_window(shower: Shower, peak: pd.Timestamp) -> tuple[pd.Timestamp, pd.
     return start, end + pd.Timedelta(days=1)
 
 
+def _approx_peak(shower: Shower, year: int) -> pd.Timestamp:
+    """Rough date the Sun reaches the shower's solar longitude in `year` (within ~2 days): the
+    March equinox is λ⊙ = 0 near March 20."""
+    return pd.Timestamp(year=year, month=3, day=20, tz="UTC") + pd.Timedelta(
+        days=shower.peak_sol / SOLAR_DEG_PER_DAY
+    )
+
+
 def shower_peaks(start: pd.Timestamp, end: pd.Timestamp) -> list[tuple[Shower, pd.Timestamp]]:
-    """Every shower whose activity period overlaps [start, end], with its peak time."""
+    """Every shower whose activity period overlaps [start, end], with its peak time. Only years
+    whose rough peak date can matter are solved exactly (activity lasts at most ~2 months)."""
     out = []
     for s in load_showers():
         for year in range(start.year - 1, end.year + 2):
-            guess = pd.Timestamp(year=year, month=3, day=21, tz="UTC") + pd.Timedelta(
-                days=s.peak_sol / SOLAR_DEG_PER_DAY
-            )
+            guess = _approx_peak(s, year)
+            if not (start - pd.Timedelta(days=75) <= guess <= end + pd.Timedelta(days=75)):
+                continue
             peak = time_of_solar_longitude(s.peak_sol, guess)
             a, b = active_window(s, peak)
             if b >= start and a <= end:
                 out.append((s, peak))
     return sorted(out, key=lambda x: x[1])
+
+
+def next_peaks(now: pd.Timestamp, days: int = 60) -> list[tuple[Shower, pd.Timestamp]]:
+    """Meteor-shower peaks still to come in the next `days` days (cheap: no per-place work)."""
+    end = now + pd.Timedelta(days=days)
+    return [(s, p) for s, p in shower_peaks(now, end) if now - pd.Timedelta(hours=12) <= p <= end]
 
 
 @lru_cache(maxsize=1024)
@@ -418,9 +433,8 @@ def opposition_events(start: pd.Timestamp, end: pd.Timestamp, site: Site) -> lis
                         + ("." if eye else ", but only in binoculars or a telescope.")
                     ),
                     look=(
-                        f"Rises in the east at sunset, highest around "
-                        f"{tr['utc'].tz_convert(site.timezone):%-I:%M %p} "
-                        f"{sky.where_words(tr['alt'], tr['az'])}, in {tr['con']}."
+                        "Up all night: rises in the east at sunset and is highest around "
+                        f"midnight, {sky.where_words(tr['alt'], tr['az'])}, in {tr['con']}."
                     ),
                     best_start=tr["utc"] - pd.Timedelta(hours=2),
                     best_end=tr["utc"] + pd.Timedelta(hours=2),
@@ -465,8 +479,9 @@ def elongation_events(start: pd.Timestamp, end: pd.Timestamp, site: Site) -> lis
                         + ("" if ok else " From California it stays very low this time.")
                     ),
                     look=(
-                        f"About {seen['alt']:.0f}° up in the {sky.compass(seen['az'])} at "
-                        f"{seen['utc'].tz_convert(site.timezone):%-I:%M %p}."
+                        f"About {seen['alt']:.0f}° up in the {sky.compass(seen['az'])} as the sky "
+                        f"{'darkens' if evening else 'brightens before dawn'} (a fist at arm's "
+                        "length is about 10°)."
                     ),
                     best_start=seen["utc"] - pd.Timedelta(minutes=30),
                     best_end=seen["utc"] + pd.Timedelta(minutes=30),
@@ -601,15 +616,13 @@ def part_of_night(local: pd.Timestamp) -> str:
 
 def _pairing(a: str, b: str, when: pd.Timestamp, sep: float, view: dict, site: Site) -> Event:
     local = view["utc"].tz_convert(site.timezone)
+    look = f"{part_of_night(local)}, {sky.where_words(view['alt'], view['az'])}."
     return Event(
         "pairing",
         f"{a} near {b}",
         when,
         f"{a} and {b} appear about {sep:.1f}° apart (your little finger at arm's length is ~1°).",
-        look=(
-            f"Look {part_of_night(local)}, around {local:%-I:%M %p}, "
-            f"{sky.where_words(view['alt'], view['az'])}."
-        ),
+        look=look[:1].upper() + look[1:],
         best_start=view["utc"] - pd.Timedelta(minutes=45),
         best_end=view["utc"] + pd.Timedelta(minutes=45),
         details={"separation": sep, "with": [b], **view},
@@ -670,7 +683,6 @@ def eclipse_events(start: pd.Timestamp, end: pd.Timestamp, site: Site) -> list[E
         seen = b["alt"][0] > 0 and sun < -6
         label = eclipselib.LUNAR_ECLIPSES[y]
         mag = float(details["umbral_magnitude"][k])
-        local = when.tz_convert(site.timezone)
         out.append(
             Event(
                 "eclipse",
@@ -687,7 +699,7 @@ def eclipse_events(start: pd.Timestamp, end: pd.Timestamp, site: Site) -> list[E
                     )
                 ),
                 look=(
-                    f"Mid-eclipse {local:%-I:%M %p}, the Moon "
+                    f"At mid-eclipse the Moon is "
                     f"{sky.where_words(float(b['alt'][0]), float(b['az'][0]))}."
                     if seen
                     else ""

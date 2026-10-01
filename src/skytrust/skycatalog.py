@@ -130,6 +130,7 @@ def build_constellations(path: Path = CONSTELLATIONS_PATH) -> dict:
         lon, lat = f["geometry"]["coordinates"]
         out[abbr] = {
             "name": names.get(abbr, f["properties"]["name"]),
+            "rank": int(f["properties"].get("rank", 3)),  # 1 = major ... 3 = minor (d3-celestial)
             "label": [_ra360(lon), round(lat, 3)],
             "lines": [],
         }
