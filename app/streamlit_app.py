@@ -13,10 +13,72 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import re
 import sys
 from pathlib import Path
 
 import streamlit as st
+
+log = logging.getLogger("skytrust.app")
+
+# Packages whose modules must match the files on disk. Streamlit Cloud pulls new code into the
+# running process; it re-reads this script but can keep the old copies of modules it already
+# imported, so new code calls old code (ImportError / KeyError on the live site). Before
+# importing anything of ours, drop every module of these packages if any of them changed.
+OUR_PACKAGES = ("views", "skytrust")
+STAMP = "__skytrust_stamp__"
+
+
+def _our_modules() -> dict:
+    return {
+        name: module
+        for name, module in list(sys.modules.items())
+        if name.split(".")[0] in OUR_PACKAGES and getattr(module, "__file__", None)
+    }
+
+
+def _is_stale(module) -> bool:
+    """Has the module's source file changed since it was loaded? Uses our own stamp when we set
+    one, else the source mtime/size Python records in the .pyc header at import (PEP 552)."""
+    try:
+        now = os.stat(module.__file__)
+    except OSError:
+        return True  # file removed by the update
+    stamp = getattr(module, STAMP, None)
+    if stamp is not None:
+        return tuple(stamp) != (now.st_mtime_ns, now.st_size)
+    try:
+        header = Path(module.__cached__).read_bytes()[:16]
+    except (AttributeError, TypeError, OSError):
+        return False  # no record: assume current
+    if len(header) < 16 or int.from_bytes(header[4:8], "little") != 0:
+        return False  # hash-based .pyc: no timestamp to compare
+    mtime, size = int.from_bytes(header[8:12], "little"), int.from_bytes(header[12:16], "little")
+    return (mtime, size) != (int(now.st_mtime) & 0xFFFFFFFF, now.st_size & 0xFFFFFFFF)
+
+
+def reload_changed_modules() -> None:
+    modules = _our_modules()
+    changed = [name for name, module in modules.items() if _is_stale(module)]
+    if not changed:
+        return
+    log.warning("code changed on disk (%s); reloading our modules", ", ".join(sorted(changed)))
+    for name in modules:
+        del sys.modules[name]
+    # cached objects were built by the old code (old classes, old settings)
+    st.cache_resource.clear()
+    st.cache_data.clear()
+
+
+def stamp_modules() -> None:
+    for module in _our_modules().values():
+        if getattr(module, STAMP, None) is None:
+            now = os.stat(module.__file__)
+            setattr(module, STAMP, (now.st_mtime_ns, now.st_size))
+
+
+reload_changed_modules()
 
 try:  # installed via `uv sync` locally; on a host that only installs dependencies, use src/
     import skytrust  # noqa: F401
@@ -29,7 +91,7 @@ from views import components as ui  # noqa: E402
 from views import methodology, outlook, theme, tonight, track_record, where  # noqa: E402
 from views.common import Context, fingerprint, footer, site_option_label  # noqa: E402
 
-log = logging.getLogger("skytrust.app")
+stamp_modules()
 
 PAGES = {
     "Tonight": tonight.render,
@@ -140,6 +202,25 @@ def get_forecast(
         return None, f"unexpected error: {exc}"
 
 
+def link_coords(query) -> tuple[float, float, bool]:
+    """Latitude/longitude from a shared link, or the default spot if they're missing, not
+    numbers, or outside the area SkyTrust covers. The flag says whether the link's were used."""
+    (la0, la1), (lo0, lo1) = live.CUSTOM_BOUNDS["lat"], live.CUSTOM_BOUNDS["lon"]
+    try:
+        lat, lon = float(query.get("lat", "")), float(query.get("lon", ""))
+    except ValueError:
+        return DEFAULT_CUSTOM["lat"], DEFAULT_CUSTOM["lon"], False
+    if la0 <= lat <= la1 and lo0 <= lon <= lo1:  # also False for nan
+        return lat, lon, True
+    return DEFAULT_CUSTOM["lat"], DEFAULT_CUSTOM["lon"], False
+
+
+def clean_name(name: str) -> str:
+    """A place name from a link or the name box, reduced to plain text: it is shown in headings
+    (markdown), so brackets, asterisks and the like could otherwise turn into links or styling."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s.,'’()&/-]", "", name)).strip()[:60]
+
+
 def top_bar(sites) -> tuple[str, str, float | None, float | None, str]:
     """One sticky row: brand, page navigation, location. On a phone the columns
     stack and the navigation wraps, so everything stays one tap away."""
@@ -153,7 +234,7 @@ def top_bar(sites) -> tuple[str, str, float | None, float | None, str]:
     start = SLUGS.get(query.get("page", ""), "Tonight")
 
     with st.container(key="topbar"):
-        brand, nav, where = st.columns([1.0, 3.6, 1.4], vertical_alignment="center", gap="small")
+        brand, nav, where = st.columns([0.9, 3.4, 1.7], vertical_alignment="center", gap="small")
         brand.markdown(
             ui.block(
                 '<div class="sk-brand">',
@@ -184,17 +265,24 @@ def top_bar(sites) -> tuple[str, str, float | None, float | None, str]:
     name = ""
     if site_id == live.CUSTOM_ID:
         (la0, la1), (lo0, lo1) = live.CUSTOM_BOUNDS["lat"], live.CUSTOM_BOUNDS["lon"]
+        lat0, lon0, from_link = link_coords(query)
         with st.container(key="panel_custom"):
+            if not from_link and "lat" in query and "lat" not in st.session_state:
+                st.warning(
+                    f"The location in this link couldn't be used (SkyTrust covers latitude "
+                    f"{la0:g}–{la1:g}, longitude {lo0:g}–{lo1:g}), so it shows "
+                    f"{DEFAULT_CUSTOM['name']} instead.",
+                    icon=":material/wrong_location:",
+                )
             c1, c2, c3 = st.columns([1, 1, 1.4])
-            lat = c1.number_input(
-                "Latitude", la0, la1, float(query.get("lat", DEFAULT_CUSTOM["lat"])), 0.01,
-                key="lat",
-            )  # fmt: skip
-            lon = c2.number_input(
-                "Longitude", lo0, lo1, float(query.get("lon", DEFAULT_CUSTOM["lon"])), 0.01,
-                key="lon",
-            )  # fmt: skip
-            name = c3.text_input("Name", query.get("name", DEFAULT_CUSTOM["name"]), key="name")
+            lat = c1.number_input("Latitude", la0, la1, lat0, 0.01, key="lat")
+            lon = c2.number_input("Longitude", lo0, lo1, lon0, 0.01, key="lon")
+            default_name = query.get("name", DEFAULT_CUSTOM["name"])[:60] if from_link else ""
+            name = clean_name(
+                c3.text_input(
+                    "Name", default_name or DEFAULT_CUSTOM["name"], max_chars=60, key="name"
+                )
+            )
             st.caption(
                 "Anywhere in the Pacific-time West. Uses the site-agnostic blend, whose accuracy "
                 "was measured at airports it had never seen."

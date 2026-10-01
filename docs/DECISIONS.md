@@ -493,3 +493,16 @@ Hiten asked for the path that is easiest to understand and gives the most consis
   credited to a town only within a population-scaled radius; the rest is "scattered lights".
 - **No new dependencies:** LZW decoding is 40 lines of Python (fast enough: ~20 s per year for
   the region), verified against libtiff.
+
+## 2026-09-30: code changes must reach every module after a deploy
+- **Live ImportError after the 2025 update:** Streamlit Cloud re-read the main script but kept
+  older copies of already-imported modules (`views.common` without `fingerprint`; `src/skytrust`
+  is never watched at all because it is outside `app/`). Reproduced by running the old commit and
+  checking out the new one under the server.
+- **Fix:** before any of our imports, the main script compares each `views.*` / `skytrust.*`
+  module with its file (our own stamp, else the source mtime/size Python records in the `.pyc`)
+  and, if any changed, drops them all and clears the Streamlit caches. All or nothing, because
+  modules hold references to each other.
+- **Shared links are untrusted input:** coordinates outside the covered area or not numbers
+  fall back to the default spot with a notice; names are reduced to plain text (they appear in
+  markdown headings).

@@ -243,6 +243,19 @@ def test_custom_location_out_of_bounds_is_friendly(offline, monkeypatch):
     assert not at.exception
 
 
+@pytest.mark.parametrize(
+    ("lat", "lon"), [("55", "-100"), ("abc", "1"), ("nan", "-119"), ("37.7", "inf")]
+)
+def test_bad_coordinates_in_a_shared_link_never_crash(lat, lon, offline, monkeypatch):
+    """Regression: `?lat=55` (outside the West) or `?lat=abc` took the whole app down."""
+    api_up(monkeypatch)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params.update({"page": "how-it-works", "lat": lat, "lon": lon})
+    at.run()
+    assert not at.exception, at.exception
+    assert any("couldn't be used" in w.value for w in at.warning)
+
+
 def test_where_tonight_ranks_every_site(offline, monkeypatch):
     api_up(monkeypatch)
     at = visit("Where to Go")
@@ -255,3 +268,30 @@ def test_where_tonight_ranks_every_site(offline, monkeypatch):
     assert any("Light pollution at Sacramento" in h.value for h in at.subheader)
     assert any("City glow" in h.value for h in at.subheader)
     assert "darkest part of the horizon" in html and "Since 2015" in html
+
+
+def test_modules_left_over_from_before_a_deploy_are_reloaded(offline, monkeypatch):
+    """Regression (live site, 2026-09-30): Streamlit Cloud pulled new code but kept the old
+    copies of already-imported modules in memory, so the new main script failed with
+    `ImportError: cannot import name ... from views.common`."""
+    import sys
+    import types
+
+    api_up(monkeypatch)
+    visit("How It Works")  # imports views.* normally
+    ours = ("views", "skytrust")
+    saved = {k: m for k, m in sys.modules.items() if k.split(".")[0] in ours}
+    real = sys.modules["views.common"]
+    stale = types.ModuleType("views.common")  # an older version, missing newer helpers
+    stale.__file__ = real.__file__
+    stale.Context = real.Context
+    stale.__skytrust_stamp__ = (0, 0)  # loaded from a file that has since changed
+    sys.modules["views.common"] = stale
+    try:
+        at = visit("How It Works")
+        assert not at.exception
+        assert sys.modules["views.common"] is not stale
+    finally:  # put back the modules the other tests' monkeypatches are attached to
+        for k in [k for k in sys.modules if k.split(".")[0] in ours]:
+            del sys.modules[k]
+        sys.modules.update(saved)
