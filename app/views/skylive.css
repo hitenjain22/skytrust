@@ -70,6 +70,8 @@
   .sk-live-body { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .sk-live-chart { position: static; }
   .sk-live-clock { font-size: 1.35rem; }
+  /* every row the same shape on a phone: name and note, then direction and badge */
+  .sk-live .sk-row > .sk-main { flex-basis: 100%; }
 }
 @media (prefers-color-scheme: light) {
   .sk-live-range::-webkit-slider-thumb { border-color: #F6F4EE; }
