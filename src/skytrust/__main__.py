@@ -138,24 +138,38 @@ def cmd_build_climatology(args: argparse.Namespace) -> int:
 
 
 def cmd_build_light_pollution(args: argparse.Namespace) -> int:
-    from skytrust import lightpollution
+    from skytrust import lightpollution, skyglow
 
     settings = load_settings()
+    cfg = settings.raw["light_pollution"]
     tif = Path(args.atlas) if args.atlas else lightpollution.ATLAS_TIF
-    if not tif.exists():
+    missing = [p for p in [tif, *(skyglow.viirs_path(y) for y in (2015, cfg["year"]))]
+               if not p.exists()]  # fmt: skip
+    if missing:
         print(
-            f"Atlas not found at {tif}. Download {settings.raw['light_pollution']['atlas_url']} "
-            f"(653 MB) and unzip World_Atlas_2015.tif there, or pass --atlas PATH.",
+            "Missing inputs: " + ", ".join(str(p) for p in missing) + ". Download the atlas "
+            f"({cfg['atlas_url']}) and the VIIRS night lights ({cfg['viirs_url']}), unzip them "
+            "into data/raw/light_pollution/ (see docs/DATA_NOTES.md §11-12).",
             file=sys.stderr,
         )
         return 2
-    grid = lightpollution.build(settings, tif)
-    lightpollution.save(grid)
-    lightpollution.save_overlay(grid)
+    atlas = lightpollution.build(settings, tif)
+    lightpollution.save(atlas, lightpollution.BASE_PATH)
+    updated, card = skyglow.build(settings, atlas, base_year=2015, year=cfg["year"])
+    lightpollution.save(updated)
+    lightpollution.save_overlay(updated)
+    skyglow.save_sources(card["_sources"])
+    skyglow.save_cities(cfg["bounds"])
+    card["validation_2025_atlas"] = skyglow.validate_against_lorenz(
+        atlas, updated, skyglow.LP_RAW / "NorthAmerica2025.png"
+    )
+    skyglow.save_model(card)
+    cv = card["spatial_cv"]
     print(
-        f"Wrote {lightpollution.GRID_PATH} and {lightpollution.OVERLAY_PATH} "
-        f"({grid.ucd.shape[0]} x {grid.ucd.shape[1]} cells, {grid.south:.2f}..{grid.north:.2f} N, "
-        f"{grid.west:.2f}..{grid.east:.2f} E)"
+        f"Wrote {lightpollution.GRID_PATH.name} (atlas updated to {cfg['year']} lights), "
+        f"{lightpollution.BASE_PATH.name}, the overlay, light sources, cities and "
+        f"{skyglow.MODEL_PATH.name}. Kernel spatial-CV error {cv['rmse_mag']:.3f} mag; median "
+        f"change in lit areas x{card['ratio']['median_lit']:.2f}."
     )
     return 0
 

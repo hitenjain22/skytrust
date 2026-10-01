@@ -1,0 +1,74 @@
+{
+ "base_year": 2015,
+ "year": 2025,
+ "ring_edges_km": [
+  0.0,
+  1.5,
+  3,
+  6,
+  12,
+  25,
+  50,
+  100,
+  200,
+  300
+ ],
+ "kernel": [
+  2.8475043298258713,
+  1.0767929837395664,
+  0.393329984891337,
+  0.10464065377268572,
+  0.01998684225587651,
+  0.002962907085528847,
+  0.0003164478391921585,
+  2.18549670488689e-05,
+  1.1143864689461967e-06
+ ],
+ "in_sample": {
+  "rmse_mag": 0.04213723559615092,
+  "median_abs_mag": 0.0045744668153981415
+ },
+ "spatial_cv": {
+  "folds": 5,
+  "rmse_mag": 0.04407748041236873,
+  "median_abs_mag": 0.004705003074540723,
+  "bias_mag": 0.00393405448432523,
+  "share_within_0_15": 0.9819659630861645,
+  "share_within_0_30": 0.9968899943726879
+ },
+ "atlas_sigma_mag": 0.15,
+ "ratio": {
+  "median_lit": 1.124271121866597,
+  "share_brighter": 0.7664315491631067,
+  "share_clipped": 9.272443299936466e-06
+ },
+ "n_targets": 300321,
+ "dome_reference": {
+  "name": "Sacramento",
+  "lat": 38.5816,
+  "lon": -121.4944,
+  "radius_km": 20.0,
+  "distance_km": 50.0,
+  "walker": 1.165747046470642
+ },
+ "validation_2025_atlas": {
+  "source": "Lorenz, World Atlas of the Artificial Night Sky Brightness 2025",
+  "atlas_2016": {
+   "within_one_zone": 0.7563391058620016,
+   "median_abs_mag": 0.05145587135688956,
+   "share_within_0_3_mag": 0.8506769439955552,
+   "lit_median_abs_mag": 0.49555912667957713,
+   "lit_bias_mag": 0.5148277672803836,
+   "lit_within_one_zone": 0.5942433232825054
+  },
+  "updated": {
+   "within_one_zone": 0.8124767029862089,
+   "median_abs_mag": 0.05089877819335342,
+   "share_within_0_3_mag": 0.8713518962702895,
+   "lit_median_abs_mag": 0.41722970921582103,
+   "lit_bias_mag": 0.42711573677335324,
+   "lit_within_one_zone": 0.8008053214695906
+  },
+  "lit_share_of_cells": 0.13789124610881917
+ }
+}

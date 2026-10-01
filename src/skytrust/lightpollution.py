@@ -35,7 +35,8 @@ from skytrust.data.cache import RAW_DIR
 log = logging.getLogger(__name__)
 
 ATLAS_TIF = RAW_DIR / "light_pollution" / "World_Atlas_2015.tif"
-GRID_PATH = REPO_ROOT / "artifacts" / "light_pollution.npz"
+GRID_PATH = REPO_ROOT / "artifacts" / "light_pollution.npz"  # updated to the latest lights
+BASE_PATH = REPO_ROOT / "artifacts" / "light_pollution_2015.npz"  # the atlas as published
 OVERLAY_PATH = REPO_ROOT / "artifacts" / "light_pollution.png"
 EARTH_KM = 6371.0
 
@@ -372,12 +373,24 @@ def area_shares(grid: Grid, lat: float, lon: float, radius_km: float) -> dict[st
     return {k: float(v.mean()) for k, v in bands.items()}
 
 
-def site_report(grid: Grid, lat: float, lon: float, settings: Settings) -> dict | None:
+def site_report(
+    grid: Grid, lat: float, lon: float, settings: Settings, base: Grid | None = None
+) -> dict | None:
     cfg = settings.raw["light_pollution"]
     here = point(grid, lat, lon, cfg["sigma_sqm"])
     if here is None:
         return None
+    change = None
+    then = point(base, lat, lon, cfg["sigma_sqm"]) if base is not None else None
+    if then is not None:
+        change = {
+            "sqm_base": then["sqm"],
+            "bortle_base": then["bortle"],
+            "delta_mag": here["sqm"] - then["sqm"],  # negative = brighter now
+            "artificial_ratio": (here["artificial_ucd"] + 1e-9) / (then["artificial_ucd"] + 1e-9),
+        }
     return {
+        "change": change,
         "here": here,
         "darkest": {
             r: darkest_within(grid, lat, lon, r, cfg["sigma_sqm"]) for r in cfg["radii_km"]
