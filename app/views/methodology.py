@@ -114,10 +114,10 @@ calibrated probability.
 ### Light pollution
 Sky darkness comes from the *World Atlas of Artificial Night Sky Brightness* (Falchi et al.,
 2016, Science Advances), a peer-reviewed model of the artificial glow of the zenith sky on a
-~1 km grid, checked against sky quality meter readings to ±0.15 mag/arcsec². The Where to Go
-page combines it with tonight's cloud forecast and the Moon, and finds the darkest skies near
-any location. The satellite data are from 2014–2015, so skies near growing towns may now be
-brighter than shown.
+~1 km grid, checked against sky quality meter readings to ±0.15 mag/arcsec², brought up to 2025
+with NASA night lights. The Where to Go page combines it with tonight's cloud forecast and the
+Moon, finds the darkest skies near any location, and maps the city light domes on its horizon.
+Full method and validation are on that page.
 
 ### Avoiding look-ahead bias
 The backtest uses Open-Meteo's **Previous Runs** archive: the value each model predicted about
@@ -155,6 +155,8 @@ observations courtesy of the [Iowa Environmental Mesonet](https://mesonet.agron.
 Iowa State University. Satellite cloud mask and imagery: NOAA GOES-18 (public AWS bucket
 `noaa-goes18`; NOAA/NESDIS STAR). Light pollution: Falchi, F. et al. (2016), *The new world atlas
 of artificial night sky brightness*, Science Advances 2:e1600377, and the dataset
-doi:10.5880/GFZ.1.4.2016.001 (CC BY-NC 4.0). Astronomy by [Skyfield](https://rhodesmill.org/skyfield/)
+doi:10.5880/GFZ.1.4.2016.001 (CC BY-NC 4.0), brought up to date with NASA Black Marble night
+lights (VNP46A4/VJ146A4, CC0) via lightpollutionmap.info; place names from
+[GeoNames](https://www.geonames.org/) (CC BY 4.0). Astronomy by [Skyfield](https://rhodesmill.org/skyfield/)
 with JPL's DE421 ephemeris.
 """)

@@ -600,3 +600,50 @@ def bortle_bar(shares: dict[str, float]) -> str:
         for k, v in shares.items()
     )
     return f'<div class="sk-stack">{segs}</div><div class="sk-legend">{labels}</div>'
+
+
+def dome_polar(glow: dict, pal: dict, height: int = 360) -> go.Figure:
+    """Light domes around the horizon: Walker's-law strength per direction on a log scale, with
+    1 = Sacramento's dome seen from 50 km. North is up, east to the right, like a compass."""
+    sectors = glow["sectors"]
+    r = [max(s["dome"], 0.003) for s in sectors]
+    alpha = [min(0.95, 0.25 + 0.2 * np.log10(max(v, 0.003) / 0.003)) for v in r]
+    fig = go.Figure(
+        go.Barpolar(
+            r=r,
+            theta=[s["direction"] for s in sectors],
+            marker={"color": [rgba(pal["accent"], a) for a in alpha], "line": {"width": 0}},
+            customdata=[[s["dome"], 100 * s["overhead_share"]] for s in sectors],
+            hovertemplate="%{theta}: dome %{customdata[0]:.2f}× · "
+            "%{customdata[1]:.0f}% of overhead glow<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        polar={
+            "bgcolor": "rgba(0,0,0,0)",
+            "angularaxis": {
+                "direction": "clockwise",
+                "rotation": 90,
+                "gridcolor": pal["grid"],
+                "linecolor": pal["border"],
+                "tickfont": {"size": 11},
+            },
+            "radialaxis": {
+                "type": "log",
+                "range": [-2.5, 2],
+                "gridcolor": pal["grid"],
+                "tickvals": [0.1, 1, 10],
+                "ticktext": ["0.1×", "1×", "10×"],
+                "tickfont": {"size": 10, "color": pal["muted"]},
+                "angle": 45,
+                "tickangle": 45,
+                "showline": False,
+            },
+        },  # fmt: skip
+        height=height,
+        margin={"l": 30, "r": 30, "t": 20, "b": 20},
+        paper_bgcolor=pal["paper"],
+        font={"family": FONT, "size": 12} | ({"color": pal["text"]} if pal.get("text") else {}),
+        showlegend=False,
+    )
+    return fig

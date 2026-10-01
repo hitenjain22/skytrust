@@ -46,16 +46,28 @@ class Context:
     forward_summary: dict | None = None
     forecast_for: object = None  # callable(site_id) -> (forecast, error), for multi-site pages
     now_utc: pd.Timestamp | None = None
-    light: object = None  # lightpollution.Grid, or None if the artifact is missing
+    light_data: dict | None = None  # {"grid", "base", "sources", "model"}; see load_light_pollution
 
-    def light_at(self, site: Site | None = None) -> dict | None:
-        """Light-pollution report for a site (default: the selected one)."""
-        from skytrust import lightpollution
+    @property
+    def light(self):
+        """The latest light-pollution grid (lightpollution.Grid) or None."""
+        return (self.light_data or {}).get("grid")
+
+    def light_at(self, site: Site | None = None, glow: bool = True) -> dict | None:
+        """Light-pollution report for a site (default: the selected one), with change since the
+        2015 atlas and city glow when the data are available."""
+        from skytrust import lightpollution, skyglow
 
         site = site or self.site
         if self.light is None:
             return None
-        return lightpollution.site_report(self.light, site.lat, site.lon, self.settings)
+        data = self.light_data or {}
+        report = lightpollution.site_report(
+            self.light, site.lat, site.lon, self.settings, data.get("base")
+        )
+        if glow and report is not None and data.get("sources") is not None:
+            report["glow"] = skyglow.city_glow(data["sources"], site.lat, site.lon)
+        return report
 
     @property
     def site_label(self) -> str:
@@ -233,7 +245,8 @@ def footer() -> None:
         "Iowa State University. Satellite: NOAA GOES-18. Light pollution: Falchi et al. (2016), "
         "[World Atlas of Artificial Night Sky Brightness]"
         "(https://doi.org/10.5880/GFZ.1.4.2016.001) "
-        "(CC BY-NC 4.0). "
+        "(CC BY-NC 4.0), updated with NASA Black Marble night lights (CC0); places from "
+        "[GeoNames](https://www.geonames.org/) (CC BY 4.0). "
         "SkyTrust is a student portfolio project by Hiten Jain, not an official forecast. "
         "[Code](https://github.com/hitenjain22/skytrust) · "
         "[Full results](https://github.com/hitenjain22/skytrust/blob/main/docs/RESULTS.md)"

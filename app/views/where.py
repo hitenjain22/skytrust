@@ -37,7 +37,7 @@ def site_rows(ctx: Context) -> pd.DataFrame:
     for site in ctx.sites:
         forecast, _ = ctx.forecast_for(site.id)
         nights = upcoming(forecast, ctx.now_utc)
-        light = ctx.light_at(site)
+        light = ctx.light_at(site, glow=False)
         here = (light or {}).get("here") or {}
         row = {
             "site": site.id,
@@ -150,9 +150,77 @@ def light_strip(report: dict, sigma: float) -> str:
                 "added on top of the natural sky brightness"
                 + (f", so the sky is {1 + h['ratio']:.0f}× brighter" if h["ratio"] >= 1 else ""),
             ),
-            ui.stat("Atlas level", ui.esc(h["level_name"]), ui.esc(h["level_text"])),
+            change_stat(report),
         ]
     )
+
+
+def change_stat(report: dict) -> str:
+    ch = report.get("change")
+    h = report["here"]
+    if not ch:
+        return ui.stat("Atlas level", ui.esc(h["level_name"]), ui.esc(h["level_text"]))
+    pct = ch["artificial_ratio"] - 1
+    direction = "more" if pct >= 0 else "less"
+    return ui.stat(
+        "Since 2015",
+        f"{ch['delta_mag']:+.2f} mag",
+        f"{abs(pct):.0%} {direction} artificial light than the 2015 atlas "
+        f"(was {ch['sqm_base']:.2f}, Bortle {ui.esc(ch['bortle_base'])})",
+    )
+
+
+def glow_rows(glow: dict) -> str:
+    items = []
+    for c in glow["cities"]:
+        items.append(
+            ui.row(
+                [
+                    f'<div class="sk-main"><div class="sk-row-title">{ui.esc(c["name"])}</div>'
+                    f'<div class="sk-row-sub">{c["distance_km"]:.0f} km {c["direction"]} · '
+                    f"population {c['population']:,}</div></div>",
+                    f'<div class="sk-row-p">{c["strength"]:.2f}×</div>',
+                    f'<div class="sk-row-sub" style="text-align:right">{c["share"]:.0%} of the '
+                    "dome light</div>",
+                ],
+                "minmax(0, 2fr) 72px 140px",
+            )
+        )
+    if glow["scattered_share"] >= 0.01:
+        items.append(
+            ui.row(
+                [
+                    '<div class="sk-main"><div class="sk-row-title">Scattered lights</div>'
+                    '<div class="sk-row-sub">roads, farms and buildings outside towns</div></div>',
+                    "<div></div>",
+                    f'<div class="sk-row-sub" style="text-align:right">'
+                    f"{glow['scattered_share']:.0%} of the dome light</div>",
+                ],
+                "minmax(0, 2fr) 72px 140px",
+            )
+        )
+    return ui.rows(items)
+
+
+def glow_summary(glow: dict) -> str:
+    """One sentence: where to point, and the biggest dome."""
+    quarter = f"{glow['darkest_quarter'][0]}–{glow['darkest_quarter'][-1]}"
+    text = f"The darkest part of the horizon is <b>{quarter}</b>: frame your targets there."
+    if glow["cities"]:
+        c = glow["cities"][0]
+        text += (
+            f" The strongest light dome is {ui.esc(c['name'])}, {c['distance_km']:.0f} km "
+            f"{c['direction']}."
+        )
+    shares = [s["overhead_share"] for s in glow["sectors"]]
+    n = len(shares)
+    wedge = max(range(n), key=lambda i: shares[i - 1] + shares[i] + shares[(i + 1) % n])
+    share = shares[wedge - 1] + shares[wedge] + shares[(wedge + 1) % n]
+    text += (
+        f" Of the artificial glow overhead, {share:.0%} comes from the "
+        f"{glow['sectors'][wedge]['direction']} (a 67° wedge)."
+    )
+    return f'<p class="sk-lede" style="margin:6px 0 4px">{text}</p>'
 
 
 def nearby_rows(report: dict) -> str:
@@ -194,29 +262,56 @@ def nearby_rows(report: dict) -> str:
 def methodology(ctx: Context) -> None:
     cfg = ctx.settings.raw["light_pollution"]
     nat_ucd, nat_sqm = cfg["natural_ucd"], cfg["natural_sqm"]
+    model = (ctx.light_data or {}).get("model") or {}
+    cv = model.get("spatial_cv", {})
+    checks = model.get("validation_2025_atlas") or {}
+    val, val0 = checks.get("updated", {}), checks.get("atlas_2016", {})
+    ratio = model.get("ratio", {})
+    year = model.get("year", cfg.get("year"))
+    nan = float("nan")
     st.markdown(
         f"""
-**Source.** The *World Atlas of Artificial Night Sky Brightness* (Falchi et al., 2016,
-*Science Advances* 2:e1600377; data doi:10.5880/GFZ.1.4.2016.001, CC BY-NC 4.0). It models the
-artificial glow of the zenith sky on a 30-arcsecond grid (about 0.7 × 0.9 km here) from VIIRS
-satellite measurements of upward light and a model of how that light scatters in the atmosphere.
+**1 · The calibrated atlas.** The *World Atlas of Artificial Night Sky Brightness* (Falchi et al.,
+2016, *Science Advances* 2:e1600377; data doi:10.5880/GFZ.1.4.2016.001, CC BY-NC 4.0) models the
+artificial glow of the zenith sky on a 30″ grid (~0.7 × 0.9 km here) and was checked against sky
+quality meter readings with a standard deviation of ±{cfg["sigma_sqm"]} mag/arcsec². Its lights
+are from 2014–2015.
 
-**How the numbers are made.** The paper assumes a natural sky of {nat_ucd:.0f} µcd/m²
-({nat_sqm:.1f} mag/arcsec²). Adding the atlas's artificial brightness gives the total, in the
-sky-quality-meter unit astronomers use: SQM = {nat_sqm:.1f} − 2.5·log₁₀((artificial +
-{nat_ucd:.0f}) / {nat_ucd:.0f}). The atlas was checked against sky quality meter readings with a
-standard deviation of **±{cfg["sigma_sqm"]} mag/arcsec²**; that is the ± shown above. Bortle
-classes use the SQM ranges tabulated for the Bortle (2001) scale, which is a visual scale, so the
-class is approximate.
+**2 · Brought up to {year}.** NASA's Black Marble annual night lights (VNP46A4 / VJ146A4, CC0;
+GeoTIFFs from lightpollutionmap.info) give the lights for 2015 and {year}. SkyTrust learns how
+light spreads through the air by fitting the atlas from the 2015 lights: each place's glow is a
+sum over every light within 300 km of its brightness × a kernel K(distance), with K fitted by
+non-negative least squares. Held out region by region, that reproduces the atlas to
+{cv.get("rmse_mag", nan):.3f} mag RMS ({cv.get("share_within_0_15", nan):.0%} of places within
+0.15). The {year} sky is then *atlas × modelled {year} glow ÷ modelled 2015 glow*, so the atlas
+keeps its calibration and altitude handling and only the change in lights comes from the model.
+In lit areas the median change is ×{ratio.get("median_lit", nan):.2f}.
+
+**3 · Checked against an independent {year} model.** David Lorenz's {year} re-calculation of the
+atlas agrees with the updated grid within one of its zones in
+{val.get("lit_within_one_zone", nan):.0%} of lit places (the 2015 atlas alone:
+{val0.get("lit_within_one_zone", nan):.0%}). In lit areas it reads
+{val.get("lit_bias_mag", nan):.2f} mag brighter than SkyTrust on average, so treat city values as
+a best case.
+
+**4 · Units.** Natural sky {nat_ucd:.0f} µcd/m² = {nat_sqm:.1f} mag/arcsec² (the paper's value),
+so SQM = {nat_sqm:.1f} − 2.5·log₁₀((artificial + {nat_ucd:.0f}) / {nat_ucd:.0f}). Bortle classes
+use the SQM ranges tabulated for the Bortle (2001) scale, a visual scale, so the class is
+approximate.
+
+**5 · City glow.** The light domes on the horizon use Walker's law (Walker 1977, *PASP* 89:405):
+the glow toward a city falls off as distance^−2.5. Each light within 300 km is weighted that way
+(lights within 2 km are local lighting; closer than 10 km count as 10 km, the range where the law
+was measured), grouped into 16 directions and named after the town it falls in (GeoNames, places
+of 1,000+ people). Strengths are relative: 1× is Sacramento's dome seen from 50 km.
 
 **What it can't tell you.**
-- The satellite data are from 2014–2015. Skies have brightened since (LED conversions and
-  growth), so treat values near cities as a best case.
-- It's the sky straight up. Domes of light from cities show near the horizon even at dark sites.
+- Satellites are nearly blind to the blue light of white LEDs, so they understate brightening:
+  citizen observations found skies brightening 9.6% a year in 2011–2022 (Kyba et al., 2023,
+  *Science* 379:265), faster than satellites show.
+- It models the sky straight up and relative dome strength, not exact horizon brightness.
 - "Darkest nearby" is straight-line distance on a ~1 km grid: it ignores roads, land access,
   terrain blocking the horizon, and local lights.
-- Tonight's conditions combine this map with the cloud forecast and the Moon; the cloud part is
-  what SkyTrust's track record measures.
 """
     )
 
@@ -352,6 +447,21 @@ def render(ctx: Context) -> None:
             + charts.bortle_bar(report["shares"]),
             unsafe_allow_html=True,
         )
+        glow = report.get("glow")
+        if glow:
+            st.subheader("City glow: light domes on the horizon")
+            st.markdown(glow_summary(glow), unsafe_allow_html=True)
+            left, right = st.columns([1, 1.15], gap="large", vertical_alignment="center")
+            with left:
+                show(charts.dome_polar(glow, ctx.palette))
+            with right:
+                st.markdown(ui.eyebrow("Biggest light domes") + glow_rows(glow),
+                            unsafe_allow_html=True)  # fmt: skip
+                st.caption(
+                    "Dome strength by Walker's law (glow ∝ light ÷ distance²·⁵), where 1× is "
+                    "Sacramento's dome seen from 50 km. Total for this spot: "
+                    f"{glow['dome_total']:.2f}×."
+                )
         if overlay is not None:
             local_map(ctx, report, overlay)
 

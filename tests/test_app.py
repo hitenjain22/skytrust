@@ -253,3 +253,5 @@ def test_where_tonight_ranks_every_site(offline, monkeypatch):
     assert "Darkest within 50 km" in html and "Nearest Bortle 1–3 sky" in html
     assert "Dark site" in html and "Moon down" in html  # the three conditions
     assert any("Light pollution at Sacramento" in h.value for h in at.subheader)
+    assert any("City glow" in h.value for h in at.subheader)
+    assert "darkest part of the horizon" in html and "Since 2015" in html

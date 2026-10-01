@@ -11,6 +11,7 @@ be bookmarked or shared.
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from pathlib import Path
@@ -22,7 +23,7 @@ try:  # installed via `uv sync` locally; on a host that only installs dependenci
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from skytrust import inference, lightpollution, live  # noqa: E402
+from skytrust import inference, lightpollution, live, skyglow  # noqa: E402
 from skytrust.config import CONFIG_DIR, load_settings, load_sites  # noqa: E402
 from views import components as ui  # noqa: E402
 from views import methodology, outlook, theme, tonight, track_record, where  # noqa: E402
@@ -66,14 +67,27 @@ def load_static():
     return _load_static(fingerprint(*STATIC_FILES))
 
 
+LIGHT_FILES = (
+    lightpollution.GRID_PATH, lightpollution.BASE_PATH, skyglow.SOURCES_PATH,
+    skyglow.CITIES_PATH, skyglow.MODEL_PATH,
+)  # fmt: skip
+
+
 @st.cache_resource(show_spinner=False)
 def _load_light_pollution(version: str):
-    return lightpollution.load()
+    model = json.loads(skyglow.MODEL_PATH.read_text()) if skyglow.MODEL_PATH.exists() else None
+    return {
+        "grid": lightpollution.load(),
+        "base": lightpollution.load(lightpollution.BASE_PATH),
+        "sources": skyglow.load_sources(),
+        "model": model,
+    }
 
 
-def load_light_pollution():
-    """The regional light-pollution grid, re-read whenever the artifact changes."""
-    return _load_light_pollution(fingerprint(lightpollution.GRID_PATH))
+def load_light_pollution() -> dict:
+    """Light-pollution grids (latest + 2015 atlas), light sources and the model card, re-read
+    whenever any of those files changes."""
+    return _load_light_pollution(fingerprint(*LIGHT_FILES))
 
 
 @st.cache_data(ttl=60 * 60, show_spinner="Reading the latest forecasts…")

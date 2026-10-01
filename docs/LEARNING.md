@@ -793,3 +793,29 @@ city is still a poor night for galaxies.
 1. How do you combine clouds, Moon and light pollution into advice without inventing a score?
 2. Why report the darkest spot *within the model's error* rather than the single darkest cell?
 3. How would you check that a raster you cropped is georeferenced correctly?
+
+---
+
+## `skytrust/skyglow.py`: making old data current, and city glow
+
+**What:** The calibrated light-pollution atlas is from 2015 lights. This module learns how light
+spreads through the air (a distance kernel fitted so that 2015 satellite lights reproduce the
+atlas), applies it to 2025 lights, and updates the atlas by the modelled ratio. The same kernel and
+Walker's law tell you which direction the glow comes from and which town causes it.
+
+**Why:** Skies have changed since 2015, and astrophotographers care about where the horizon is
+darkest, not just one number overhead.
+
+**Key concepts:**
+- **Calibrate on the trusted thing, transfer the change:** a simple model fitted to a calibrated
+  product, used only for a ratio, cancels most of its own errors.
+- **Convolution:** "sum every light times a function of its distance" is a 2-D convolution;
+  FFTs make it fast. Distances need an equal-area projection, not raw latitude/longitude.
+- **Validation you didn't train on:** spatial cross-validation (hold out whole regions) and an
+  independent model from someone else.
+- **Known blind spots, stated:** satellites miss LED blue light, so the update is a lower bound.
+
+**Interview questions:**
+1. Why update the old atlas by a ratio instead of replacing it with your model?
+2. How would you validate a model when the "truth" is itself a model?
+3. What's Walker's law, and why use it only for relative dome strength?

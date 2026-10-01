@@ -478,3 +478,18 @@ Hiten asked for the path that is easiest to understand and gives the most consis
   is made sticky with `:has()`.
 - **Scroll motion:** CSS scroll-driven animations (Chrome/Edge/Safari; Firefox shows content
   without motion), guarded by `@supports` and `prefers-reduced-motion`.
+
+### 2026-09-30 · Light pollution brought to 2025; city glow
+- **KeyError on the live site:** Streamlit Cloud reloads code on a push without restarting, so a
+  per-process cache kept the old settings; reproduced by swapping config under a running server.
+  Cached loaders are now keyed on the fingerprints of the files they read.
+- **Why not just use the 2025 atlas:** it has no stated license and is published only as colour
+  zones (a factor of √3 per step). Building from CC0 NASA lights is redistributable and gives
+  continuous values; the 2025 atlas becomes an independent check instead.
+- **Update as a ratio, not a replacement:** 2025 = atlas × model(2025) / model(2015). The atlas
+  keeps its SQM calibration and altitude handling; the kernel only has to get the *change* right.
+- **City glow, two quantities:** the calibrated kernel splits the overhead glow by direction;
+  Walker's law ranks horizon domes (relative, fixed reference so faint looks faint). Lights are
+  credited to a town only within a population-scaled radius; the rest is "scattered lights".
+- **No new dependencies:** LZW decoding is 40 lines of Python (fast enough: ~20 s per year for
+  the region), verified against libtiff.

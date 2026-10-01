@@ -261,3 +261,33 @@ Checked against real files (2025-01-10, 2025-06-15, 2026-02-03) before any code 
   18.78 (6), AUN 20.52 (4.5), TRK 21.48 (3), BIH 21.64 (2).
 - **Caveats:** VIIRS data from 2014–2015 (skies have brightened since); zenith only; ~1 km grid;
   "darkest nearby" is straight-line distance and ignores roads, access and terrain.
+
+---
+
+## 12. Night lights 2015 / 2025 and city glow, added 2026-09-30
+
+- **Night lights:** NASA Black Marble annual composites (VNP46A4 ≤ 2019 from Suomi NPP, VJ146A4
+  > 2019 from NOAA-20; CC0), as raw GeoTIFFs from lightpollutionmap.info
+  (`viirs_{year}_raw.zip`, ~0.9 GB each, no account). Checked 2026-09-30: 86400 × 33600 float32,
+  15″ grid from (−180°, 75°), **LZW-compressed, one row per strip**, nodata −999.9. The brightest
+  pixel in the region decodes at 36.115°N, 115.173°W (the Las Vegas Strip). The LZW reader was
+  verified byte-for-byte against libtiff.
+- **Kernel fit (2015 lights → 2016 atlas):** 9 distance rings to 300 km on a 1 km Lambert
+  azimuthal equal-area grid; spatial 5-fold CV by longitude band: RMS 0.044 mag, 98% of places
+  within 0.15 mag (atlas σ = 0.15). The kernel falls monotonically with distance.
+- **Change 2015 → 2025:** median ×1.12 artificial light in lit areas; 77% of places brighter.
+  The sensor changed between the two years (Suomi NPP → NOAA-20); NASA harmonizes the products,
+  but some of the change could be instrumental.
+- **Independent check:** David Lorenz's *World Atlas of the Artificial Night Sky Brightness 2025*
+  (djlorenz.github.io; NorthAmerica2025.png, 7–75°N, 180–51°W at 1/120°, 15 colour zones whose
+  index bounds are read from its colour bar). No license is stated on that site, so it is used
+  only to validate, never shipped. Within one zone in lit areas: updated grid 80%, 2016 atlas
+  59%. In lit areas Lorenz reads 0.43 mag brighter than SkyTrust (0.51 for the 2016 atlas).
+- **LED caveat:** VIIRS is nearly blind to the blue light of white LEDs; Kyba et al. (2023),
+  *Science* 379:265, found skies brightening 9.6%/yr (2011–2022) from 51,000+ citizen
+  observations, faster than satellites show. Satellite-based updates are a lower bound on change.
+- **Places:** GeoNames `cities1000` (CC BY 4.0), places of 1,000+ people within 3° of the region
+  (3,058), for naming light domes.
+- **Walker's law** (Walker 1977, *PASP* 89:405): glow toward a city ∝ distance^−2.5, used for the
+  *relative* strength of light domes. The absolute constant could not be confirmed from a
+  primary source, so strengths are relative to Sacramento's dome seen from 50 km.

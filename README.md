@@ -52,10 +52,13 @@ flowchart LR
 - **The blend** is a logistic regression per lead time over every model's forecast, how much the
   models disagree, and site/season context. It's trained on 2024-25 and tested once on 2026.
 
-**Where to go:** tonight's forecast is combined with light pollution (the peer-reviewed World
-Atlas of Artificial Night Sky Brightness, ±0.15 mag/arcsec²) and the Moon. For any location the app
-shows its sky quality and Bortle class, the darkest skies within 25/50/100 km, and how much of the
-surrounding area is dark.
+**Where to go:** tonight's forecast is combined with light pollution and the Moon. The peer-reviewed
+World Atlas of Artificial Night Sky Brightness (±0.15 mag/arcsec²) is brought up to **2025** with
+NASA night lights: a light-spread kernel learned from the atlas (spatial-CV error 0.044 mag) turns
+the change in lights since 2015 into the change in sky glow, checked against an independent 2025
+model. For any location the app shows sky quality and Bortle class, the change since 2015, the
+darkest skies within 25/50/100 km, and **city glow**: which towns' light domes sit on which part of
+the horizon, and where to point instead.
 
 ## Headline results
 
@@ -170,6 +173,8 @@ Weather data by [Open-Meteo.com](https://open-meteo.com/), licensed
 Satellite cloud mask from NOAA GOES-18. Light pollution from the World Atlas of Artificial Night
 Sky Brightness: Falchi et al. (2016), [Science Advances 2:e1600377](https://doi.org/10.1126/sciadv.1600377),
 data [doi:10.5880/GFZ.1.4.2016.001](https://doi.org/10.5880/GFZ.1.4.2016.001) (CC BY-NC 4.0).
+Night lights: NASA Black Marble (VNP46A4/VJ146A4, CC0) via [lightpollutionmap.info](https://www.lightpollutionmap.info).
+Place names: [GeoNames](https://www.geonames.org/) (CC BY 4.0).
 Astronomy computed with [Skyfield](https://rhodesmill.org/skyfield/) and JPL's DE421 ephemeris.
 
 ---

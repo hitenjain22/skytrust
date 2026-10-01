@@ -126,6 +126,10 @@ def fact_strip(ctx: Context, night) -> str:
         h = report["here"]
         near = report.get("nearest_dark")
         sub = brightness_phrase(h["ratio"]).capitalize()
+        glow = report.get("glow")
+        if glow:
+            q = glow["darkest_quarter"]
+            sub += f" · darkest horizon {q[0]}–{q[-1]}"
         if near and near["distance_km"] >= 1.5 and h["bortle"] not in ("1", "2", "3"):
             sub += f" · Bortle 3 or darker {near['distance_km']:.0f} km {near['direction']}"
         items.append(ui.stat("Light pollution", f"Bortle {esc(h['bortle'])}", sub))
