@@ -1,15 +1,21 @@
 # SkyTrust 🌙
 
-**An astronomy cloud forecast that tells you how often it's been wrong.**
+**A stargazing forecast for California that tells you how often it's been wrong, and what you'll
+actually see when you look up.**
 
 [![CI](https://github.com/hitenjain22/skytrust/actions/workflows/ci.yml/badge.svg)](https://github.com/hitenjain22/skytrust/actions/workflows/ci.yml)
 
 **Live app: [skytrust.streamlit.app](https://skytrust.streamlit.app/)** · **Full results:** [docs/RESULTS.md](docs/RESULTS.md)
 
 <p align="center">
-  <img src="docs/screenshots/tonight.png" alt="Tonight page: plain-English verdict with the chance of a usable night, darkness, best window, Moon phase, how much to trust it, and an hour-by-hour chart" width="68%">
+  <img src="docs/screenshots/tonight.png" alt="Tonight page: the chance of a clear night, a picture of the sky you'll actually see from there, and the four facts that matter" width="68%">
   &nbsp;
   <img src="docs/screenshots/tonight_mobile.png" alt="The same page on a phone" width="24%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/sky_guide.png" alt="Sky Guide: a chart of tonight's sky over Death Valley with the Milky Way, planets and constellations, and a list of what's up and where" width="46%">
+  &nbsp;
+  <img src="docs/screenshots/events.png" alt="Events: meteor showers with expected meteors per hour at California places, Moon phases and planet events" width="46%">
 </p>
 
 ## The problem
@@ -52,13 +58,27 @@ flowchart LR
 - **The blend** is a logistic regression per lead time over every model's forecast, how much the
   models disagree, and site/season context. It's trained on 2024-25 and tested once on 2026.
 
-**Where to go:** tonight's forecast is combined with light pollution and the Moon. The peer-reviewed
-World Atlas of Artificial Night Sky Brightness (±0.15 mag/arcsec²) is brought up to **2025** with
-NASA night lights: a light-spread kernel learned from the atlas (spatial-CV error 0.044 mag) turns
-the change in lights since 2015 into the change in sky glow, checked against an independent 2025
-model. For any location the app shows sky quality and Bortle class, the change since 2015, the
-darkest skies within 25/50/100 km, and **city glow**: which towns' light domes sit on which part of
-the horizon, and where to point instead.
+## What the app does
+
+Five pages, written for someone new to stargazing, for nine well-known California places (bright
+cities to dark deserts) or any spot you choose:
+
+- **Tonight:** the chance of a clear night, a picture of the sky as you'll actually see it from
+  there (only the stars that show through the local light pollution and moonlight are drawn),
+  what to look for tonight (planets, the Milky Way, a star pattern to learn), and the week ahead.
+- **Sky Guide:** a live chart of the sky for any hour of the night, a list of what's up and where
+  ("high in the SE"), where the Milky Way runs and when it's best, and where to look with your back
+  to the Moon. Visibility comes from published models: Schaefer's limiting magnitude, Krisciunas &
+  Schaefer's moonlight, the light-pollution map.
+- **Events:** meteor showers (the International Meteor Organization's list), Moon phases, planets
+  at their best, close pairings and eclipses for the next four months, with when and where to
+  look, and for showers the expected meteors per hour at each place in California. Computed from
+  JPL's ephemeris and checked against published dates; see [docs/SKY_EVENTS.md](docs/SKY_EVENTS.md).
+- **Where to Go:** places ranked by tonight's clear sky, dark sky and Moon; light pollution in plain
+  words (very dark … city, "× natural"); the nearest darker skies; and **city glow**, which towns
+  light up which part of the horizon. The peer-reviewed World Atlas of Artificial Night Sky
+  Brightness is brought up to **2025** with NASA night lights.
+- **Accuracy:** the track record and how it works.
 
 ## Headline results
 
@@ -90,12 +110,12 @@ A backtest is evaluated on data the developer has seen, so SkyTrust also runs a 
 Every afternoon a scheduled GitHub Action saves the forecasts for the next 7 nights *before* the
 outcome exists. About a week later, once observations are published, it scores them with the same
 code, next to NOAA's National Blend of Models and the raw ECMWF/GEFS ensembles. The running record
-is on the app's Track Record page. The log is append-only on the
+is on the app's Accuracy page. The log is append-only on the
 [`forward-data`](https://github.com/hitenjain22/skytrust/tree/forward-data) branch.
 
 ## Methodology and caveats
 
-The short version is above; the app's **How It Works** page and [docs/RESULTS.md](docs/RESULTS.md)
+The short version is above; the app's **Accuracy** page and [docs/RESULTS.md](docs/RESULTS.md)
 have the details. Key caveats:
 - Airport ceilometers can't see cirrus; ERA5 is a model on a ~28 km grid and is made by ECMWF
   (so ECMWF may look better than it is under ERA5-based labels; results flag this).
@@ -149,9 +169,13 @@ src/skytrust/
   inference.py   numpy-only model loading/prediction (what the app runs)
   evaluate.py    metrics + week-block bootstrap CIs     report.py   RESULTS.md, README block
   live.py        tonight + 7-night outlook, last-good cache fallback
-app/             Streamlit app (4 pages)
+  lightpollution.py, skyglow.py   light-pollution map (2025) and city glow
+  sky.py         what's up tonight and what you can see (positions, light pollution, moonlight)
+  events.py      meteor showers, Moon, planets, pairings, eclipses     skycatalog.py  star data
+app/             Streamlit app (5 pages; the sky chart is drawn as SVG in views/skychart.py)
 artifacts/       model_lead{1..7}.json, metrics.json (committed; the app reads only these)
-config/          settings.yaml (all thresholds), sites.yaml (from IEM metadata)
+config/          settings.yaml (all thresholds), sites.yaml (evaluated airports), places.yaml,
+                 meteor_showers.yaml (IMO 2026)
 docs/            RESULTS, DATA_QUALITY, DATA_NOTES, DECISIONS, LEARNING, figures, screenshots
 tests/           offline tests + recorded API fixtures + a synthetic raw-data generator
 ```
@@ -162,7 +186,7 @@ Out of scope for v1, and natural extensions:
 - **Dew timer:** when optics will dew up from radiative cooling.
 - **Central Valley fog / inversion mode:** tule fog, and "drive above X ft".
 - **Mid-latitude aurora module.**
-- **GOES satellite clear-sky mask as ground truth:** fixes the ceilometer's cirrus blind spot.
+- **Satellite passes and comets:** ISS passes and bright comets need live orbital elements.
 - **Satellite cloud-motion nowcasting** for the next few hours.
 
 ## Data attribution
@@ -176,6 +200,9 @@ data [doi:10.5880/GFZ.1.4.2016.001](https://doi.org/10.5880/GFZ.1.4.2016.001) (C
 Night lights: NASA Black Marble (VNP46A4/VJ146A4, CC0) via [lightpollutionmap.info](https://www.lightpollutionmap.info).
 Place names: [GeoNames](https://www.geonames.org/) (CC BY 4.0).
 Astronomy computed with [Skyfield](https://rhodesmill.org/skyfield/) and JPL's DE421 ephemeris.
+Stars: ESA Hipparcos catalogue (via CDS). Constellation figures and Milky Way outline:
+[d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn (BSD-3-Clause). Meteor showers:
+the [International Meteor Organization](https://www.imo.net/)'s 2026 Meteor Shower Calendar.
 
 ---
 

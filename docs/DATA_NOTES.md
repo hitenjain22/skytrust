@@ -291,3 +291,55 @@ Checked against real files (2025-01-10, 2025-06-15, 2026-02-03) before any code 
 - **Walker's law** (Walker 1977, *PASP* 89:405): glow toward a city ∝ distance^−2.5, used for the
   *relative* strength of light domes. The absolute constant could not be confirmed from a
   primary source, so strengths are relative to Sacramento's dome seen from 50 km.
+
+## 13. The sky guide and sky events, added 2026-09-30
+
+**Places** (`config/places.yaml`): nine well-known California places, coordinates and elevation
+(SRTM3 `dem`) from GeoNames cities1000 (CC BY 4.0); each row keeps its `geonames_id`. "Lake
+Tahoe" is the GeoNames record for South Lake Tahoe; "Death Valley" is the populated place of that
+name (GeoNames 12523068). How dark each place is comes from the 2025 light-pollution grid at run
+time (SQM: Los Angeles 17.29, San Francisco 18.11, Sacramento 18.08, Santa Barbara 19.38, Big Bear
+Lake 20.93, Joshua Tree 21.09, South Lake Tahoe 21.37, Yosemite Valley 21.96, Death Valley 21.98).
+They were never part of the evaluation, so forecasts there use the site-agnostic blend.
+
+**Stars**: Hipparcos main catalogue (ESA 1997, CDS I/239, `hip_main.dat`), every star with
+V ≤ 6.5 (8,874): position (ICRS, epoch J1991.25; proper motion ignored, < 0.1° for any naked-eye
+star in 35 years), V, B−V. A few entries have no astrometric solution; their sexagesimal columns
+are used. Proper names: Skyfield's `named_star_dict` (100 of its names are among these stars).
+
+**Constellations and the Milky Way**: d3-celestial by Olaf Frohn (BSD-3-Clause):
+`constellations.lines.json` (stick figures), `constellations.json` (label positions, a 1–3
+importance rank), `mw.json` (five nested brightness levels of the Milky Way outline). Constellation
+membership of every star and object comes from Skyfield's bundled IAU boundaries (Roman 1987), an
+independent check on the third-party coordinates.
+
+**Deep-sky showpieces**: d3-celestial `messier.json` and `dsos.bright.json`. **Finding:** the
+bright-DSO list files M4 at RA 83.82°, M42's right ascension (M4 is at 245.9°, in Scorpius). The
+build checks every object against the constellation it must fall in and refuses bad ones, so
+Messier objects come from the Messier list. Clusters wider than 100′ (Pleiades, Hyades, α Persei,
+Coma) are judged by their third-brightest catalogue star within the cluster radius, not their
+combined magnitude.
+
+**Meteor showers** (`config/meteor_showers.yaml`): the IMO's *2026 Meteor Shower Calendar*
+(J. Rendtel, ed., IMO INFO(3-25), DOI 10.13140/RG.2.2.36179.08480), Table 5. Peaks are stored as
+solar longitudes and converted to times with Skyfield; for 2026 they reproduce the calendar's
+times within 25 minutes (Geminids 13:49 vs 14h UT, Leonids 23:52 vs 23:45, Draconids 01:21 vs 01h,
+Quadrantids 21:24 vs ~21h). Notes on parent bodies are from the calendar text or NASA's shower
+pages. **Findings:** (1) the calendar's Draconid radiant is 262°, +54° in Table 5 but 263°, +56° in
+the text; Table 5 is used. (2) Table 4's lunar phase dates follow Central European time: the
+June 2026 full Moon (23:57 UTC on June 29, confirmed by other sources) is listed as June 30.
+
+**Validation of the computed events** (tests/test_events.py): every 2026 new and full Moon matches
+IMO Table 4; Saturn's 2026 opposition is computed at 12:29 UTC on October 4 (published ~12:00 UTC,
+definitions differ); the 2026 lunar eclipses are found on March 3 (total) and August 28 (partial,
+greatest at 04:12:54 UTC, umbral magnitude 0.929; NASA/Espenak: 04:13 UTC, 0.9299). News reports'
+"96%" for that eclipse is by area, not diameter.
+
+**Formulas** (sources in `sky.py`): limiting magnitude NELM = 7.93 − 5 log10(10^(4.316 − B/5) + 1)
+(Schaefer 1990 via Unihedron); moonlight per Krisciunas & Schaefer (1991) as reproduced in Yao et
+al. (2013, RAA 13:1255); B[nL] = 34.08 exp(20.7233 − 0.92104 V) (Garstang 1989, confirmed in
+arXiv:1710.06755); observed meteor rate = ZHR · sin(h) / r^(6.5 − LM) (the IMO formula, zenith
+exponent 1; LM capped at 6.5). Assumed: extinction 0.20 mag/airmass (K&S: 0.172 on Mauna Kea; Yao
+et al.: 0.23 at Xinglong). Wikipedia's Bortle table lists naked-eye limits 0.3–1.2 mag fainter than
+the Schaefer formula at the same SQM: Bortle describes experienced observers, the formula a
+typical one; the app uses the formula and says so.

@@ -506,3 +506,26 @@ Hiten asked for the path that is easiest to understand and gives the most consis
 - **Shared links are untrusted input:** coordinates outside the covered area or not numbers
   fall back to the default spot with a notice; names are reduced to plain text (they appear in
   markdown headings).
+
+## 2026-09-30: a stargazing guide for beginners (sky guide, events, places, plain language)
+- **Places instead of airports in the menu:** nine well-known California places (three bright,
+  three in between, three dark, picked by the 2025 light-pollution grid) replace the five ASOS
+  airports, at Hiten's request. The airports stay the evaluation sites: Track Record still reports
+  them, and the places use the site-agnostic blend with its leave-one-site-out record (a place is
+  never shown a track record it doesn't have). `live.uses_site_blend` makes that explicit.
+- **Light pollution in words, not Bortle numbers:** five tiers (very dark, dark, suburban, bright,
+  city) are the Bortle classes' SQM ranges grouped (1–3, 4–4.5, 5, 6–7, 8–9), plus "× natural".
+  Bortle is mentioned only in the method notes.
+- **Computed, not looked up:** planets, Moon, eclipses, pairings, oppositions and shower peaks come
+  from the ephemeris already in the repo, checked against published values; only the meteor-shower
+  list is a table (the IMO's), because shower activity can't be computed.
+- **Visibility from published models, with stated assumptions:** Schaefer's limiting magnitude,
+  Krisciunas & Schaefer moonlight, Garstang's units; one tuned rule (extended objects need 0.5 mag
+  more darkness) is set to reproduce the Bortle scale's own descriptions of M31 and M33.
+- **The chart is SVG, drawn server-side:** a real planisphere (Hipparcos stars, IAU figures, Milky
+  Way outline) where only the stars you could see are drawn, so light pollution shows at a glance;
+  faint stars are batched into paths to keep a dark-sky chart under ~150 KB.
+- **Five pages:** Tonight (with the week), Sky Guide, Events, Where to Go, Accuracy (track record
+  + how it works). Old links (`7-nights`, `track-record`, `how-it-works`, `site=sac`/`trk`) keep
+  working.
+- **No new dependencies.**

@@ -819,3 +819,51 @@ darkest, not just one number overhead.
 1. Why update the old atlas by a ratio instead of replacing it with your model?
 2. How would you validate a model when the "truth" is itself a model?
 3. What's Walker's law, and why use it only for relative dome strength?
+
+---
+
+## `skytrust/sky.py`: what can I actually see tonight?
+
+**What:** For a place and a night: where the planets, Moon, bright stars, star patterns, clusters
+and the Milky Way are, when each is best, and whether it will show through the local light
+pollution and moonlight. Also where the sky is darkest while the Moon is up.
+
+**Why:** "Clear" isn't enough for a beginner. From Los Angeles you see about 50 stars; from Death
+Valley about 3,000. Telling people what they will actually see, and where to look, is the useful
+part.
+
+**Key concepts:**
+- **Coordinate frames:** catalogue positions (J2000) → apparent positions of date → altitude and
+  azimuth via local sidereal time. Computing the slow part once per night makes it fast.
+- **Physical models over guesses:** sky brightness from a calibrated atlas, moonlight from
+  Krisciunas & Schaefer's scattering model, the faintest visible star from Schaefer's formula.
+- **Calibrating a heuristic against an independent description:** the one tuned rule is set so the
+  Bortle scale's descriptions come out right.
+
+**Interview questions:**
+1. Why is the darkest part of a moonlit sky not directly opposite the Moon?
+2. How do you turn "sky brightness in mag/arcsec²" into "how many stars can I see"?
+3. Why does a star cluster with a bright total magnitude sometimes not show from a city?
+
+---
+
+## `skytrust/events.py`: sky events, computed and checked
+
+**What:** Meteor showers (from the IMO's list), Moon phases, planets at opposition and greatest
+elongation, close pairings of the Moon and planets, lunar eclipses and the seasons, with when and
+where to look from a place and, for showers, the expected meteors per hour at each place.
+
+**Why:** "Is anything happening this week?" is the first question a new stargazer asks, and the
+answer depends on where you are (light pollution changes a shower from 1 to 20 meteors an hour).
+
+**Key concepts:**
+- **Recurring by solar longitude:** showers return when Earth reaches the same point of its orbit,
+  so a peak is a solar longitude, not a date; root-finding turns it into a time for any year.
+- **Event search:** find_discrete / find_maxima over smooth functions (phase, elongation,
+  separation), then refine.
+- **Test against the world:** published phase tables, opposition times and eclipse figures.
+
+**Interview questions:**
+1. Why store a meteor shower's peak as a solar longitude rather than a date?
+2. How would you find every moment two planets come within 3° over four months, efficiently?
+3. The ZHR is 150; why might you only see 7 meteors an hour from a city?
