@@ -20,6 +20,9 @@ LABEL_POSITIONS = {
     "FAT": "bottom right",
 }
 FONT = "Geist, system-ui, sans-serif"
+# Map labels are drawn by MapLibre from the basemap's own glyph server, which has no Geist;
+# asking for it fails (a CORS error per page load) before falling back.
+MAP_FONT = "Open Sans Regular"
 
 
 def _local(ts, tz: str):
@@ -307,7 +310,7 @@ def site_map(
                 textfont={
                     "color": pal.get("text") or ("#2A2A2E" if light else "#D5D5DA"),
                     "size": 12,
-                    "family": FONT,
+                    "family": MAP_FONT,
                 },
                 marker={"size": 13, "color": level_color(p, pal, go_at, maybe_at), "opacity": 0.95},
                 hovertemplate="%{text}<extra></extra>",
@@ -526,7 +529,8 @@ def light_map(
     """The atlas as a warm glow over a dark base map (light pollution is a night-time view, so
     the base stays dark in both themes), with site markers and optional darker-sky spots.
 
-    `markers` columns: lat, lon, label, color, position. `spots` columns: lat, lon, label."""
+    `markers` columns: lat, lon, label, color, position. `spots` columns: lat, lon, label and
+    optionally position."""
     import base64
 
     src = "data:image/png;base64," + base64.b64encode(overlay_png).decode()
@@ -535,12 +539,12 @@ def light_map(
         [grid.east, grid.south], [grid.west, grid.south],
     ]  # fmt: skip
     fig = go.Figure()
-    if spots is not None and len(spots):
+    for _, r in (spots if spots is not None else pd.DataFrame()).iterrows():
         fig.add_trace(
             go.Scattermap(
-                lat=spots["lat"], lon=spots["lon"], mode="markers+text", text=spots["label"],
-                textposition="bottom center",
-                textfont={"color": "#CFCFD4", "size": 11, "family": FONT},
+                lat=[r["lat"]], lon=[r["lon"]], mode="markers+text", text=[r["label"]],
+                textposition=r.get("position", "bottom center"),
+                textfont={"color": "#CFCFD4", "size": 11, "family": MAP_FONT},
                 marker={"size": 9, "color": "#CFCFD4", "symbol": "circle", "opacity": 0.9},
                 hovertemplate="%{text}<extra></extra>",
             )
@@ -550,7 +554,7 @@ def light_map(
             go.Scattermap(
                 lat=[r["lat"]], lon=[r["lon"]], mode="markers+text", text=[r["label"]],
                 textposition=r["position"],
-                textfont={"color": "#E6E6EA", "size": 12, "family": FONT},
+                textfont={"color": "#E6E6EA", "size": 12, "family": MAP_FONT},
                 marker={"size": 13, "color": r["color"], "opacity": 0.95},
                 hovertemplate="%{text}<extra></extra>",
             )

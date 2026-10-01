@@ -96,7 +96,9 @@ def fact_strip(ctx: Context, night) -> str:
     bw = night.best_window
     best = ui.stat(
         "Best window",
-        f"{short_time(bw.start_utc, tz)} – {short_time(bw.until_utc, tz)}" if bw else "None",
+        f"{short_time(bw.start_utc, tz)} – {short_time(bw.until_utc, tz)}"
+        if bw
+        else "No clear hours",
         f"{duration(bw.start_utc, bw.until_utc)} of clear sky in the typical model"
         if bw
         else "No dark hour is clear in the typical model",

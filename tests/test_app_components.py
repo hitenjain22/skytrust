@@ -157,3 +157,42 @@ def test_cache_fingerprint_changes_when_a_file_changes(tmp_path):
     os.utime(f, ns=(f.stat().st_atime_ns, f.stat().st_mtime_ns + 1_000_000))
     after = common.fingerprint(f, tmp_path / "missing.json")
     assert before != after and "missing.json:missing" in after
+
+
+def test_change_since_2015_says_brighter_or_darker_in_words():
+    from views import where
+
+    here = {"bortle": "6", "level_name": "", "level_text": ""}
+    change = {"artificial_ratio": 1.19, "delta_mag": -0.18, "sqm_base": 18.78, "bortle_base": "6"}
+    html = where.change_stat({"here": here, "change": change})
+    assert "brighter" in html and "19% more" in html
+    darker = change | {"delta_mag": 0.04, "artificial_ratio": 0.9}
+    html = where.change_stat({"here": here, "change": darker})
+    assert "darker" in html and "10% less" in html
+
+
+def test_site_without_light_data_shows_no_placeholder_text():
+    from views import where
+
+    pal = {"No data": "#888"}
+    r = pd.Series({"verdict": "No data", "p": None, "bortle": float("nan"), "sqm": float("nan"),
+                   "place": "Somewhere", "area": "", "window": "–", "conds": []})  # fmt: skip
+    html = where.rank_row(1, r, pal) + where.marker_label(r)
+    assert "nan" not in html and "None" not in html
+
+
+def test_dark_spots_on_the_local_map_do_not_pile_up_or_cover_the_site():
+    from views import where
+
+    def spot(lat, lon, sqm, km):
+        return {"lat": lat, "lon": lon, "sqm": sqm, "bortle": "1", "distance_km": km}
+
+    report = {
+        "darkest": {25: spot(39.40, -120.16, 21.72, 9), 50: spot(39.22, -120.27, 21.79, 14),
+                    100: spot(39.21, -120.28, 21.82, 15)},  # 50 and 100 km are 1.4 km apart
+        "nearest_dark": spot(39.32, -120.14, 21.49, 0.5),  # "right here": no separate dot
+    }  # fmt: skip
+    df = where.map_spots(report, 39.32, -120.14)
+    assert df["label"].tolist() == ["21.82 · B1", "21.72 · B1"]  # darkest of the close pair kept
+    assert df["position"].tolist() == ["bottom center", "top center"]  # south / north of the site
+    assert where.label_side(39.32, -119.9, 39.32, -120.14) == "middle right"

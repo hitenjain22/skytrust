@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -98,7 +99,7 @@ def rank_row(i: int, r: pd.Series, pal: dict) -> str:
     color = pal[r["verdict"]]
     p = None if pd.isna(r["p"]) else float(r["p"])
     sky = "–"
-    if r["bortle"]:
+    if pd.notna(r["bortle"]) and pd.notna(r["sqm"]):
         sky = (
             f'<div class="sk-row-title">Bortle {ui.esc(r["bortle"])}</div>'
             f'<div class="sk-row-sub">{r["sqm"]:.2f} mag/arcsec²</div>'
@@ -126,7 +127,8 @@ def marker_color(met: int, pal: dict) -> str:
 
 def marker_label(r: pd.Series) -> str:
     chance = "–" if pd.isna(r["p"]) else f"{r['p']:.0%}"
-    return f"{r['place']} · B{r['bortle']} · {chance}"
+    sky = f" · B{r['bortle']}" if pd.notna(r["bortle"]) else ""
+    return f"{r['place']}{sky} · {chance}"
 
 
 # ---------- light pollution at the selected place ----------
@@ -162,9 +164,13 @@ def change_stat(report: dict) -> str:
         return ui.stat("Atlas level", ui.esc(h["level_name"]), ui.esc(h["level_text"]))
     pct = ch["artificial_ratio"] - 1
     direction = "more" if pct >= 0 else "less"
+    if abs(ch["delta_mag"]) < 0.005:
+        trend = "no change"
+    else:  # magnitudes run backwards: a lower number is a brighter sky
+        trend = "brighter" if ch["delta_mag"] < 0 else "darker"
     return ui.stat(
         "Since 2015",
-        f"{ch['delta_mag']:+.2f} mag",
+        f"{ch['delta_mag']:+.2f} mag <span class='sk-muted' style='font-size:.8em'>{trend}</span>",
         f"{abs(pct):.0%} {direction} artificial light than the 2015 atlas "
         f"(was {ch['sqm_base']:.2f}, Bortle {ui.esc(ch['bortle_base'])})",
     )
@@ -346,14 +352,43 @@ def climate_tip(ctx: Context) -> str:
 # ---------- page ----------
 
 
+def label_side(lat: float, lon: float, site_lat: float, site_lon: float) -> str:
+    """Put a spot's label on the side facing away from the site, so it never covers the site's
+    own marker and label."""
+    dy, dx = lat - site_lat, (lon - site_lon) * np.cos(np.radians(site_lat))
+    if abs(dx) > abs(dy):
+        return "middle right" if dx > 0 else "middle left"
+    return "top center" if dy > 0 else "bottom center"
+
+
+def map_spots(report: dict, site_lat: float, site_lon: float, min_gap_km: float = 4.0):
+    """The darker-sky spots for the local map, darkest first, skipping any within `min_gap_km`
+    of one already shown (their dots and labels would sit on top of each other)."""
+    found = [d for d in [*report["darkest"].values(), report.get("nearest_dark")]
+             if d and d["distance_km"] >= 1.5]  # fmt: skip
+    kept: list[dict] = []
+    for d in sorted(found, key=lambda d: -d["sqm"]):
+        near = lightpollution.haversine_km(
+            d["lat"],
+            d["lon"],
+            np.array([k["lat"] for k in kept]),
+            np.array([k["lon"] for k in kept]),
+        )
+        if not kept or float(np.min(near)) >= min_gap_km:
+            kept.append(d)
+    return pd.DataFrame(
+        {
+            "lat": [d["lat"] for d in kept],
+            "lon": [d["lon"] for d in kept],
+            "label": [f"{d['sqm']:.2f} · B{d['bortle']}" for d in kept],
+            "position": [label_side(d["lat"], d["lon"], site_lat, site_lon) for d in kept],
+        }
+    )
+
+
 def local_map(ctx: Context, report: dict, overlay: bytes) -> None:
     pal = ctx.palette
-    spots = [
-        (d["lat"], d["lon"], f"{d['sqm']:.2f} · B{d['bortle']}")
-        for d in [*report["darkest"].values(), report.get("nearest_dark")]
-        if d and d["distance_km"] >= 1.5
-    ]
-    spot_df = pd.DataFrame(spots, columns=["lat", "lon", "label"]).drop_duplicates(["lat", "lon"])
+    spot_df = map_spots(report, ctx.site.lat, ctx.site.lon)
     here = pd.DataFrame(
         {
             "lat": [ctx.site.lat],
