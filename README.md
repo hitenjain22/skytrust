@@ -60,13 +60,17 @@ flowchart LR
 
 ## What the app does
 
-Five pages, written for someone new to stargazing, for nine well-known California places (bright
-cities to dark deserts) or any spot you choose:
+Five pages, written for someone new to stargazing, for **any place in California**: type a
+city, town, neighbourhood or ZIP code (all 3,561 of them, from Census, USGS and GeoNames data; see
+[docs/DATA_NOTES.md](docs/DATA_NOTES.md) §14), pick one of nine featured places, or enter exact
+coordinates:
 
 - **Tonight:** the chance of a clear night, a picture of the sky as you'll actually see it from
   there (only the stars that show through the local light pollution and moonlight are drawn),
   what to look for tonight (planets, the Milky Way, a star pattern to learn), and the week ahead.
-- **Sky Guide:** a live chart of the sky for any hour of the night, a list of what's up and where
+- **Sky Guide:** a live chart of the sky that follows the time slider as you drag it (drawn in the
+  browser from positions and visibility tables computed in Python, cross-checked against the
+  Python chart to 0.03°), a list of what's up and where
   ("high in the SE"), where the Milky Way runs and when it's best, and where to look with your back
   to the Moon. Visibility comes from published models: Schaefer's limiting magnitude, Krisciunas &
   Schaefer's moonlight, the light-pollution map.
@@ -78,7 +82,12 @@ cities to dark deserts) or any spot you choose:
   words (very dark … city, "× natural"); the nearest darker skies; and **city glow**, which towns
   light up which part of the horizon. The peer-reviewed World Atlas of Artificial Night Sky
   Brightness is brought up to **2025** with NASA night lights.
-- **Accuracy:** the track record and how it works.
+- **Accuracy:** the track record, how it works, and a **statewide test**: the forecast for places
+  without their own record, scored at 32 weather stations in all ten National Weather Service
+  regions of California as places it had never seen (plan fixed in
+  [docs/DECISIONS.md](docs/DECISIONS.md) before any result; results fill in when the evaluation
+  has run). Every astronomical number is cross-checked against an independent source (NASA/JPL
+  Horizons, Meeus, the IAU, astral): [tests/test_crosscheck.py](tests/test_crosscheck.py).
 
 ## Headline results
 
