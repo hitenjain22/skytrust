@@ -163,6 +163,22 @@ GLYPHS = {
 }
 
 
+# Small line icons for notes (currentColor, so they follow the theme).
+ICON_PATHS = {
+    # three wavy lines: haze
+    "haze": "M3 8c2-2 4 2 6 0s4 2 6 0 4 2 6 0M3 13c2-2 4 2 6 0s4 2 6 0 4 2 6 0"
+    "M3 18c2-2 4 2 6 0s4 2 6 0 4 2 6 0",
+    # a half sun on the horizon: dusk
+    "dusk": "M2 18h20M6 18a6 6 0 0 1 12 0M12 6v2M4.9 10.9l1.4 1.4M19.1 10.9l-1.4 1.4",
+}
+
+
+def icon(name: str, size: int = 16) -> str:
+    return (f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" '
+            f'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">'
+            f'<path d="{ICON_PATHS[name]}"/></svg>')  # fmt: skip
+
+
 def section(title: str, lede: str = "", label: str = "") -> str:
     """A section opener: small label, serif title, one line of context."""
     return block(

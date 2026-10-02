@@ -12,7 +12,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from conftest import FIXTURES
-from skytrust import live
+from skytrust import haze, live
 from skytrust.config import REPO_ROOT
 from skytrust.data import openmeteo
 from skytrust.data.http import SourceUnavailableError
@@ -32,6 +32,7 @@ def offline(monkeypatch, tmp_path):
     # exact coordinates look up the terrain height online; the tests stay offline (a slow
     # elevation service on GitHub's runners once timed a test out)
     monkeypatch.setattr(live, "custom_site", _offline_custom_site)
+    monkeypatch.setattr(haze, "fetch", lambda *a, **k: None)  # no smoke forecast offline
     monkeypatch.setenv("SKYTRUST_LIVE_CACHE", str(tmp_path))
     # No network for the live-verification record: point it at a file that doesn't exist.
     monkeypatch.setenv("SKYTRUST_FORWARD_SUMMARY", str(tmp_path / "no_summary.json"))

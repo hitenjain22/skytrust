@@ -89,7 +89,7 @@ def render(ctx: Context, standalone: bool = True) -> None:
     meta = ctx.metrics["meta"]
     st.caption(
         f"Tested once on {pd.Timestamp(meta['test_period'][0]):%B} – "
-        f"{pd.Timestamp(meta['test_period'][1]):%B %Y}, nights the model never saw. Ranges are "
+        f"{pd.Timestamp(meta['test_period'][1]):%B %Y} at five California airports. Ranges are "
         "95% confidence intervals."
     )
     st.markdown(report_card(v), unsafe_allow_html=True)

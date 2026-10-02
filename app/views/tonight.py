@@ -6,20 +6,24 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from skytrust import sky
+from skytrust import haze, sky
 from views import charts, lookup, outlook
 from views import components as ui
 from views.common import (  # noqa: F401  (show/unavailable re-exported for other pages)
+    CLEAR_P,
+    CLOUDY_P,
     VERDICTS,
     Context,
     agreement_text,
+    clearest,
     day_label,
     duration,
     esc,
     held_with_ci,
-    moon_advice,
+    hour_chances,
+    longest_run,
     moon_sentence,
-    night_summary,
+    moon_up_in_dark,
     short_time,
     show,
     station_label,
@@ -38,7 +42,6 @@ MODEL_NAMES = {
     "gem": "Canadian (GEM)",
     "icon": "German (ICON)",
 }
-CLEAR_P, CLOUDY_P = 0.6, 0.35  # an hour's chance of clear sky: likely clear / likely cloudy
 
 
 def in_progress(night, now: pd.Timestamp | None) -> bool:
@@ -50,21 +53,9 @@ def view_moment(night, now: pd.Timestamp | None) -> pd.Timestamp:
     middle of the clearest stretch (or two hours after dark)."""
     if now is not None and night.dusk_utc <= now < night.dawn_utc:
         return now.floor("10min")
-    bw = night.best_window
-    t = (
-        bw.start_utc + (bw.until_utc - bw.start_utc) / 2
-        if bw
-        else night.dusk_utc + pd.Timedelta(hours=2)
-    )
+    span = clearest(night)
+    t = span[0] + (span[1] - span[0]) / 2 if span else night.dusk_utc + pd.Timedelta(hours=2)
     return min(max(t, night.dusk_utc), night.dawn_utc).floor("10min")
-
-
-def hour_chances(night) -> pd.Series:
-    """Chance each dark hour is clear: the hourly model, or 1 - the models' median cover."""
-    p = getattr(night, "hourly_clear", None)
-    if p is not None and not p.empty:
-        return p[(p.index >= night.dusk_utc.floor("h")) & (p.index <= night.dawn_utc)]
-    return pd.Series(dtype=float)
 
 
 def story(night, tz: str) -> str:
@@ -87,7 +78,9 @@ def story(night, tz: str) -> str:
     if len(runs) == 1:
         return {"clear": "Clear skies all night.", "cloudy": "Cloudy all night.",
                 "mixed": "Patchy cloud all night: clear spells are possible."}[first]  # fmt: skip
-    change = lookup.clock(runs[1][1], tz)
+    # the sky changes between two hourly readings: say the half hour in between, the same
+    # boundary the "Clearest" stretch uses
+    change = lookup.clock(runs[1][1] - pd.Timedelta(minutes=30), tz)
     if first == "clear" and last in ("cloudy", "mixed"):
         return f"Clear until about {change}, then clouds move in."
     if first in ("cloudy", "mixed") and last == "clear":
@@ -113,12 +106,102 @@ def next_better_night(ctx: Context) -> str:
     return f"{day} looks better ({best.p_usable:.0%})."
 
 
+def clear_moonless(night) -> tuple[pd.Timestamp, pd.Timestamp] | None:
+    """The longest stretch (2 hours or more) of dark hours that are likely clear with the Moon
+    down: the window for the Milky Way and faint objects. A thin Moon (< 15% lit) counts as
+    down. Each hour stands for the half hour either side of it (as in the cloud labels)."""
+    p = hour_chances(night)
+    if p.empty:
+        return None
+    thin = (night.moon_illum or 0.0) < 0.15
+    runs_up = [] if thin else moon_up_in_dark(night)
+    half = pd.Timedelta(minutes=30)
+    good = [
+        t
+        for t, v in p.items()
+        if v >= CLEAR_P and not any(a < t + half and t - half < b for a, b in runs_up)
+    ]
+    span = longest_run(good, night)
+    if span is None or span[1] - span[0] < pd.Timedelta(hours=2):
+        return None
+    return span
+
+
+def heads_up(ctx: Context, night, guide: dict, aod: float | None) -> list[tuple[str, str]]:
+    """Short notes under the headline, only when they change the plan: the Moon (and when the
+    sky is both clear and moonless), smoke or haze, and the early evening before full dark.
+    Returns (icon html, text) pairs."""
+    tz = ctx.site.timezone
+    notes = []
+    illum = night.moon_illum or 0.0
+    runs = moon_up_in_dark(night)
+    up_min = sum((b - a).total_seconds() / 60 for a, b in runs)
+    dark_min = (night.dawn_utc - night.dusk_utc).total_seconds() / 60
+    milky_way_here = ctx.sqm_at() >= sky.MILKY_WAY_MIN_SQM
+    moon_icon = ui.moon_svg(night.moon_phase_deg, 16)
+    window = clear_moonless(night) if night.verdict != "Skip" else None
+    if window and ctx.now_utc is not None and ctx.now_utc >= window[1]:
+        window = None  # already over tonight
+    span = f"{short_time(window[0], tz)} – {short_time(window[1], tz)}" if window else ""
+    if illum >= 0.15 and runs:
+        bright = illum >= 0.5 and up_min >= 0.5 * dark_min
+        if window and milky_way_here:
+            notes.append((moon_icon, f"Best for the Milky Way: {span}, clear with the Moon down."))
+        elif bright:
+            text = ("Bright Moon most of the night: the Milky Way and faint galaxies are washed "
+                    "out. Planets and the Moon are fine.")  # fmt: skip
+            notes.append((moon_icon, text))
+    elif milky_way_here and night.verdict != "Skip":
+        notes.append((moon_icon, "No Moon in the dark hours: the best kind of night for the "
+                                 "Milky Way."))  # fmt: skip
+    w = haze.words(aod)
+    if w:
+        notes.append((ui.icon("haze", 16), f"{w[0]} in the forecast: {w[1]}."))
+    evening = early_evening(ctx, night)
+    if evening:
+        notes.append((ui.icon("dusk", 16), evening))
+    return notes
+
+
+def early_evening(ctx: Context, night) -> str:
+    """'Early evening (7:05 – 8:20 PM): 4 of 5 forecasts say clear.' Before full darkness the
+    first stars and planets are already out; the tested hourly model covers dark hours only,
+    so this just counts the weather forecasts that show a clear sky (mostly <= 20% cloud)."""
+    if ctx.now_utc is not None and ctx.now_utc >= night.dusk_utc:
+        return ""
+    svc = (ctx.services or {}).get("twilight")
+    if svc is None or ctx.forecast is None:
+        return ""
+    first_stars, _ = svc(ctx.site, night.dusk_utc, night.dawn_utc)
+    if night.dusk_utc - first_stars < pd.Timedelta(minutes=30):
+        return ""
+    h = ctx.forecast.hourly
+    h = h[(h["time"] >= first_stars.floor("h")) & (h["time"] < night.dusk_utc)]
+    cover = h.groupby("model")["cloud_cover"].mean().dropna()
+    if cover.empty:
+        return ""
+    clear = int((cover <= ctx.settings.clear_threshold).sum())
+    tz = ctx.site.timezone
+    return (f"Early evening ({short_time(first_stars, tz)} – {short_time(night.dusk_utc, tz)}): "
+            f"{clear} of {len(cover)} forecasts say clear.")  # fmt: skip
+
+
 def hero_lede(ctx: Context, night) -> str:
     """The plain-words summary under the headline: what happens tonight, and what to do."""
     tz = ctx.site.timezone
     parts = [story(night, tz)]
-    if night.verdict == "Go" and not in_progress(night, ctx.now_utc):
-        parts.append(f"It's fully dark from {short_time(night.dusk_utc, tz)}.")
+    span = clearest(night)
+    now = ctx.now_utc
+    if night.verdict == "Go":
+        late_start = span and span[0] > night.dusk_utc + pd.Timedelta(minutes=45)
+        if span and now is not None and span[0] <= now < span[1]:
+            parts.append("A good time to be out now.")
+        elif late_start and (now is None or now < span[0]):
+            when = short_time(span[0], tz)
+            if when not in parts[0]:  # the story may already say when it clears
+                parts.append(f"Head out for {when}.")
+        elif not in_progress(night, now):
+            parts.append(f"It's fully dark from {short_time(night.dusk_utc, tz)}.")
     elif night.verdict == "Maybe":
         parts.append("Check again closer to dark.")
     else:
@@ -126,20 +209,27 @@ def hero_lede(ctx: Context, night) -> str:
     return " ".join(x for x in parts if x)
 
 
-def hero(ctx: Context, night, guide: dict) -> str:
-    tz, pal = ctx.site.timezone, ctx.palette
+def headline_for(night, aod: float | None) -> str:
+    """The verdict in words; a clear night with real smoke or haze says so (the chance is about
+    clouds only, but a smoky clear night is not the night a beginner expects)."""
     headline, _ = VERDICTS[night.verdict]
+    w = haze.words(aod)
+    if night.verdict == "Go" and w and w[0] != "Some haze":
+        return "Clear but hazy tonight"
+    return headline
+
+
+def hero(ctx: Context, night, guide: dict, aod: float | None = None) -> str:
+    tz, pal = ctx.site.timezone, ctx.palette
+    headline = headline_for(night, aod)
     when = "Tonight, under way" if in_progress(night, ctx.now_utc) else "Tonight"
     date = pd.Timestamp(night.night_date)
     number = "–" if night.p_usable is None else f"{night.p_usable * 100:.0f}<sup>%</sup>"
-    note = ""
-    tip = moon_advice(night)
-    if tip:
-        icon = ui.moon_svg(night.moon_phase_deg, 16)
-        note = f'<div class="sk-note">{icon}<span>{esc(tip[1])}</span></div>'
+    note = "".join(f'<div class="sk-note">{icon}<span>{esc(text)}</span></div>'
+                   for icon, text in heads_up(ctx, night, guide, aod))  # fmt: skip
 
     t = view_moment(night, ctx.now_utc)
-    svg, info = ctx.service("chart")(ctx.site, t, ctx.sqm_at(), "here", False, True, True)
+    svg, info = ctx.service("chart")(ctx.site, t, ctx.sqm_at(), "here", False, True, True, aod)
     counts = guide["stars_visible"]
     moment = "right now" if in_progress(night, ctx.now_utc) else f"at {lookup.clock(t, tz)}"
     caption = (
@@ -169,15 +259,11 @@ def fact_strip(ctx: Context, night, guide: dict) -> str:
         f"{short_time(night.dusk_utc, tz)} – {short_time(night.dawn_utc, tz)}",
         f"{duration(night.dusk_utc, night.dawn_utc)} of full darkness",
     )
-    bw = night.best_window
+    span = clearest(night)
     best = ui.stat(
         "Clearest",
-        f"{short_time(bw.start_utc, tz)} – {short_time(bw.until_utc, tz)}"
-        if bw
-        else "No clear stretch",
-        f"{duration(bw.start_utc, bw.until_utc)} of clear sky expected"
-        if bw
-        else "Clouds expected through the dark hours",
+        f"{short_time(span[0], tz)} – {short_time(span[1], tz)}" if span else "No clear stretch",
+        f"{duration(*span)} likely clear" if span else "No hour looks likely to be clear",
     )
     moon = ui.stat(
         "Moon",
@@ -301,9 +387,12 @@ def next_event_line(ctx: Context) -> str:
     when = "today" if days <= 0 else "tomorrow" if days == 1 else f"in {days} days"
     return (
         f'<p class="sk-lede" style="margin:6px 0 0">Coming up: the <b>{esc(shower.name)}</b> '
-        f"meteor shower peaks {when} ({peak.tz_convert(tz):%a %b %-d}), up to "
-        f"{shower.zhr:.0f} an hour in a perfect sky. See the Events tab for when and where.</p>"
+        f"meteor shower peaks {when} ({peak.tz_convert(tz):%a %b %-d}). Details in Events.</p>"
     )
+
+
+def days_ahead(lead: int) -> str:
+    return "1 day ahead" if lead == 1 else f"{lead} days ahead"
 
 
 def reliability_details(night, site_label: str) -> None:
@@ -321,20 +410,24 @@ def reliability_details(night, site_label: str) -> None:
         ]
         st.markdown(
             f"{esc(site_label)} has no weather station in SkyTrust's test, so it uses the version "
-            "of the model built for any place in California. Here is how that version did at the "
-            "weather stations nearest you, each scored as a place it had **never seen** (2026, "
-            f"lead {night.lead}):\n\n" + "\n".join(lines) + "\n\n"
-            f"Across all {record['n_stations']} stations: “go” calls that held {held_with_ci(o)}, "
-            f"skill vs the seasonal average {with_ci(o, 'bss', 'num')}."
+            "of the model built for any place in California. How it did at the stations nearest "
+            "you, each scored as a place it had **never seen** (2026, "
+            f"{days_ahead(night.lead)}):\n\n" + "\n".join(lines) + "\n\n"
+            f"Across all {record['n_stations']} stations: “go” calls that held {held_with_ci(o)}; "
+            f"skill {with_ci(o, 'bss', 'num')} (0 = no better than the season's average, "
+            "1 = perfect)."
         )
         return
     if record.get("kind") == "unseen":
         o = record["overall"]
+        bss = o.get("bss")
+        smaller = f"{bss:.0%} smaller" if bss is not None and bss == bss and bss > 0 else "–"
         st.markdown(
             f"{esc(site_label)} wasn't part of SkyTrust's test, so it uses the version of the "
-            "model built for new places. Tested at airports it had **never seen** (lead "
-            f"{night.lead}), its false-clear rate was {with_ci(o, 'false_clear_rate')} and its "
-            f"skill vs the seasonal average {with_ci(o, 'bss', 'num')}."
+            "model built for new places. At airports it had **never seen** "
+            f"({days_ahead(night.lead)}): “go” calls held {held_with_ci(o)} of the time, and its "
+            f"errors were {smaller} than guessing from the season "
+            f"(skill {with_ci(o, 'bss', 'num')})."
         )
         return
     site, overall = record.get("site"), record["overall"]
@@ -351,8 +444,8 @@ def reliability_details(night, site_label: str) -> None:
         help="Brier Skill Score: 0 = no better than the seasonal base rate, 1 = perfect.",
     )
     st.caption(
-        f"All sites, lead {night.lead}: false-clear {with_ci(overall, 'false_clear_rate')}, "
-        f"skill {with_ci(overall, 'bss', 'num')}."
+        f"All sites, {days_ahead(night.lead)}: false-clear "
+        f"{with_ci(overall, 'false_clear_rate')}, skill {with_ci(overall, 'bss', 'num')}."
     )
 
 
@@ -421,11 +514,11 @@ def forecast_agreement(fc, night, tz: str, threshold: float) -> str:
         return (f"All {total} forecasts expect {a} until about {lookup.clock(flip, tz)}, then "
                 f"{b}.")  # fmt: skip
     split = clear.index[~agree.to_numpy()][0]
-    lead = "They agree" if agree.iloc[0] else "They disagree from the start"
     mid = int(round(clear[~agree].median()))
-    when = f" until about {lookup.clock(split, tz)}" if agree.iloc[0] else ""
-    return (f"{lead}{when}; after that they split: about {mid} of {total} say clear, the rest "
-            "expect clouds. When forecasts disagree, the night can go either way.")  # fmt: skip
+    if agree.iloc[0]:
+        return (f"All {total} agree until about {lookup.clock(split, tz)}; after that only about "
+                f"{mid} of {total} say clear.")  # fmt: skip
+    return f"They disagree: about {mid} of {total} say clear through the night."
 
 
 def beginner_guide(ctx: Context) -> None:
@@ -452,8 +545,9 @@ def render(ctx: Context) -> None:
         return
     fc, tz, pal = ctx.forecast, ctx.site.timezone, ctx.palette
     night = ctx.nights[0]
-    guide = ctx.service("sky")(ctx.site, night.dusk_utc, night.dawn_utc, ctx.sqm_at())
-    st.markdown(hero(ctx, night, guide), unsafe_allow_html=True)
+    aod = ctx.haze_aod(night.dusk_utc, night.dawn_utc)
+    guide = ctx.service("sky")(ctx.site, night.dusk_utc, night.dawn_utc, ctx.sqm_at(), aod)
+    st.markdown(hero(ctx, night, guide, aod), unsafe_allow_html=True)
     if night.models_missing:
         st.info(
             f"Computed without {', '.join(m.upper() for m in night.models_missing)} "
@@ -464,7 +558,7 @@ def render(ctx: Context) -> None:
     st.markdown(
         ui.section(
             "Look up tonight",
-            "Picked from what's above the horizon tonight and bright enough to see from here.",
+            "What's up tonight and bright enough to see from here.",
             "What to see",
         ),
         unsafe_allow_html=True,
@@ -477,9 +571,8 @@ def render(ctx: Context) -> None:
     st.markdown(
         ui.section(
             "The week ahead",
-            "The chance of a clear night for each of the next seven. Forecasts get less "
-            "reliable the further ahead they look: the dots show how far each number can be "
-            "trusted (●●● high, ●○○ low). The moon icon shows its phase that night.",
+            "The chance of a clear night, night by night. The dots show how far to trust each "
+            "number (●●● high, ●○○ low: forecasts blur further ahead).",
             "7 nights",
         ),
         unsafe_allow_html=True,
@@ -492,8 +585,8 @@ def render(ctx: Context) -> None:
     st.markdown(ui.section("Details", "", "For the curious"), unsafe_allow_html=True)
     with st.expander("Hour by hour tonight", icon=":material/schedule:"):
         st.caption(
-            "Each bar is the chance that hour has a clear sky. The shaded part is full darkness; "
-            "the strip underneath shows when the Moon is up (its light hides faint stars)."
+            "Bars: the chance each hour is clear. Shaded: full darkness. Strip below: the Moon "
+            "is up (its light hides faint stars)."
         )
         show(charts.night_chart(fc.hourly, night, tz, pal, CLEAR_P, CLOUDY_P))
         st.markdown(
@@ -511,16 +604,14 @@ def render(ctx: Context) -> None:
         risk_panel(ctx, night)
     with st.expander("Do the weather forecasts agree?", icon=":material/stacked_line_chart:"):
         st.markdown(
-            "SkyTrust reads five computer weather forecasts made by different weather agencies. "
-            "They simulate the atmosphere in different ways, so they often disagree about "
-            "clouds. When they agree, the forecast is more trustworthy; when they don't, treat "
-            "it with caution. " + forecast_agreement(fc, night, tz, ctx.settings.clear_threshold)
+            "SkyTrust combines five weather forecasts from different agencies. When they agree, "
+            "trust the forecast more. "
+            + forecast_agreement(fc, night, tz, ctx.settings.clear_threshold)
         )
         show(charts.model_grid(fc.hourly, night, tz, pal, MODEL_NAMES))
         st.caption(
-            "Each row is one forecast; each square is an hour, with the cloud cover it predicts "
-            "(dark = clear, light = cloudy). "
-            f"[Latest satellite picture]({GOES_LOOP}) (NOAA) to see where the clouds are now."
+            "Each square: one forecast's cloud cover (%) for that hour, dark = clear. "
+            f"[Satellite picture now]({GOES_LOOP}) (NOAA)."
         )
     with st.expander("How reliable is this forecast here?", icon=":material/verified:"):
         reliability_details(night, ctx.site_label)
@@ -528,6 +619,5 @@ def render(ctx: Context) -> None:
         beginner_guide(ctx)
     st.caption(
         f"Forecast fetched {fc.fetched_at_utc.tz_convert(tz):%b %-d, %-I:%M %p} ({fc.source}). "
-        "Tonight's live forecast is fresher than the 1-day-ahead data the model was tested on, so "
-        "this probability is slightly conservative."
+        "Tested on day-old forecasts; tonight's fresher one is, if anything, a little better."
     )

@@ -309,7 +309,7 @@ def go_accuracy_by_lead(records: pd.DataFrame, pal: dict) -> go.Figure:
                 }
                 if is_blend
                 else None,
-                hovertemplate="%{x} day(s) ahead: %{y:.0f}% of 'go' nights were usable"
+                hovertemplate="Days ahead: %{x}<br>%{y:.0f}% of 'go' nights were usable"
                 "<extra></extra>",
             )
         )

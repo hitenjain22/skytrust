@@ -15,6 +15,7 @@ from views import charts, lookup
 from views import components as ui
 from views.common import (
     Context,
+    clearest,
     conditions,
     maps_link,
     place_detail,
@@ -83,12 +84,11 @@ def site_rows(ctx: Context) -> pd.DataFrame:
         }
         if nights:
             n = nights[0]
-            bw = n.best_window
             conds = conditions(n, sqm, ctx.settings)
             row |= {
                 "p": n.p_usable,
                 "verdict": n.verdict,
-                "window": window_text(bw, site.timezone),
+                "window": window_text(clearest(n), site.timezone),
                 "moon_free": n.moon_free_hours,
                 "conds": conds,
                 "met": sum(1 for _, ok, _ in conds if ok),
@@ -141,10 +141,11 @@ def photo_gallery(table: pd.DataFrame, n: int = 3) -> str:
     )
 
 
-def window_text(bw, tz: str) -> str:
-    if not bw:
+def window_text(span, tz: str) -> str:
+    """'9 PM–5:30 AM' for a (start, until) stretch, from common.clearest."""
+    if not span:
         return "no clear window"
-    return f"{short_time(bw.start_utc, tz)}–{short_time(bw.until_utc, tz)}"
+    return f"{short_time(span[0], tz)}–{short_time(span[1], tz)}"
 
 
 def condition_chips(conds) -> str:
@@ -328,12 +329,15 @@ def nearby_rows(report: dict) -> str:
             if d["distance_km"] < 1.5
             else f"{d['distance_km']:.0f} km {d['direction']}"
         )
+        if d.get("name"):  # a named place on land: open it in SkyTrust
+            link = f'<a href="?site={ui.esc(d["id"])}&page=where-to-go" target="_self">'
+            where = f"{link}{ui.esc(d['name'])}</a> · {where}"
         tier = sky.darkness(d["sqm"])
         items.append(
             ui.row(
                 [
                     f'<div class="sk-main"><div class="sk-row-title">{ui.esc(title)}</div>'
-                    f'<div class="sk-row-sub">{where} · straight-line distance</div></div>',
+                    f'<div class="sk-row-sub">{where}</div></div>',
                     f'<div><div class="sk-row-title">{ui.esc(tier.title)} sky</div>'
                     f'<div class="sk-row-sub">{times_words(tier.times_natural)}</div></div>',
                     f'<div style="text-align:right"><a href="{maps_link(d["lat"], d["lon"])}" '
@@ -453,16 +457,20 @@ def map_spots(report: dict, site_lat: float, site_lon: float, min_gap_km: float 
         {
             "lat": [d["lat"] for d in kept],
             "lon": [d["lon"] for d in kept],
-            "label": [f"{sky.darkness(d['sqm']).title.lower()} sky" for d in kept],
+            "label": [
+                f"{d['name']} · {sky.darkness(d['sqm']).title.lower()}"
+                if d.get("name")
+                else f"{sky.darkness(d['sqm']).title.lower()} sky"
+                for d in kept
+            ],
             "position": [label_side(d["lat"], d["lon"], site_lat, site_lon) for d in kept],
         }
     )
 
 
 CLICK_NOTE = (
-    "Click anywhere on a map to open the nearest town. The light-pollution map is about 1 km "
-    "fine, but SkyTrust has forecasts and details for California's towns and communities, so a "
-    "click opens the nearest one: that's as precise as it gets."
+    "Click the map to open the nearest town. The map is detailed to about 1 km, but forecasts "
+    "are made per town, so that's as precise as a click gets."
 )
 
 

@@ -86,7 +86,16 @@ try:  # installed via `uv sync` locally; on a host that only installs dependenci
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from skytrust import events, gazetteer, inference, lightpollution, live, sky, skyglow  # noqa: E402
+from skytrust import (  # noqa: E402
+    events,
+    gazetteer,
+    haze,
+    inference,
+    lightpollution,
+    live,
+    sky,
+    skyglow,
+)
 from skytrust.config import CONFIG_DIR, Site, load_places, load_settings  # noqa: E402
 from views import (  # noqa: E402
     accuracy,
@@ -168,6 +177,7 @@ def _load_light_pollution(version: str):
         "base": lightpollution.load(lightpollution.BASE_PATH),
         "sources": skyglow.load_sources(),
         "model": model,
+        "places": gazetteer.land_points(gaz) if (gaz := gazetteer.load()) is not None else None,
     }
 
 
@@ -262,31 +272,51 @@ def get_forecast(
 
 
 @st.cache_data(ttl=6 * 60 * 60, max_entries=64, show_spinner="Working out tonight's sky…")
-def cached_sky(site: Site, dusk: pd.Timestamp, dawn: pd.Timestamp, sqm: float) -> dict:
-    return sky.tonight(site, dusk, dawn, sqm)
+def cached_sky(
+    site: Site, dusk: pd.Timestamp, dawn: pd.Timestamp, sqm: float, aod: float | None = None
+) -> dict:
+    return sky.tonight(site, dusk, dawn, sky.site_conditions(site, sqm, aod))
 
 
 @st.cache_data(ttl=6 * 60 * 60, max_entries=256, show_spinner=False)
 def cached_chart(
-    site: Site, utc: pd.Timestamp, sqm: float, mode: str, labels: bool, lines: bool, compact: bool
-) -> tuple[str, dict]:
-    return skychart.sky_svg(site, utc, sqm, mode=mode, labels=labels, lines=lines, compact=compact)
+    site: Site, utc: pd.Timestamp, sqm: float, mode: str, labels: bool, lines: bool, compact: bool,
+    aod: float | None = None,
+) -> tuple[str, dict]:  # fmt: skip
+    cond = sky.site_conditions(site, sqm, aod)
+    return skychart.sky_svg(site, utc, cond, mode=mode, labels=labels, lines=lines, compact=compact)
+
+
+@st.cache_data(ttl=60 * 60, max_entries=128, show_spinner=False)
+def cached_haze(lat: float, lon: float) -> pd.Series | None:
+    """The smoke-and-haze forecast (aerosol optical depth, hourly) for the next ~5 days."""
+    settings, _, _ = load_static()
+    return haze.fetch(lat, lon, settings)
+
+
+def haze_for(site: Site, dusk: pd.Timestamp, dawn: pd.Timestamp) -> float | None:
+    """Tonight's aerosol optical depth here (median over the dark hours), rounded so nearby
+    clicks share the cache; None when there's no forecast for that night."""
+    aod = haze.night_aod(cached_haze(round(site.lat, 2), round(site.lon, 2)), dusk, dawn)
+    return None if aod is None else round(aod, 2)
 
 
 @st.cache_data(ttl=6 * 60 * 60, max_entries=48, show_spinner="Drawing tonight's sky…")
 def cached_live(
-    site: Site, dusk: pd.Timestamp, dawn: pd.Timestamp, sqm: float, start: pd.Timestamp
-) -> dict:
+    site: Site, dusk: pd.Timestamp, dawn: pd.Timestamp, sqm: float, start: pd.Timestamp,
+    aod: float | None = None,
+) -> dict:  # fmt: skip
     """Data for the Sky Guide's live chart: from civil dusk (Sun 6° down, the first stars) to
     civil dawn, with the fully dark part (`dusk`-`dawn`, Sun 18° down) marked. The start time
     is rounded to 5 minutes so the cache isn't defeated by the clock."""
     c_dusk, c_dawn = twilight_window(site, dusk, dawn)
-    guide = cached_sky(site, c_dusk, c_dawn, sqm)
-    return skylive.payload(site, guide, sqm, pd.Timestamp(start), dark=(dusk, dawn))
+    guide = cached_sky(site, c_dusk, c_dawn, sqm, aod)
+    cond = sky.site_conditions(site, sqm, aod)
+    return skylive.payload(site, guide, cond, pd.Timestamp(start), dark=(dusk, dawn))
 
 
-def live_chart(site: Site, dusk, dawn, sqm: float, start: pd.Timestamp) -> dict:
-    return cached_live(site, dusk, dawn, sqm, pd.Timestamp(start).floor("5min"))
+def live_chart(site: Site, dusk, dawn, sqm: float, start: pd.Timestamp, aod=None) -> dict:
+    return cached_live(site, dusk, dawn, sqm, pd.Timestamp(start).floor("5min"), aod)
 
 
 def twilight_window(
@@ -497,6 +527,8 @@ def main() -> None:
             "events": cached_events,
             "night": night_window,
             "live": live_chart,
+            "haze": haze_for,
+            "twilight": twilight_window,
         },
     )
     try:

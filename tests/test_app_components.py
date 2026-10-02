@@ -95,14 +95,6 @@ def test_moon_sentence_describes_when_it_is_up():
     assert "up until 12:30 AM" in common.moon_sentence(setting, TZ)
 
 
-def test_moon_advice_only_when_it_matters():
-    bright = night(moon_up=[(DUSK, DAWN)], moon_illum=0.9)
-    assert common.moon_advice(bright)[0] == "bright"
-    assert common.moon_advice(night(moon_illum=0.6))[0] == "dark"  # below the horizon all night
-    brief = night(moon_up=[(DUSK, DUSK + pd.Timedelta(hours=1))], moon_illum=0.5)
-    assert common.moon_advice(brief) is None
-
-
 def test_nights_that_have_ended_are_dropped():
     """A forecast cached before dawn must not keep showing last night as 'tonight'."""
     past = SimpleNamespace(dawn_utc=DAWN)
@@ -130,7 +122,7 @@ def test_place_names_are_friendly_and_details_come_from_config():
     airports = {s.id: s for s in load_sites()}
     assert common.place_name(airports["AUN"]) == "Auburn airport"  # not "AURBURN MUNICIPAL..."
     places = {p.id: p for p in load_places()}
-    assert common.place_detail(places["death-valley"]) == "Mojave Desert · -70 m"
+    assert common.place_detail(places["death-valley"]) == "Mojave Desert · 70 m below sea level"
     label = common.site_option_label(places["death-valley"], sky.darkness(21.98))
     assert label == "Death Valley · very dark sky"
 
@@ -253,8 +245,8 @@ def _night(chances, start="2026-10-02 03:00"):
     [  # hours from 8 PM Pacific (03:00 UTC): 8, 9, 10, 11 PM, 12 AM, 1, 2, 3 AM
         ([0.9] * 8, "Clear skies all night."),
         ([0.1] * 8, "Cloudy all night."),
-        ([0.9] * 4 + [0.2] * 4, "Clear until about 12 AM, then clouds move in."),
-        ([0.2] * 3 + [0.8] * 5, "Cloudy at first, clearing around 11 PM."),
+        ([0.9] * 4 + [0.2] * 4, "Clear until about 11:30 PM, then clouds move in."),
+        ([0.2] * 3 + [0.8] * 5, "Cloudy at first, clearing around 10:30 PM."),
         ([0.9, 0.2] + [0.9] * 6, "Clear skies all night."),  # a one-hour blip is ignored
     ],
 )
@@ -278,7 +270,7 @@ def test_forecast_agreement_sentence():
     fc = SimpleNamespace(hourly=pd.DataFrame(rows))
     night = SimpleNamespace(dusk_utc=times[0], dawn_utc=times[-1])
     text = tonight.forecast_agreement(fc, night, "America/Los_Angeles", 0.2)
-    assert text.startswith("They agree until about 11 PM; after that they split: about 3 of 5")
+    assert text == "All 5 agree until about 11 PM; after that only about 3 of 5 say clear."
     clear = pd.DataFrame([r | {"cloud_cover": 0.0} for r in rows])
     assert "All 5 forecasts expect a clear sky all night" in tonight.forecast_agreement(
         SimpleNamespace(hourly=clear), night, "America/Los_Angeles", 0.2
@@ -353,3 +345,81 @@ def test_the_forecast_grid_keeps_both_1_ams_apart():
     fig = charts.model_grid(hourly, night, "America/Los_Angeles", theme.palette(), names)
     assert len(set(fig.data[0].x)) == len(idx)  # one column per hour, none merged
     assert list(fig.layout.xaxis.ticktext).count("1 AM") == 2
+
+
+# ---------- Tonight: one story, the Moon, haze ----------
+
+
+def _hourly(chances, **kw):
+    """A night whose dark hours start at 9 PM PDT (04:00 UTC) with these clear chances."""
+    idx = pd.date_range("2026-10-01 04:00", periods=len(chances), freq="h", tz="UTC")
+    return night(hourly_clear=pd.Series(chances, index=idx), **kw)
+
+
+def test_the_clearest_stretch_matches_the_story():
+    """'Clearest' and the story sentence read the same hourly chances, so a night that clears
+    at midnight can't show a clear stretch from 9 PM (they once disagreed)."""
+    from views import tonight
+
+    n = _hourly([0.2, 0.2, 0.3, 0.8, 0.9, 0.9, 0.8])
+    start, until = common.clearest(n)
+    assert start == pd.Timestamp("2026-10-01 06:30", tz="UTC")  # 11:30 PM (hour 12 AM - 30 min)
+    assert until == pd.Timestamp("2026-10-01 10:30", tz="UTC")
+    assert "clearing around 11:30 PM" in tonight.story(n, TZ)
+    assert common.clearest(_hourly([0.3] * 7)) is None
+
+
+def test_the_milky_way_window_is_clear_and_moonless():
+    from views import tonight
+
+    moon = [
+        (pd.Timestamp("2026-10-01 03:00", tz="UTC"), pd.Timestamp("2026-10-01 07:10", tz="UTC"))
+    ]
+    n = _hourly([0.9] * 8, moon_up=moon, moon_illum=0.7)
+    start, until = tonight.clear_moonless(n)
+    assert start >= moon[0][1] and until == pd.Timestamp("2026-10-01 11:30", tz="UTC")
+    # a thin Moon doesn't count; a cloudy night has no window; under 2 hours isn't a window
+    thin = tonight.clear_moonless(_hourly([0.9] * 8, moon_up=moon, moon_illum=0.1))
+    assert thin[0] == pd.Timestamp("2026-10-01 03:30", tz="UTC")  # the first hour, 04:00
+    assert tonight.clear_moonless(_hourly([0.2] * 8, moon_up=moon)) is None
+    assert tonight.clear_moonless(_hourly([0.9, 0.9, 0.9, 0.9, 0.2, 0.2, 0.2, 0.2],
+                                          moon_up=moon)) is None  # fmt: skip
+
+
+def test_a_clear_but_smoky_night_says_so():
+    from views import tonight
+
+    go = night(verdict="Go")
+    assert tonight.headline_for(go, None) == "Clear skies tonight"
+    assert tonight.headline_for(go, 0.15) == "Clear skies tonight"  # a little haze: no change
+    assert tonight.headline_for(go, 0.9) == "Clear but hazy tonight"
+    assert tonight.headline_for(night(verdict="Skip"), 0.9) == "Probably cloudy"
+
+
+def test_a_clear_night_that_starts_late_says_when_to_go():
+    from views import tonight
+
+    n = _hourly([0.2, 0.2, 0.3, 0.8, 0.9, 0.9, 0.8], verdict="Go")
+    ctx = SimpleNamespace(site=SimpleNamespace(timezone=TZ), now_utc=DUSK - pd.Timedelta(hours=2))
+    # the story already says when it clears, so the time isn't repeated
+    assert tonight.hero_lede(ctx, n) == "Cloudy at first, clearing around 11:30 PM."
+    ctx.now_utc = pd.Timestamp("2026-10-01 08:00", tz="UTC")  # 1 AM, inside the clear stretch
+    assert "A good time to be out now." in tonight.hero_lede(ctx, n)
+    assert "plan rather than drive out" not in tonight.hero_lede(ctx, n)
+
+
+def test_a_milky_way_window_that_has_passed_is_not_offered():
+    from views import tonight
+
+    moon = [(pd.Timestamp("2026-10-01 08:10", tz="UTC"), DAWN)]  # rises at 1:10 AM
+    n = _hourly([0.9] * 8, moon_up=moon, moon_illum=0.7, verdict="Go", moon_phase_deg=200.0)
+    ctx = SimpleNamespace(
+        site=SimpleNamespace(timezone=TZ), now_utc=DUSK, sqm_at=lambda *a: 21.5,
+        services={}, forecast=None,
+    )  # fmt: skip
+    notes = [text for _, text in tonight.heads_up(ctx, n, {}, None)]
+    # hours 9 PM - midnight are clear and moonless: 8:30 PM - 12:30 AM (each hour +/- 30 min)
+    assert "Best for the Milky Way: 8:30 PM – 12:30 AM, clear with the Moon down." in notes
+    ctx.now_utc = pd.Timestamp("2026-10-01 09:00", tz="UTC")  # 2 AM: that window is over
+    notes = [text for _, text in tonight.heads_up(ctx, n, {}, None)]
+    assert not any("Best for the Milky Way" in t for t in notes)

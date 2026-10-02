@@ -664,6 +664,10 @@ def cross_truth_table(v: MetricsView, lead: int) -> pd.DataFrame | None:
     return out
 
 
+def _days(n: int) -> str:
+    return "1 day" if n == 1 else f"{n} days"
+
+
 def cross_truth_lines(v: MetricsView, lead: int) -> list[str]:
     table = cross_truth_table(v, lead)
     if table is None:
@@ -1562,7 +1566,7 @@ def takeaways(v: MetricsView, label: str, lead: int) -> list[str]:
     best = v.best_single(label, lead)
     name = v.name(main)
     lines = [
-        f"Judged against the {LABEL_NAMES[label]} label, {lead} day(s) ahead, the {name.lower()} "
+        f"Judged against the {LABEL_NAMES[label]} label, {_days(lead)} ahead, the {name.lower()} "
         f'says "go" on nights that turn out cloudy {with_ci(r, "false_clear_rate", "pct")} of the '
         f"time, versus {with_ci(clim, 'false_clear_rate', 'pct')} for the seasonal base rate.",
         f"Its Brier Skill Score is {with_ci(r, 'bss')} "
@@ -1576,7 +1580,7 @@ def takeaways(v: MetricsView, label: str, lead: int) -> list[str]:
     leads = [ld for ld in v.lead_list(label) if v.rec(label, ld, main) is not None]
     first, last = v.req(label, leads[0], main), v.req(label, leads[-1], main)
     lines.append(
-        f"Skill fades with lead time: from {_fmt(first['bss'], 'num')} at {leads[0]} day(s) ahead "
+        f"Skill fades with lead time: from {_fmt(first['bss'], 'num')} at {_days(leads[0])} ahead "
         f"to {_fmt(last['bss'], 'num')} at {leads[-1]} days."
     )
     return lines

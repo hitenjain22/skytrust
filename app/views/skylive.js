@@ -429,27 +429,30 @@ function planetsSvg(P, F) {
   return out;
 }
 
-// City glow on the horizon: an amber haze along the rim, as strong as the glow 3° up compared
-// with the natural sky there.
+// City glow on the horizon: a faint amber haze along the rim, stronger on the sides where the
+// glow 3° up is well above its average around the horizon (the direction of a town's dome).
 function domesSvg(P, F) {
   if (F.mode === "dark") return "";
   const n = P.d.glowAz.length;
   const [i, fa] = bracket(P.d.alts, 3);
   const nat = lerp(P.vis.nat[i], P.vis.nat[i + 1], fa);
+  const g = Array.from({ length: n }, (_, j) => glowAt(P, i, fa, (j * 360) / n));
+  const mean = g.reduce((a, b) => a + b, 0) / n;
+  const base = Math.min(0.1, 0.03 * Math.log2(1 + mean / nat));
   let out = "";
   for (let j = 0; j < n; j++) {
+    const side = Math.max(0, Math.min(1, Math.log2(g[j] / mean) / 1.5));
+    const op = base + 0.26 * side;
+    if (op < 0.03) continue;
     const az = (j * 360) / n;
-    const ratio = glowAt(P, i, fa, az) / nat;
-    const op = Math.min(0.5, 0.11 * Math.log2(1 + ratio));
-    if (op < 0.04) continue;
     const a0 = (az - 180 / n) * D2R;
     const a1 = (az + 180 / n) * D2R;
-    const rr = R - 16;
+    const rr = R - 12;
     out += `<path d="M${(CX - rr * Math.sin(a0)).toFixed(1)} ${(CY - rr * Math.cos(a0)).toFixed(1)} `
       + `A${rr} ${rr} 0 0 0 ${(CX - rr * Math.sin(a1)).toFixed(1)} ${(CY - rr * Math.cos(a1)).toFixed(1)}" `
       + `stroke-opacity="${op.toFixed(2)}"/>`;
   }
-  return out ? `<g fill="none" stroke="#E9A55E" stroke-width="44" filter="url(#mwblur-${P.uid})">${out}</g>` : "";
+  return out ? `<g fill="none" stroke="#E9A55E" stroke-width="30" filter="url(#mwblur-${P.uid})">${out}</g>` : "";
 }
 
 function moonSvg(P, F) {
@@ -556,8 +559,7 @@ function listHtml(P, F, selected) {
     ["Clusters, galaxies, nebulae", rows.filter((r) => ["cluster", "galaxy", "nebula"].includes(r.it.k)).slice(0, 4)],
   ];
   // what you can see gets a row; what's up but too faint is named in one line at the end
-  let html = `<div class="sk-eyebrow">What you can see at ${esc(clock(F.t, P.d.tz))}</div>`
-    + '<p class="sk-row-sub" style="margin:4px 0 0">Tap a name to find it on the map.</p>';
+  let html = `<div class="sk-eyebrow">What you can see at ${esc(clock(F.t, P.d.tz))}</div>`;
   const faint = [];
   for (const [title, group] of groups) {
     const seen = group.filter((r) => r.seen);
@@ -580,8 +582,7 @@ function listHtml(P, F, selected) {
   if (faint.length) {
     const names = faint.map((r) => `<span class="sk-pick-name" role="button" tabindex="0" `
       + `data-item="${r.index}">${esc(r.it.n)}</span>`).join(", ");
-    html += `<p class="sk-row-sub" style="margin-top:14px">Up but too faint to see from here right `
-      + `now: ${names}.</p>`;
+    html += `<p class="sk-row-sub" style="margin-top:14px">Up, but too faint right now: ${names}.</p>`;
   }
   return html;
 }
@@ -668,8 +669,8 @@ function build(root, P) {
           </div>
           <input class="sk-live-range" type="range" min="0" max="${n}" step="1" value="${startIdx}" aria-label="Time tonight">
           <div class="sk-live-ticks" aria-hidden="true"></div>
-          <div class="sk-live-dark">Fully dark ${esc(clock(d.dark0, d.tz))} – ${esc(clock(d.dark1, d.tz))}.
-            Before and after, leftover sunlight (twilight) hides the fainter stars.</div>
+          <div class="sk-live-dark">Fully dark ${esc(clock(d.dark0, d.tz))} – ${esc(clock(d.dark1, d.tz))};
+            twilight (striped) hides the fainter stars before and after.</div>
         </div>
         <div class="sk-live-mode" role="radiogroup" aria-label="Show">
           <button type="button" role="radio" aria-checked="true" data-mode="here">Your sky</button>
@@ -737,13 +738,13 @@ function build(root, P) {
     root.querySelector(".sk-live").classList.toggle("is-twilight", F.twilight);
     range.setAttribute("aria-valuetext", label);
     range.style.setProperty("--p", `${((idx / n) * 100).toFixed(2)}%`);
-    const what = mode === "here" ? "you can see" : "a perfectly dark sky would show";
+    const what = mode === "here" ? "visible" : "in a perfectly dark sky";
     const howMany = count === 0 ? "No stars show yet"
       : count === 1 ? "1 star" : `About ${fmtCount(count)} stars`;
     help.textContent = (count === 0
       ? `${howMany} at ${clock(t, d.tz)}: the sky is still too bright.`
       : `${howMany} ${what} at ${clock(t, d.tz)}.`)
-      + " Face a direction and turn the map so that direction is at the bottom.";
+      + " Turn the map so the way you face is at the bottom.";
     // the list changes only every few minutes: rebuild it only when its content would change
     const key = `${mode}|${clock(t, d.tz)}|${selected}`;
     if (key !== lastList) {

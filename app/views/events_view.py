@@ -28,10 +28,9 @@ OUTLOOK_COLORS = {
 
 # Viewing advice, quoted from NASA's meteor pages (docs/SKY_EVENTS.md has the sources).
 HOW_TO_WATCH = (
-    "Get “well away from the city or street lights”, “lie flat on your back … and look up”, "
-    "and give your eyes 30 minutes: “in less than 30 minutes in the dark, your eyes will adapt "
-    "and you will begin to see meteors.” Meteors can appear anywhere; the longest are "
-    "“45 to 90 degrees away from the radiant,” the point they seem to come from. (NASA)"
+    "get away from lights, lie back and look up, and give your eyes 30 minutes to adjust. "
+    "Meteors appear anywhere; the longest streak 45–90° from the radiant, the point they seem "
+    "to come from (NASA's advice)."
 )
 SOON_DAYS = 42  # the list shows the next six weeks unless asked for all four months
 MIN_PLANET_ALT = 8.0  # a planet's "best showing" lower than this is hard to see in practice

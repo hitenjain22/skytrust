@@ -13,8 +13,8 @@ def render(ctx: Context) -> None:
     st.markdown(
         ui.section(
             "How often has it been wrong?",
-            "SkyTrust grades itself. It was tested on nights it never saw, at five California "
-            "airports with weather stations, and keeps a public log of every forecast it makes.",
+            "SkyTrust grades itself: tested on nights it never saw, and every new forecast is "
+            "logged in public before the night.",
             "Accuracy",
         ),
         unsafe_allow_html=True,

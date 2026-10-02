@@ -41,6 +41,12 @@ GLOSSARY = {
     "night. The best time of the year to see it.",
     "Sky quality (SQM)": "Sky brightness in magnitudes per square arcsecond, measured with a sky "
     "quality meter. Higher is darker; about 22.0 is a natural sky.",
+    "Light dome": "The glow over a town seen from outside it, brightest low on the horizon in "
+    "its direction. The Sky Guide shows it as an amber glow on the chart's rim.",
+    "Smoke and haze": "Fine particles (wildfire smoke, dust) that dim every star even on a "
+    "cloud-free night. SkyTrust reads the CAMS forecast of how hazy the air will be.",
+    "Twilight": "Leftover sunlight after sunset. It fades out as the Sun sinks to 18° below the "
+    "horizon and is brightest on the side where the Sun went down.",
 }
 
 
@@ -164,7 +170,11 @@ CREDITS = """
 Weather data by [Open-Meteo.com](https://open-meteo.com/), licensed CC BY 4.0. ASOS
 observations courtesy of the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/),
 Iowa State University. Satellite cloud mask and imagery: NOAA GOES-18 (public AWS bucket
-`noaa-goes18`; NOAA/NESDIS STAR). Light pollution: Falchi, F. et al. (2016), *The new world atlas
+`noaa-goes18`; NOAA/NESDIS STAR). Smoke and haze (aerosol optical depth): Copernicus
+Atmosphere Monitoring Service (CAMS) global forecasts, served by Open-Meteo's air-quality API.
+City glow by direction: the Garstang (1986) model as set out by Cinzano et al. (2000), MNRAS
+318:641; twilight by direction and extinction: Schaefer (1998), Sky & Telescope 95(5):57.
+Light pollution: Falchi, F. et al. (2016), *The new world atlas
 of artificial night sky brightness*, Science Advances 2:e1600377, and the dataset
 doi:10.5880/GFZ.1.4.2016.001 (CC BY-NC 4.0), brought up to date with NASA Black Marble night
 lights (VNP46A4/VJ146A4, CC0) via lightpollutionmap.info; place names from

@@ -55,6 +55,7 @@ def test_a_dome_is_brightest_low_towards_its_city():
     assert toward[-1] == pytest.approx(away[-1])  # the zenith has no direction
 
 
+@pytest.mark.slow
 def test_with_air_molecules_alone_a_lit_plain_brightens_like_the_air_path():
     """Limiting case: a uniform lit plain and symmetric (Rayleigh) scattering give a sky that
     brightens towards the horizon about like sec z (less near the horizon, where extinction

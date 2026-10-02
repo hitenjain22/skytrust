@@ -15,7 +15,7 @@ import streamlit as st
 
 from skytrust import sky
 from skytrust.config import Settings, Site
-from views.components import esc, pill
+from views.components import esc, pill  # noqa: F401  (esc re-exported)
 from views.theme import DAY, MOON, palette  # noqa: F401  (re-exported)
 
 # The evaluated airports, by the place they're near (Track Record page, CLI links).
@@ -65,7 +65,7 @@ class Context:
             return None
         data = self.light_data or {}
         report = lightpollution.site_report(
-            self.light, site.lat, site.lon, self.settings, data.get("base")
+            self.light, site.lat, site.lon, self.settings, data.get("base"), data.get("places")
         )
         if glow and report is not None and data.get("sources") is not None:
             report["glow"] = skyglow.city_glow(data["sources"], site.lat, site.lon)
@@ -86,6 +86,11 @@ class Context:
 
     def service(self, name: str):
         return (self.services or {})[name]
+
+    def haze_aod(self, dusk: pd.Timestamp, dawn: pd.Timestamp, site: Site | None = None):
+        """Tonight's smoke-and-haze forecast here (aerosol optical depth), None if unknown."""
+        svc = (self.services or {}).get("haze")
+        return svc(site or self.site, dusk, dawn) if svc else None
 
     @property
     def site_label(self) -> str:
@@ -116,7 +121,8 @@ def place_detail(site: Site) -> str:
         elev = site.elevation_m
         if elev is None or pd.isna(elev):
             return site.terrain_class
-        return f"{site.terrain_class} · {elev:,.0f} m"
+        height = f"{-elev:,.0f} m below sea level" if elev < -0.5 else f"{elev:,.0f} m"
+        return f"{site.terrain_class} · {height}"
     return f"{site.lat:.3f}, {site.lon:.3f}"
 
 
@@ -267,37 +273,39 @@ def moon_sentence(night, tz: str) -> str:
     return f"The Moon ({illum:.0%} lit) is {when}."
 
 
-def moon_advice(night) -> tuple[str, str] | None:
-    """(kind, text) when the Moon changes what's worth shooting tonight, else None.
-    kind is "bright" (a warning) or "dark" (good news for faint targets)."""
-    illum = night.moon_illum or 0.0
-    up_min, dark_min = _moon_minutes(night)
-    if illum >= 0.5 and up_min >= 0.5 * dark_min:
-        return (
-            "bright",
-            "Bright Moon for most of the dark hours: the Milky Way and faint galaxies will be "
-            "washed out. The Moon itself, planets and bright stars are fine.",
-        )
-    if up_min == 0 or illum < 0.15:
-        return "dark", "No Moon in the dark hours: the best kind of night for the Milky Way."
-    return None
+CLEAR_P, CLOUDY_P = 0.6, 0.35  # an hour's chance of clear sky: likely clear / likely cloudy
 
 
-def night_summary(night, tz: str, threshold: float) -> str:
-    """One or two sentences: when it's clear, and the Moon."""
-    bw = night.best_window
-    if bw:
-        clear = (
-            f"Clearest stretch: <b>{short_time(bw.start_utc, tz)} – "
-            f"{short_time(bw.until_utc, tz)}</b> ({duration(bw.start_utc, bw.until_utc)} where "
-            "the typical model shows clear sky)."
-        )
-    else:
-        clear = (
-            f"No dark hour looks clear (≤ {threshold:.0%} cloud) in the middle-of-the-road model "
-            "forecast."
-        )
-    return f"{clear} {esc(moon_sentence(night, tz))}"
+def hour_chances(night) -> pd.Series:
+    """Chance each dark hour is clear: the hourly model, or 1 - the models' median cover."""
+    p = getattr(night, "hourly_clear", None)
+    if p is not None and not p.empty:
+        return p[(p.index >= night.dusk_utc.floor("h")) & (p.index <= night.dawn_utc)]
+    return pd.Series(dtype=float)
+
+
+def longest_run(hours: list[pd.Timestamp], night) -> tuple[pd.Timestamp, pd.Timestamp] | None:
+    """Longest run of consecutive hours, as a time span: each hour stands for the half hour
+    either side of it (as in the cloud labels), clipped to the dark window."""
+    best: list = []
+    cur: list = []
+    for t in hours:
+        cur = cur + [t] if cur and t - cur[-1] == pd.Timedelta(hours=1) else [t]
+        best = cur if len(cur) > len(best) else best
+    if not best:
+        return None
+    half = pd.Timedelta(minutes=30)
+    return max(best[0] - half, night.dusk_utc), min(best[-1] + half, night.dawn_utc)
+
+
+def clearest(night) -> tuple[pd.Timestamp, pd.Timestamp] | None:
+    """The longest likely-clear stretch, from the same hourly chances as the story sentence
+    (so the two never disagree); the models' median when there's no hourly model."""
+    p = hour_chances(night)
+    if p.empty:
+        bw = night.best_window
+        return (bw.start_utc, bw.until_utc) if bw else None
+    return longest_run([t for t, v in p.items() if v >= CLEAR_P], night)
 
 
 def agreement_text(night) -> tuple[str, str]:
@@ -314,7 +322,8 @@ def footer() -> None:
     st.caption(
         "Weather: [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0). Observations: the "
         "[Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/). Satellite: NOAA "
-        "GOES-18. Light pollution: Falchi et al. (2016), [World Atlas of Artificial Night Sky "
+        "GOES-18. Smoke and haze: Copernicus Atmosphere Monitoring Service (CAMS) via Open-Meteo. "
+        "Light pollution: Falchi et al. (2016), [World Atlas of Artificial Night Sky "
         "Brightness](https://doi.org/10.5880/GFZ.1.4.2016.001) (CC BY-NC 4.0), updated with NASA "
         "Black Marble night lights (CC0). Positions: JPL DE421 via Skyfield; stars from the ESA "
         "Hipparcos catalogue; constellation figures and Milky Way outline from "

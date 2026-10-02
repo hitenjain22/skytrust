@@ -659,8 +659,9 @@ def merge_moon_pairings(events: list[Event], site: Site) -> list[Event]:
                 "pairing",
                 f"The Moon near {listing}",
                 first.utc,
-                f"The Moon passes close to {listing} ({first.details['with'][0]} "
-                f"{apart_words(closest)}).",
+                f"The Moon passes close to {listing} ("
+                + ("" if len(names) == 1 else f"closest: {first.details['with'][0]}, ")
+                + f"{apart_words(closest)}).",
                 look=first.look,
                 best_start=first.best_start,
                 best_end=first.best_end,

@@ -6,7 +6,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from skytrust import sky
+from skytrust import haze, sky
 from views import components as ui
 from views import lookup, skylive
 from views.common import Context, esc
@@ -16,14 +16,16 @@ def render(ctx: Context) -> None:
     tz = ctx.site.timezone
     dusk, dawn = ctx.service("night")(ctx.site)
     sqm = ctx.sqm_at()
-    guide = ctx.service("sky")(ctx.site, dusk, dawn, sqm)
+    aod = ctx.haze_aod(dusk, dawn)
+    guide = ctx.service("sky")(ctx.site, dusk, dawn, sqm, aod)
     d = guide["darkness"]
+    w = haze.words(aod)
+    smoke = f" {w[0]} tonight: {w[1]}." if w else ""
     st.markdown(
         ui.section(
             f"The sky tonight over {ctx.site_label}",
-            f"{esc(d.title)} sky ({esc(lookup.uncap(sky.brightness_words(d.times_natural)))}): "
-            f"{esc(lookup.uncap(d.verdict))}. Drag the time to move through the night, and tap "
-            "any name to find it on the map.",
+            f"{esc(d.title)} sky: {esc(lookup.uncap(d.verdict))}.{esc(smoke)} Drag the time, "
+            "tap a name to find it.",
             f"Sky guide · {dusk.tz_convert(tz):%a %b %-d}",
         ),
         unsafe_allow_html=True,
@@ -34,7 +36,7 @@ def render(ctx: Context) -> None:
         start = ctx.now_utc
     # the chart, the time slider and the "Up at ..." list are drawn in the browser, so the sky
     # follows the slider while it is dragged (views/skylive.py)
-    skylive.render(ctx.service("live")(ctx.site, dusk, dawn, sqm, min(start, dawn)))
+    skylive.render(ctx.service("live")(ctx.site, dusk, dawn, sqm, min(start, dawn), aod))
 
     mw = guide["milky_way"]
     when, help_ = lookup.milky_way_text(mw, tz)
@@ -81,16 +83,15 @@ def render(ctx: Context) -> None:
     with st.expander("How the chart and the visibility are worked out", icon=":material/info:"):
         st.markdown(
             """
-- **Positions** of the stars (ESA's Hipparcos catalogue), planets and Moon (JPL's DE421
-  ephemeris) are computed for your place and time with Skyfield. The chart is a planisphere:
-  the center is straight overhead, the rim is the horizon.
-- **What you can see** depends on how bright the sky is. The light-pollution map gives the sky
-  brightness overhead; the Moon's glow is added with the Krisciunas & Schaefer (1991) model of
-  scattered moonlight; and the faintest visible star follows Schaefer's (1990) formula for a
-  typical observer. Stars low down are dimmed by the extra air they shine through.
-- **Clusters, galaxies and nebulae** are harder to see than a star of the same brightness; they
-  need about half a magnitude darker sky, a rule set so the Bortle scale's descriptions come out
-  right (Andromeda barely visible from a city edge, Triangulum only from dark sites).
-- Experienced observers with fully dark-adapted eyes can do up to a magnitude better than shown.
+- **Positions**: stars (Hipparcos), planets and the Moon (JPL DE421), computed with Skyfield
+  for your place and time. Center = overhead, rim = horizon.
+- **What you can see** depends on how bright the sky is in that direction: light pollution
+  (the atlas overhead, spread over the sky by each town's light dome, which is the amber glow on
+  the rim), moonlight (Krisciunas & Schaefer 1991) and twilight, brightest on the side of the
+  set Sun (Patat et al. 2006; Schaefer 1998). The faintest visible star follows Schaefer (1990).
+- **Air**: stars low down shine through more air, and smoke or haze (the CAMS forecast) dims
+  every star further.
+- Galaxies and nebulae need about half a magnitude darker sky than a star of the same
+  brightness. Experienced observers can see up to a magnitude fainter than shown.
 """
         )
