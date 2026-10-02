@@ -406,3 +406,19 @@ same moments: Death Valley and Los Angeles, three times of night, both modes, on
   model keeps the published form; the browser table has nodes on both sides of 10°.
 - Smoothness: redrawing ~3,000 stars, the Milky Way and the figures takes about one screen refresh
   in Chrome on the development Mac (frames measured over 40 slider positions).
+
+## 16. Twilight, added 2026-10-01
+
+The sky model now includes leftover sunlight. Source: Patat, Ugolnikov & Postylyakov (2006),
+"UBVRI twilight sky brightness at ESO-Paranal", *A&A* 455:385, Table 1: zenith V brightness
+m = 11.84 + 1.518 (ζ − 95) − 0.057 (ζ − 95)² mag/arcsec² for Sun zenith distance 95° ≤ ζ ≤ 105°,
+from >2,000 FORS1 frames. (The PDF's text layer drops the minus sign of the quadratic term; only
+the negative sign reaches the night level, 21.32 at ζ = 105°, where the paper says the night sky
+takes over at ζ ≈ 105°–106°.) SkyTrust takes the twilight glow as the brightness above the fit's
+105° value, zero below a 15° solar depression, and brightens it towards the horizon like the dark
+sky. **Limits:** the extra glow on the side of the set Sun isn't modelled (low western sky after
+sunset is brighter than shown), and the paper finds deep twilight ~30 % brighter at a 600 m site
+than at Paranal (2,600 m), so near sea level twilight lasts slightly longer than shown. Result at
+a dark site: faintest star −0.4 at civil dusk (Sun −6°), 4.0 at −10°, 5.3 at −12°, full darkness
+by −15°; in a city the light pollution takes over by about −12°. The Sky Guide's slider now runs
+from civil dusk to civil dawn with the fully dark part (Sun below −18°) marked.

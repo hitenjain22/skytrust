@@ -29,8 +29,8 @@ def render(ctx: Context) -> None:
         unsafe_allow_html=True,
     )
     start = dusk + pd.Timedelta(hours=2)
-    if ctx.now_utc is not None and dusk <= ctx.now_utc <= dawn:
-        start = ctx.now_utc  # the night is under way: open on now
+    if ctx.now_utc is not None and dusk - pd.Timedelta(hours=2) <= ctx.now_utc <= dawn:
+        start = max(ctx.now_utc, dusk - pd.Timedelta(hours=2))  # twilight or night: open on now
     # the chart, the time slider and the "Up at ..." list are drawn in the browser, so the sky
     # follows the slider while it is dragged (views/skylive.py)
     skylive.render(ctx.service("live")(ctx.site, dusk, dawn, sqm, min(start, dawn)))

@@ -201,7 +201,10 @@ function tableAt(P, table, alt, sep) {
 
 // Faintest visible magnitude at (alt, separation from the Moon) at the current moment.
 function limitAt(P, F, alt, sep) {
-  if (F.mode === "dark") return curveAt(P, P.d.curveDark, alt);
+  if (F.mode === "dark") {  // no light pollution or Moon; twilight still counts
+    const dk = (k) => curveAt(P, P.d.darkTwilight[k] || P.d.curveDark, alt);
+    return lerp(dk(F.s), dk(F.s + 1), F.f);
+  }
   const one = (k) => (P.tables[k] ? tableAt(P, P.tables[k], alt, sep)
     : curveAt(P, P.d.curveHere, alt));
   return lerp(one(F.s), one(F.s + 1), F.f);
@@ -409,7 +412,9 @@ function frame(P, t, mode) {
   F.mN = Math.cos(moonAlt * D2R) * Math.cos(moonAz * D2R);
   F.mE = Math.cos(moonAlt * D2R) * Math.sin(moonAz * D2R);
   F.mU = Math.sin(moonAlt * D2R);
-  F.zen = mode === "dark" ? 22.0 : lerp(P.d.zen[s], P.d.zen[s + 1], f);
+  F.zen = mode === "dark" ? lerp(P.d.zenDark[s], P.d.zenDark[s + 1], f)
+    : lerp(P.d.zen[s], P.d.zen[s + 1], f);
+  F.twilight = t < P.d.dark0 - 60000 || t > P.d.dark1 + 60000;
   // nothing anywhere can beat the moonless sky's best (moonlight only brightens the sky)
   F.maxLimit = mode === "dark" ? P.maxDark : P.maxHere;
   return F;
@@ -507,6 +512,8 @@ function build(root, P) {
           </div>
           <input class="sk-live-range" type="range" min="0" max="${n}" step="1" value="${startIdx}" aria-label="Time tonight">
           <div class="sk-live-ticks" aria-hidden="true"></div>
+          <div class="sk-live-dark">Fully dark ${esc(clock(d.dark0, d.tz))} – ${esc(clock(d.dark1, d.tz))}.
+            Before and after, leftover sunlight (twilight) hides the fainter stars.</div>
         </div>
         <div class="sk-live-mode" role="radiogroup" aria-label="Show">
           <button type="button" role="radio" aria-checked="true" data-mode="here">Your sky</button>
@@ -540,6 +547,10 @@ function build(root, P) {
     }).join("");
   };
   drawTicks();
+  // the twilight parts of the night, shaded on the slider's track
+  const pct = (x) => `${(((x - d.t0) / (d.t1 - d.t0)) * 100).toFixed(2)}%`;
+  range.style.setProperty("--d0", pct(d.dark0));
+  range.style.setProperty("--d1", pct(d.dark1));
 
   let mode = "here";
   let pending = false;
@@ -556,13 +567,21 @@ function build(root, P) {
     skyLayer.innerHTML = milkyWaySvg(P, F, strength);
     const [stars, count] = starsSvg(P, F);
     dyn.innerHTML = linesSvg(P, F) + labelsSvg(P, F) + stars + planetsSvg(P, F) + moonSvg(P, F);
-    const label = idx === 0 ? `Dusk ${clock(t, d.tz)}` : idx === n ? `Dawn ${clock(t, d.tz)}` : clock(t, d.tz);
+    const label = F.twilight
+      ? `${clock(t, d.tz)} · ${t < d.dark0 ? "evening" : "morning"} twilight`
+      : clock(t, d.tz);
     clockEl.textContent = label;
+    root.querySelector(".sk-live").classList.toggle("is-twilight", F.twilight);
     range.setAttribute("aria-valuetext", label);
     range.style.setProperty("--p", `${((idx / n) * 100).toFixed(2)}%`);
     const what = mode === "here" ? "you can see" : "a perfectly dark sky would show";
-    help.textContent = `About ${fmtCount(count)} stars ${what} at ${clock(t, d.tz)}. Hold it `
-      + "overhead with north at the top, or turn it so the direction you face is at the bottom.";
+    const stars = count === 0 ? "No stars show yet"
+      : count === 1 ? "1 star" : `About ${fmtCount(count)} stars`;
+    help.textContent = (count === 0
+      ? `${stars} at ${clock(t, d.tz)}: the sky is still too bright.`
+      : `${stars} ${what} at ${clock(t, d.tz)}.`)
+      + " Hold it overhead with north at the top, or turn it so the direction you face is at "
+      + "the bottom.";
     // the list changes only every few minutes: rebuild it only when its content would change
     const key = `${mode}|${clock(t, d.tz)}`;
     if (key !== lastList) {

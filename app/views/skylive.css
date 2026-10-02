@@ -21,9 +21,13 @@
   background: transparent; cursor: pointer; touch-action: pan-y;
 }
 .sk-live-range:focus-visible { outline: none; }
+/* gold up to the thumb; the twilight ends of the night drawn as a fainter, striped track */
 .sk-live-range::-webkit-slider-runnable-track {
   height: 4px; border-radius: 4px;
-  background: linear-gradient(to right, var(--sk-accent) 0 var(--p, 0%), var(--sk-live-line) var(--p, 0%) 100%);
+  background:
+    linear-gradient(to right, var(--sk-accent) 0 var(--p, 0%), transparent var(--p, 0%) 100%),
+    linear-gradient(to right, transparent 0 var(--d0, 0%), var(--sk-live-line) var(--d0, 0%) var(--d1, 100%), transparent var(--d1, 100%)),
+    repeating-linear-gradient(90deg, var(--sk-live-line) 0 3px, transparent 3px 6px);
 }
 .sk-live-range::-moz-range-track { height: 4px; border-radius: 4px; background: var(--sk-live-line); }
 .sk-live-range::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--sk-accent); }
@@ -40,6 +44,8 @@
 .sk-live-range:active::-webkit-slider-thumb { transform: scale(1.15); }
 .sk-live-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--sk-accent) 35%, transparent); }
 .sk-live-ticks { position: relative; height: 16px; margin-top: 2px; }
+.sk-live-dark { font-size: .78rem; margin-top: 4px; color: color-mix(in srgb, currentColor 56%, transparent); }
+.sk-live.is-twilight .sk-live-clock { color: color-mix(in srgb, var(--sk-accent) 70%, currentColor); }
 .sk-live-ticks span {
   position: absolute; transform: translateX(-50%); white-space: nowrap;
   font-family: "Geist Mono", monospace; font-size: .66rem; letter-spacing: .04em;

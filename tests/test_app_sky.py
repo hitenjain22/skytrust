@@ -160,3 +160,15 @@ def test_star_tints_match_the_python_chart():
     bvs = [-0.3, 0.0, 0.2, 0.5, 0.8, 1.2, 1.6, float("nan")]
     tints = [c for _, c in skychart.BV_TINTS]
     assert [tints[i] for i in skylive.tint_index(bvs)] == [skychart.star_tint(b) for b in bvs]
+
+
+def test_live_chart_covers_twilight():
+    """From civil dusk the chart shows the sky brightening-to-dark: steps in twilight get a
+    visibility table even with the Moon down, and the fully dark part is marked."""
+    civil_dusk, civil_dawn = DUSK - pd.Timedelta(minutes=55), DAWN + pd.Timedelta(minutes=55)
+    guide = sky.tonight(LA, civil_dusk, civil_dawn, 17.8)
+    data = skylive.payload(LA, guide, 17.8, DUSK, dark=(DUSK, DAWN))
+    assert data["t0"] < data["dark0"] < data["dark1"] < data["t1"]
+    first = 0  # civil dusk: twilight, so a table and a twilight curve for the dark sky
+    assert data["tables"][first] is not None and data["darkTwilight"][first] is not None
+    assert data["zenDark"][first] < 20 < data["zenDark"][len(data["steps"]) // 2]

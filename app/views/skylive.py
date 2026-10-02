@@ -127,29 +127,46 @@ def bodies_block(obs: sky.Observer, times: pd.DatetimeIndex, moon: dict) -> dict
     }
 
 
-def tables_block(times: pd.DatetimeIndex, moon: dict, zenith_sqm: float) -> dict:
-    """Visibility tables per step for "your sky" (light pollution + the Moon), and the moonless
-    curves for "your sky" and "a perfectly dark sky" (altitude only)."""
-    tables = []
+def tables_block(
+    times: pd.DatetimeIndex, moon: dict, zenith_sqm: float, sun_alt: np.ndarray
+) -> dict:
+    """Visibility tables per step for "your sky" (light pollution, the Moon and twilight), and
+    the curves for steps with no Moon and no twilight. "A perfectly dark sky" removes light
+    pollution and the Moon but not twilight: the Sun's glow is nature, not pollution."""
+    tables, dark_twilight = [], []
     for i in range(len(times)):
-        if float(moon["alt"][i]) <= 0:
-            tables.append(None)  # no moonlight: the moonless curve applies
-            continue
-        t = sky.limit_table(zenith_sqm, float(moon["alt"][i]), float(moon["phase_angle"][i]))
-        tables.append(_b64(np.round(t * 100), "<i2"))
+        twilight = bool(sky.twilight_nl(sun_alt[i]) > 0)
+        sun = float(sun_alt[i]) if twilight else None
+        if float(moon["alt"][i]) <= 0 and not twilight:
+            tables.append(None)  # no moonlight, no twilight: the moonless curve applies
+        else:
+            t = sky.limit_table(
+                zenith_sqm, float(moon["alt"][i]), float(moon["phase_angle"][i]), sun
+            )
+            tables.append(_b64(np.round(t * 100), "<i2"))
+        dark_twilight.append(
+            _round(sky.limit_table(sky.NATURAL_SQM, -1.0, 0.0, sun)[:, 0], 3) if twilight else None
+        )
     here = sky.limit_table(zenith_sqm, -1.0, 0.0)[:, 0]
     dark = sky.limit_table(sky.NATURAL_SQM, -1.0, 0.0)[:, 0]
     zen = [
-        float(sky.sky_brightness(90.0, zenith_sqm, sky.moon_at(moon, i, 90.0, 0.0)))
+        float(
+            sky.sky_brightness(
+                90.0, zenith_sqm, sky.moon_at(moon, i, 90.0, 0.0), sun_alt=float(sun_alt[i])
+            )
+        )  # fmt: skip
         for i in range(len(times))
     ]
+    zen_dark = [float(sky.sky_brightness(90.0, sky.NATURAL_SQM, sun_alt=float(h))) for h in sun_alt]
     return {
         "alts": _round(sky.LIMIT_ALTS, 3),
         "seps": _round(sky.LIMIT_SEPS, 3),
         "tables": tables,
+        "darkTwilight": dark_twilight,
         "curveHere": _round(here, 3),
         "curveDark": _round(dark, 3),
         "zen": _round(zen, 3),
+        "zenDark": _round(zen_dark, 3),
     }
 
 
@@ -178,12 +195,22 @@ def items_block(guide: dict) -> list[dict]:
     ]
 
 
-def payload(site: Site, guide: dict, zenith_sqm: float, start: pd.Timestamp) -> dict:
-    """Everything the browser needs to draw the night from dusk to dawn."""
+def payload(
+    site: Site,
+    guide: dict,
+    zenith_sqm: float,
+    start: pd.Timestamp,
+    dark: tuple[pd.Timestamp, pd.Timestamp] | None = None,
+) -> dict:
+    """Everything the browser needs to draw the night. `guide` covers the whole window shown
+    (civil dusk to civil dawn, twilight included); `dark` is the fully dark part (astronomical
+    dusk to dawn), which the slider marks."""
     times = pd.DatetimeIndex(guide["times"])
     dusk, dawn = times[0], times[-1]
+    dark = dark or (dusk, dawn)
     mid = times[len(times) // 2]
     obs = sky.Observer(site)
+    sun_alt = obs.body("sun", times)["alt"]
     cat = sky.load_catalog()
     lst0 = float(obs.lst_deg(pd.DatetimeIndex([dusk]))[0])
     return {
@@ -192,6 +219,8 @@ def payload(site: Site, guide: dict, zenith_sqm: float, start: pd.Timestamp) -> 
         "lat": site.lat,
         "t0": _ms(dusk),
         "t1": _ms(dawn),
+        "dark0": _ms(dark[0]),
+        "dark1": _ms(dark[1]),
         "start": _ms(start),
         "stepMinutes": STEP_MINUTES,
         "lst0": lst0,
@@ -203,7 +232,7 @@ def payload(site: Site, guide: dict, zenith_sqm: float, start: pd.Timestamp) -> 
         "tints": [c for _, c in BV_TINTS],
         "items": items_block(guide),
         **bodies_block(obs, times, guide["moon"]),
-        **tables_block(times, guide["moon"], zenith_sqm),
+        **tables_block(times, guide["moon"], zenith_sqm, sun_alt),
         "place": site.name,
         "minMilkyWaySqm": sky.MILKY_WAY_MIN_SQM,
         "extendedMargin": sky.EXTENDED_MARGIN,

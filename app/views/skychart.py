@@ -200,13 +200,15 @@ def sky_svg(
     moon = obs.moon(t)
     moon_up = float(moon["alt"][0]) > 0
     sqm_here = zenith_sqm if mode == "here" else sky.NATURAL_SQM
+    # twilight (leftover sunlight) applies in both modes: it is nature, not light pollution
+    sun_alt = float(obs.body("sun", t)["alt"][0])
 
     s = cat.stars
     alt, az = obs.altaz(s["ra"].to_numpy(), s["dec"].to_numpy(), t, key="stars")
     alt, az = alt[0], az[0]
     up = alt > 0
     m_state = sky.moon_at(moon, 0, alt[up], az[up]) if mode == "here" else None
-    limit = sky.faintest_visible(alt[up], sqm_here, m_state)
+    limit = sky.faintest_visible(alt[up], sqm_here, m_state, sun_alt=sun_alt)
     mags = s["mag"].to_numpy()[up]
     show = mags <= limit
     x, y = project(alt[up][show], az[up][show])
@@ -220,7 +222,10 @@ def sky_svg(
     # the Milky Way shows only where the sky is dark enough (Bortle 6 and darker overhead)
     zen = float(
         sky.sky_brightness(
-            90.0, sqm_here, sky.moon_at(moon, 0, 90.0, 0.0) if mode == "here" else None
+            90.0,
+            sqm_here,
+            sky.moon_at(moon, 0, 90.0, 0.0) if mode == "here" else None,
+            sun_alt=sun_alt,
         )
     )
     mw_strength = float(
@@ -235,7 +240,10 @@ def sky_svg(
             continue
         lim = float(
             sky.faintest_visible(
-                a, sqm_here, sky.moon_at(moon, 0, a, z) if mode == "here" else None
+                a,
+                sqm_here,
+                sky.moon_at(moon, 0, a, z) if mode == "here" else None,
+                sun_alt=sun_alt,
             )
         )
         if mg > lim:

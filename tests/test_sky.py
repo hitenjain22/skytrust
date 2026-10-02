@@ -163,3 +163,21 @@ def test_moon_position_from_ra_dec_of_date_matches_skyfield():
         assert np.allclose(alt, ref["alt"], atol=0.01)
         dz = (np.array(az) - ref["az"] + 180) % 360 - 180
         assert np.all(np.abs(dz * np.cos(np.radians(alt))) < 0.01)
+
+
+def test_twilight_follows_the_paranal_measurements():
+    """Twilight (Patat et al. 2006, Table 1, V band): the fit gives 11.84 mag/arcsec² with the
+    Sun 5° down and reaches the night level (21.3) at 15° down. Leftover sunlight fades as the
+    Sun sinks and is gone 15° below the horizon; at civil dusk (6° down) only the brightest
+    objects show, even from a perfectly dark site."""
+    assert float(sky._twilight_fit(95.0)) == pytest.approx(11.84)
+    assert float(sky._twilight_fit(105.0)) == pytest.approx(11.84 + 15.18 - 5.7)
+    glow = sky.twilight_nl(np.array([-6.0, -9.0, -12.0, -14.9, -15.0, -18.0, -40.0]))
+    assert np.all(np.diff(glow[:5]) < 0) and np.all(glow[4:] == 0)
+    nelm = [float(sky.limiting_magnitude(sky.sky_brightness(90.0, 21.9, sun_alt=h)))
+            for h in (-6.0, -10.0, -12.0, -18.0)]  # fmt: skip
+    assert nelm[0] < 1.0 and nelm[1] < nelm[2] < nelm[3]
+    assert nelm[3] == pytest.approx(float(sky.limiting_magnitude(21.9)))  # no change once dark
+    # in a city, light pollution swamps the fading twilight sooner
+    city = float(sky.sky_brightness(90.0, 17.3, sun_alt=-12.0))
+    assert city == pytest.approx(17.3, abs=0.15)

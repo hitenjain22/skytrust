@@ -230,25 +230,55 @@ def moon_sky_nl(sep_deg, zenith_deg, moon_zenith_deg, phase_angle_deg, k=EXTINCT
     return (rayleigh + mie) * i_star * 10 ** (-0.4 * k * xm) * (1 - 10 ** (-0.4 * k * x))
 
 
-def sky_brightness(alt_deg, zenith_sqm, moon=None, k=EXTINCTION_K):
+# Twilight: zenith V-band sky brightness measured at ESO-Paranal (Patat, Ugolnikov &
+# Postylyakov 2006, A&A 455:385, Table 1): m = a0 + a1 (ζ - 95) + a2 (ζ - 95)², ζ = the Sun's
+# zenith distance in degrees, fitted for 95° <= ζ <= 105° (Sun 5°-15° below the horizon). The
+# paper finds the night-sky level reached at ζ ≈ 105°-106°, so the twilight glow is taken as the
+# brightness above the fit's value at 105°, and as zero once the Sun is more than 15° down.
+TWILIGHT_V = (11.84, 1.518, -0.057)
+TWILIGHT_ZETA = (95.0, 105.0)
+
+
+def _twilight_fit(zeta):
+    a0, a1, a2 = TWILIGHT_V
+    d = np.asarray(zeta, dtype=float) - TWILIGHT_ZETA[0]
+    return a0 + a1 * d + a2 * d**2
+
+
+def twilight_nl(sun_alt_deg):
+    """Scattered sunlight at the zenith (nanolamberts) for the Sun at `sun_alt_deg`. Below 95°
+    (Sun higher than -5°) the fit isn't extrapolated: the value at 95° is used, which already
+    hides every star but the brightest (the app starts at civil dusk, Sun at -6°)."""
+    zeta = 90.0 - np.asarray(sun_alt_deg, dtype=float)
+    lo, hi = TWILIGHT_ZETA
+    glow = mag_to_nl(_twilight_fit(np.clip(zeta, lo, hi))) - mag_to_nl(_twilight_fit(hi))
+    return np.where(zeta >= hi, 0.0, glow)
+
+
+def sky_brightness(alt_deg, zenith_sqm, moon=None, k=EXTINCTION_K, sun_alt=None):
     """Sky brightness (mag/arcsec²) at altitude(s) `alt_deg`. `zenith_sqm` is the moonless
     zenith brightness here (natural + light pollution). `moon` = dict(alt, sep, phase_angle)
-    with `sep` the angular distance of each sky position from the Moon (same shape as alt)."""
+    with `sep` the angular distance of each sky position from the Moon (same shape as alt).
+    `sun_alt` adds twilight: the measured zenith glow, brightened towards the horizon the way
+    the dark sky is (the extra glow on the side of the set Sun isn't modelled)."""
     z = 90 - np.asarray(alt_deg, dtype=float)
     x = airmass(z)
-    b = mag_to_nl(zenith_sqm) * 10 ** (-0.4 * k * (x - 1)) * x
+    base = mag_to_nl(zenith_sqm)
+    if sun_alt is not None:
+        base = base + twilight_nl(sun_alt)
+    b = base * 10 ** (-0.4 * k * (x - 1)) * x
     if moon is not None and moon["alt"] > 0:
         b = b + moon_sky_nl(moon["sep"], z, 90 - moon["alt"], moon["phase_angle"], k)
     return nl_to_mag(b)
 
 
-def faintest_visible(alt_deg, zenith_sqm, moon=None, k=EXTINCTION_K):
+def faintest_visible(alt_deg, zenith_sqm, moon=None, k=EXTINCTION_K, sun_alt=None):
     """Catalogue magnitude of the faintest star visible at each altitude: the limiting magnitude
     for the local sky brightness, minus the extra extinction an object there suffers compared
     with the zenith (NELM is quoted for the zenith, so the zenith's own extinction is already in
     it)."""
     alt = np.asarray(alt_deg, dtype=float)
-    nelm = limiting_magnitude(sky_brightness(alt, zenith_sqm, moon, k))
+    nelm = limiting_magnitude(sky_brightness(alt, zenith_sqm, moon, k, sun_alt))
     return nelm - k * (extinction_airmass(90 - alt) - 1)
 
 
@@ -272,12 +302,15 @@ LIMIT_SEPS = np.array(
 )  # fmt: skip
 
 
-def limit_table(zenith_sqm: float, moon_alt: float, phase_angle: float) -> np.ndarray:
+def limit_table(
+    zenith_sqm: float, moon_alt: float, phase_angle: float, sun_alt: float | None = None
+) -> np.ndarray:
     """Faintest visible magnitude on the LIMIT_ALTS x LIMIT_SEPS grid with the Moon at
-    `moon_alt`; without the Moon (moon_alt <= 0) every column is the same."""
+    `moon_alt` (and twilight for the Sun at `sun_alt`); without the Moon (moon_alt <= 0) every
+    column is the same."""
     aa, ss = np.meshgrid(LIMIT_ALTS, LIMIT_SEPS, indexing="ij")
     moon = {"alt": float(moon_alt), "sep": ss, "phase_angle": float(phase_angle)}
-    return np.asarray(faintest_visible(aa, zenith_sqm, moon), dtype=float)
+    return np.asarray(faintest_visible(aa, zenith_sqm, moon, sun_alt=sun_alt), dtype=float)
 
 
 def interpolate_limit(table: np.ndarray, alt, sep) -> np.ndarray:

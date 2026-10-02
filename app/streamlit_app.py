@@ -277,14 +277,28 @@ def cached_chart(
 def cached_live(
     site: Site, dusk: pd.Timestamp, dawn: pd.Timestamp, sqm: float, start: pd.Timestamp
 ) -> dict:
-    """Data for the Sky Guide's live chart. The start time is rounded to 5 minutes so the
-    cache isn't defeated by the clock."""
-    guide = cached_sky(site, dusk, dawn, sqm)
-    return skylive.payload(site, guide, sqm, pd.Timestamp(start))
+    """Data for the Sky Guide's live chart: from civil dusk (Sun 6° down, the first stars) to
+    civil dawn, with the fully dark part (`dusk`-`dawn`, Sun 18° down) marked. The start time
+    is rounded to 5 minutes so the cache isn't defeated by the clock."""
+    c_dusk, c_dawn = twilight_window(site, dusk, dawn)
+    guide = cached_sky(site, c_dusk, c_dawn, sqm)
+    return skylive.payload(site, guide, sqm, pd.Timestamp(start), dark=(dusk, dawn))
 
 
 def live_chart(site: Site, dusk, dawn, sqm: float, start: pd.Timestamp) -> dict:
     return cached_live(site, dusk, dawn, sqm, pd.Timestamp(start).floor("5min"))
+
+
+def twilight_window(
+    site: Site, dusk: pd.Timestamp, dawn: pd.Timestamp
+) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Civil dusk and dawn (Sun 6° below the horizon) around a dark window."""
+    night = dusk.tz_convert(site.timezone).date()
+    w = events._dark_windows(site, night, -6.0)
+    if night not in w.index:
+        return dusk, dawn
+    row = w.loc[night]
+    return min(row["dusk_utc"], dusk), max(row["dawn_utc"], dawn)
 
 
 @st.cache_data(ttl=12 * 60 * 60, max_entries=32, show_spinner="Working out the coming sky events…")
