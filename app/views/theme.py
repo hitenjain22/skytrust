@@ -284,6 +284,57 @@ h2, h3 {{ margin-top: .6rem; }}
 [data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"]) * {{ color: inherit !important; }}
 [data-testid="stMetricValue"] {{ letter-spacing: -0.03em; }}
 code {{ color: inherit !important; background: {_line(7)} !important; font-family: {MONO_FONT}; font-size: .85em; }}
+/* ---------- starlight: a little gold where the eye should go ---------- */
+@media (prefers-color-scheme: dark) {{
+  .sk-display {{ text-shadow: 0 0 34px color-mix(in srgb, var(--sk-accent) 30%, transparent); }}
+}}
+.sk-hero {{ position: relative; }}
+.sk-hero::before {{ content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(520px 220px at 12% 0%, color-mix(in srgb, var(--sk-accent) 9%, transparent), transparent 70%); }}
+.sk-hero > * {{ position: relative; }}
+.sk-headline .sk-dot {{ animation: sk-breathe 3.2s ease-in-out infinite; }}
+@keyframes sk-breathe {{
+  0%, 100% {{ box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 22%, transparent); }}
+  50% {{ box-shadow: 0 0 0 6px color-mix(in srgb, var(--c) 12%, transparent),
+                    0 0 14px 2px color-mix(in srgb, var(--c) 35%, transparent); }}
+}}
+/* buttons and tabs: a gold halo on hover, a moonlight sheen that sweeps across once, a press */
+.stButton button, .stDownloadButton button, .sk-live-now, .sk-live-best, .sk-live-mode button,
+.st-key-topbar [data-testid="stButtonGroup"] button {{
+  position: relative; overflow: hidden; isolation: isolate;
+  transition: box-shadow 220ms var(--sk-ease), border-color 220ms var(--sk-ease),
+    color 150ms ease, background-color 200ms var(--sk-ease), transform 140ms var(--sk-ease) !important;
+}}
+.stButton button::after, .stDownloadButton button::after, .sk-live-now::after, .sk-live-best::after,
+.sk-live-mode button::after, .st-key-topbar [data-testid="stButtonGroup"] button::after {{
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(110deg, transparent 32%,
+    color-mix(in srgb, var(--sk-accent) 22%, transparent) 50%, transparent 68%);
+  transform: translateX(-130%);
+}}
+@media (hover: hover) and (pointer: fine) {{
+  .stButton button:hover, .stDownloadButton button:hover, .sk-live-now:hover, .sk-live-best:hover,
+  .sk-live-mode button:hover {{
+    border-color: color-mix(in srgb, var(--sk-accent) 55%, transparent) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--sk-accent) 10%, transparent),
+      0 0 22px -6px color-mix(in srgb, var(--sk-accent) 55%, transparent) !important;
+  }}
+  .stButton button:hover::after, .stDownloadButton button:hover::after, .sk-live-now:hover::after,
+  .sk-live-best:hover::after, .sk-live-mode button:hover::after,
+  .st-key-topbar [data-testid="stButtonGroup"] button:hover::after {{
+    transform: translateX(130%); transition: transform 760ms var(--sk-ease);
+  }}
+  .sk-card {{ transition: transform 220ms var(--sk-ease), border-color 220ms var(--sk-ease), box-shadow 220ms var(--sk-ease); }}
+  .sk-card:hover {{ transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--sk-accent) 28%, transparent);
+    box-shadow: inset 0 1px 0 {_line(6)}, 0 14px 30px -22px color-mix(in srgb, var(--sk-accent) 70%, transparent); }}
+}}
+.stButton button:active, .stDownloadButton button:active, .sk-live-now:active, .sk-live-best:active,
+.sk-live-mode button:active {{ transform: scale(0.97); }}
+.st-key-topbar [data-testid="stButtonGroup"] button[aria-checked="true"] {{
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sk-accent) 26%, transparent),
+    0 0 18px -8px color-mix(in srgb, var(--sk-accent) 60%, transparent) !important; }}
+[data-testid="stExpander"] summary:hover {{ color: var(--sk-accent); }}
 /* ---------- motion ---------- */
 @keyframes sk-rise {{ from {{ opacity: 0; transform: translateY(8px); }} to {{ opacity: 1; transform: none; }} }}
 @keyframes sk-fade {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
@@ -315,7 +366,10 @@ code {{ color: inherit !important; background: {_line(7)} !important; font-famil
 @media (prefers-reduced-motion: reduce) {{
   .sk-rise, .sk-row, .sk-event, .sk-card, [data-testid="stPlotlyChart"], [data-testid="stDataFrame"] {{
     animation: sk-fade 200ms ease both !important; }}
-  .sk-tw {{ animation: none; }}
+  .sk-tw, .sk-headline .sk-dot {{ animation: none; }}
+  .stButton button::after, .stDownloadButton button::after, .sk-live-now::after, .sk-live-best::after,
+  .sk-live-mode button::after, .st-key-topbar [data-testid="stButtonGroup"] button::after {{ display: none; }}
+  .sk-card:hover {{ transform: none; }}
   .sk-meter > span, .sk-bar > span, .sk-stack > span {{ animation: none; }}
   [data-testid="stMain"] {{ scroll-behavior: auto; }}
 }}

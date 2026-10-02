@@ -80,7 +80,11 @@
 .sk-pick-name:hover { color: var(--sk-accent); }
 .sk-live-info { border: 1px solid color-mix(in srgb, var(--sk-accent) 40%, transparent);
   background: color-mix(in srgb, var(--sk-accent) 7%, transparent); border-radius: 14px;
-  padding: 14px 16px 12px; margin-bottom: 16px; }
+  padding: 14px 16px 12px; margin-bottom: 16px;
+  box-shadow: 0 0 28px -14px color-mix(in srgb, var(--sk-accent) 80%, transparent);
+  animation: sk-info-in 320ms cubic-bezier(.2, .7, .2, 1) both; }
+/* plays when the card appears (it's hidden in between), not on every redraw while dragging */
+@keyframes sk-info-in { from { opacity: 0; transform: translateY(6px) scale(.985); } }
 .sk-live-info p { margin: 8px 0 0; font-size: .9rem; line-height: 1.5; }
 .sk-live-info-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .sk-live-info-name { font-family: "Instrument Serif", Georgia, serif; font-size: 1.5rem; line-height: 1.1; margin-top: 2px; }
@@ -95,7 +99,10 @@
 .sk-live-ping { fill: none; stroke: #F0C987; stroke-width: 3; transform-box: fill-box;
   transform-origin: center; animation: sk-live-ping 1.6s ease-out infinite; }
 @keyframes sk-live-ping { from { transform: scale(1); opacity: .9; } to { transform: scale(2.6); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .sk-live-ping { animation: none; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .sk-live-ping { animation: none; opacity: 0; }
+  .sk-live-info { animation: none; }
+}
 @media (max-width: 760px) {
   .sk-live-controls { grid-template-columns: minmax(0, 1fr); }
   .sk-live-mode { justify-self: start; }
