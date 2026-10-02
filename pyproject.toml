@@ -54,7 +54,7 @@ known-first-party = ["skytrust", "views", "synthetic", "conftest"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Quick loop: `pytest` skips network and slow tests. Everything offline: `make test` (and CI).
-addopts = "-m 'not network and not slow' --strict-markers"
+addopts = "-m 'not network and not slow and not browser' --strict-markers"
 filterwarnings = [
     # Emitted inside skyfield's own search code under NumPy 2.5; not our code, harmless.
     "ignore:Setting the dtype on a NumPy array:DeprecationWarning:skyfield",
@@ -62,6 +62,7 @@ filterwarnings = [
 markers = [
     "network: hits live APIs; run manually with `pytest -m network`",
     "slow: longer-running offline checks (Streamlit AppTest); run by `make test` and CI",
+    "browser: needs Playwright + Chromium (opt-in): `uv run --with playwright pytest -m browser`",
 ]
 
 [tool.coverage.run]

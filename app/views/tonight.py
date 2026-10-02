@@ -17,6 +17,7 @@ from views.common import (  # noqa: F401  (show/unavailable re-exported for othe
     esc,
     held_with_ci,
     moon_advice,
+    moon_sentence,
     night_summary,
     short_time,
     show,
@@ -79,13 +80,9 @@ def hero(ctx: Context, night, guide: dict) -> str:
         ui.eyebrow(f"{when} · {ctx.site_label} · {date:%a %b %-d}"),
         f'<div class="sk-display" style="margin-top:14px">{number}</div>',
         '<div class="sk-caption">chance of a clear night (3+ clear dark hours in a row)</div>',
-        ui.meter(night.p_usable),
-        '<div style="margin-top:22px">',
-        ui.status(night.verdict.upper(), pal[night.verdict]),
-        "</div>",
-        f'<div class="sk-headline">{esc(headline)}</div>',
-        f'<div class="sk-lede">{esc(advice)} '
-        f"{night_summary(night, tz, ctx.settings.clear_threshold)}</div>",
+        f'<div class="sk-headline" style="margin-top:22px">'
+        f'<span class="sk-dot" style="--c:{pal[night.verdict]}"></span>{esc(headline)}</div>',
+        f'<div class="sk-lede">{esc(advice)}</div>',
         note,
         "</div>",
         f'<div class="sk-dome">{svg}<p class="sk-caption">{esc(caption)}</p></div>',
@@ -113,13 +110,26 @@ def fact_strip(ctx: Context, night, guide: dict) -> str:
     moon = ui.stat(
         "Moon",
         ui.phase_name(night.moon_phase_deg),
-        f"{night.moon_illum or 0:.0%} lit · {night.moon_free_hours} moon-free dark hour"
-        f"{'' if night.moon_free_hours == 1 else 's'}",
+        f"{night.moon_illum or 0:.0%} lit · {moon_when(night, tz)}",
         icon=ui.moon_svg(night.moon_phase_deg, 22),
     )
     d = guide["darkness"]
     light = ui.stat("Light pollution", esc(d.title), esc(sky.brightness_words(d.times_natural)))
     return ui.strip([dark, best, moon, light])
+
+
+def moon_when(night, tz: str) -> str:
+    """'rises 10:17 PM' / 'sets 1:05 AM' / 'up all night' / 'down all night' (darkness only)."""
+    sentence = moon_sentence(night, tz)  # "The Moon (64% lit) is rising at 10:17 PM."
+    if "below the horizon" in sentence:
+        return "down all night"
+    if "up all night" in sentence:
+        return "up all night"
+    if "rising at" in sentence:
+        return "rises " + sentence.split("rising at ")[1].rstrip(".")
+    if "up until" in sentence:
+        return "sets " + sentence.split("up until ")[1].rstrip(".")
+    return sentence.split(" is ")[1].rstrip(".")  # "up from 9 PM to 2 AM"
 
 
 def look_up_cards(ctx: Context, night, guide: dict) -> list[str]:
@@ -142,19 +152,20 @@ def look_up_cards(ctx: Context, night, guide: dict) -> list[str]:
                     if p.visible
                     else esc(lookup.visible_words(p)) + "."
                 ),
-                meta=f"magnitude {p.mag:.1f}",
             )
         )
     mw = guide["milky_way"]
     when, help_ = lookup.milky_way_text(mw, tz)
     if mw["visible"]:
+        route = help_.split(". ")[0].rstrip(".") + "." if help_ else ""  # the full text: Sky Guide
+        dark_enough = mw["zenith_sqm"] >= ctx.settings.raw["light_pollution"]["dark_sqm"]
         cards.append(
             ui.card(
                 "milkyway",
                 "The Milky Way",
-                "Look for a pale band",
+                "Look for a pale band" if dark_enough else "Faint from here",
                 where=esc(when),
-                body=esc(help_),
+                body=esc(route),
                 meta=esc(mw["looks"]) + ".",
             )
         )

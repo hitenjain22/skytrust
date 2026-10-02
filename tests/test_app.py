@@ -279,7 +279,8 @@ def test_where_to_go_ranks_every_place(offline, monkeypatch):
     assert "Where should I go tonight?" in html and "How dark is it at Los Angeles?" in html
     assert "Darkest spot within 50 km" in html and "Nearest very dark sky" in html
     assert "Dark sky" in html and "Moon down" in html  # the three conditions
-    assert "Glow on the horizon" in html and "darkest part of the horizon" in html
+    assert "darkest part of the horizon" in html
+    assert "Biggest glows" in html  # the city-glow details, folded away
     assert "Since 2015" in html
     # places are described in plain words; "Bortle" appears only in the method notes
     assert not re.search(r"Bortle \d", html) and not re.search(r"\bB\d(\.5)?\b", html)

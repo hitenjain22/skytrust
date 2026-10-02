@@ -638,7 +638,7 @@ def light_map(
                     customdata=sub["id"],
                     text=sub["label"],
                     hovertemplate="%{text}<extra></extra>",
-                    marker={"size": 4, "color": "#D9DCE4", "opacity": 0.45}
+                    marker={"size": 3, "color": "#D9DCE4", "opacity": 0.22}
                     if visible
                     else {"size": 12, "color": "#D9DCE4", "opacity": 0.01},
                 )

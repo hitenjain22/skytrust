@@ -65,11 +65,11 @@ def thirty_seconds(ctx: Context) -> str:
 
 
 def sections(text: str) -> None:
-    """First section in full; every later "### " section folded into an expander, so the page
-    stays scannable while keeping all the detail."""
-    first, *rest = text.strip().split("\n### ")
-    st.markdown(first.replace("### ", "#### ", 1))  # sits under "The full methodology"
-    for part in rest:
+    """Every "### " section folded into an expander, so the page stays short while keeping
+    all the detail one tap away."""
+    parts = text.strip().split("\n### ")
+    parts[0] = parts[0].removeprefix("### ")
+    for part in parts:
         title, _, body = part.partition("\n")
         with st.expander(title.strip(), icon=":material/chevron_right:"):
             st.markdown(body)
@@ -84,12 +84,11 @@ def render(ctx: Context, standalone: bool = True) -> None:
     if standalone:
         st.header("How SkyTrust works")
     st.markdown(thirty_seconds(ctx), unsafe_allow_html=True)
-    st.markdown(ui.section("Words you'll see", "", "Glossary"), unsafe_allow_html=True)
     terms = "".join(
         f"<div><dt>{ui.esc(t)}</dt><dd>{ui.esc(m)}</dd></div>" for t, m in GLOSSARY.items()
     )
-    st.markdown(f'<dl class="sk-gloss sk-reveal">{terms}</dl>', unsafe_allow_html=True)
-    st.markdown(ui.section("The full methodology", "", "Method"), unsafe_allow_html=True)
+    with st.expander("Words you'll see (glossary)", icon=":material/menu_book:"):
+        st.markdown(f'<dl class="sk-gloss">{terms}</dl>', unsafe_allow_html=True)
     text = f"""
 ### The problem
 Astrophotographers routinely check five or six forecasts before driving out, and the most common
@@ -157,8 +156,11 @@ afterwards (the forward test on the Track Record page).
     with st.expander("Caveats: what this can't tell you", icon=":material/info:"):
         for c in caveats:
             st.markdown(f"- {c}")
-    st.markdown("""
-#### Data and credits
+    with st.expander("Data and credits", icon=":material/copyright:"):
+        st.markdown(CREDITS)
+
+
+CREDITS = """
 Weather data by [Open-Meteo.com](https://open-meteo.com/), licensed CC BY 4.0. ASOS
 observations courtesy of the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/),
 Iowa State University. Satellite cloud mask and imagery: NOAA GOES-18 (public AWS bucket
@@ -166,6 +168,9 @@ Iowa State University. Satellite cloud mask and imagery: NOAA GOES-18 (public AW
 of artificial night sky brightness*, Science Advances 2:e1600377, and the dataset
 doi:10.5880/GFZ.1.4.2016.001 (CC BY-NC 4.0), brought up to date with NASA Black Marble night
 lights (VNP46A4/VJ146A4, CC0) via lightpollutionmap.info; place names from
-[GeoNames](https://www.geonames.org/) (CC BY 4.0). Astronomy by [Skyfield](https://rhodesmill.org/skyfield/)
-with JPL's DE421 ephemeris.
-""")
+[GeoNames](https://www.geonames.org/) (CC BY 4.0), the US Census Bureau (2025 Gazetteer, 2024
+population estimates) and the USGS (GNIS names, 3DEP elevations), all public domain. Astronomy by
+[Skyfield](https://rhodesmill.org/skyfield/) with JPL's DE421 ephemeris, checked against NASA/JPL
+Horizons; stars from ESA's Hipparcos catalogue; twilight brightness from Patat et al. (2006,
+A&A 455:385); meteor showers from the [IMO](https://www.imo.net/) 2026 calendar.
+"""

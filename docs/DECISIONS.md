@@ -606,3 +606,23 @@ Hiten asked for the path that is easiest to understand and gives the most consis
   little: 0.72 instead of 1.86 magnitudes at 5° altitude. Extinction now uses Kasten & Young
   (1989); K&S's formula stays inside the sky-glow model it was calibrated with. Regression test
   added.
+
+## 2026-10-01: a shorter, calmer app for beginners
+- **Why:** a friend of Hiten's found the app showed too much at once. Every page was reviewed from
+  full-length screenshots; the rule was "keep every fact a beginner acts on, fold the rest one tap
+  away, delete repeats".
+- **Tonight:** the verdict is said once (number + headline with a coloured dot; the bar and badge
+  that repeated it are gone); one plain sentence instead of "≤ 20% cloud in the middle-of-the-road
+  model"; the Moon card says when it rises/sets; no magnitudes on the cards; the Milky Way card says
+  "Faint from here" when the sky is only suburban-dark.
+- **Sky Guide:** opens an hour after dark (or on now, during the night); the list shows what you can
+  see, with what's up but too faint named in one line; the star-count card (repeating the chart's
+  caption) is gone.
+- **Events (10,000 → 3,700 px):** the next six weeks, with a switch for all four months; the Moon
+  passing bright stars and planet showings below 8° are left out (they stay in the data); one
+  "how to watch" line instead of the meteor tip on every card and five tip cards; shorter wording.
+- **Where to Go:** three plain stats (the 2015 trend moves to the folded details), three nearby dark
+  spots instead of four, the city-glow chart, land bar and trend folded together.
+- **Accuracy (5,300 → 2,800 px):** the full backtest, glossary and credits are folded.
+- **Also:** a browser test (`pytest -m browser`) now loads the live chart's script, after a
+  duplicate declaration broke it in a local commit (caught before any push).

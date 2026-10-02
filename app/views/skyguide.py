@@ -28,9 +28,10 @@ def render(ctx: Context) -> None:
         ),
         unsafe_allow_html=True,
     )
-    start = dusk + pd.Timedelta(hours=2)
-    if ctx.now_utc is not None and dusk - pd.Timedelta(hours=2) <= ctx.now_utc <= dawn:
-        start = max(ctx.now_utc, dusk - pd.Timedelta(hours=2))  # twilight or night: open on now
+    # open on now once it's fully dark, otherwise an hour after dark (twilight is one drag away)
+    start = dusk + pd.Timedelta(hours=1)
+    if ctx.now_utc is not None and dusk <= ctx.now_utc <= dawn:
+        start = ctx.now_utc
     # the chart, the time slider and the "Up at ..." list are drawn in the browser, so the sky
     # follows the slider while it is dragged (views/skylive.py)
     skylive.render(ctx.service("live")(ctx.site, dusk, dawn, sqm, min(start, dawn)))
@@ -76,22 +77,7 @@ def render(ctx: Context) -> None:
                 body="No moonlight: the best time for the Milky Way and faint objects.",
             )
         )
-    counts = guide["stars_visible"]
-    cards.append(
-        ui.card(
-            "star",
-            "Stars you can see",
-            f"About {lookup.fmt_count(counts['here'])}",
-            where=f"of ~{lookup.fmt_count(counts['natural'])} in a natural sky",
-            body=esc(
-                f"At the darkest moment tonight ({lookup.clock(counts['utc'], tz)}), the faintest "
-                f"stars a typical eye picks out overhead are magnitude {d.nelm:.1f} "
-                "(bigger numbers are fainter)."
-            ),
-            extra=ui.darkness_scale(d.key),
-        )
-    )
-    st.markdown(ui.grid(cards, n=3), unsafe_allow_html=True)
+    st.markdown(ui.grid(cards, n=2), unsafe_allow_html=True)
 
     with st.expander("How the chart and the visibility are worked out", icon=":material/info:"):
         st.markdown(

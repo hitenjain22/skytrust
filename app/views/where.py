@@ -182,7 +182,6 @@ def marker_label(r: pd.Series) -> str:
 
 
 def light_strip(report: dict, d: sky.Darkness) -> str:
-    h = report["here"]
     return ui.strip(
         [
             ui.stat("How dark", f"{ui.esc(d.title)}", ui.esc(d.verdict) + ui.darkness_scale(d.key)),
@@ -194,11 +193,11 @@ def light_strip(report: dict, d: sky.Darkness) -> str:
             ui.stat(
                 "Faintest stars",
                 f"magnitude {d.nelm:.1f}",
-                "what a typical eye picks out overhead on a moonless night "
-                f"(about {h['sqm']:.2f} mag/arcsec²)",
+                "the faintest a typical eye picks out overhead on a moonless night (bigger "
+                "numbers are fainter; 6.6 in a natural sky)",
             ),
-            change_stat(report),
-        ]
+        ],
+        three=True,
     )
 
 
@@ -270,7 +269,8 @@ def glow_summary(glow: dict) -> str:
 def nearby_rows(report: dict) -> str:
     items = []
     seen = set()
-    entries = [(f"Darkest spot within {r} km", d) for r, d in report["darkest"].items()]
+    # the darkest spot within 50 and 100 km (25 km nearly always repeats one of them)
+    entries = [(f"Darkest spot within {r} km", d) for r, d in report["darkest"].items() if r > 25]
     if report.get("nearest_dark"):
         entries.insert(0, ("Nearest very dark sky", report["nearest_dark"]))
     for title, d in entries:
@@ -624,34 +624,35 @@ def render(ctx: Context) -> None:
             unsafe_allow_html=True,
         )
         st.markdown(ui.eyebrow("Darker skies nearby") + nearby_rows(report), unsafe_allow_html=True)
-        st.markdown(
-            ui.eyebrow(f"How dark the land is within {report['shares_radius_km']} km")
-            + area_bar(report["shares"]),
-            unsafe_allow_html=True,
-        )
-        glow = report.get("glow")
-        if glow:
-            st.markdown(
-                ui.section(
-                    "Glow on the horizon",
-                    "Which towns light up which part of the "
-                    "horizon from here: matters most for photos low in the sky.",
-                    "City glow",
-                ),
-                unsafe_allow_html=True,
-            )
-            st.markdown(glow_summary(glow), unsafe_allow_html=True)
-            left, right = st.columns([1, 1.15], gap="large", vertical_alignment="center")
-            with left:
-                show(charts.dome_polar(glow, ctx.palette))
-            with right:
-                st.markdown(ui.eyebrow("Biggest glows") + glow_rows(glow), unsafe_allow_html=True)
-                st.caption(
-                    "Strength by Walker's law (glow ∝ light ÷ distance²·⁵); 1× is Sacramento's "
-                    f"glow seen from 50 km. Total here: {glow['dome_total']:.2f}×."
-                )
         if overlay is not None:
             local_map(ctx, report, overlay)
+        glow = report.get("glow")
+        if glow:
+            st.markdown(glow_summary(glow), unsafe_allow_html=True)
+        with st.expander(
+            "Glow on the horizon, the land around, and the change since 2015",
+            icon=":material/light_mode:",
+        ):
+            if glow:
+                left, right = st.columns([1, 1.15], gap="large", vertical_alignment="center")
+                with left:
+                    show(charts.dome_polar(glow, ctx.palette))
+                with right:
+                    st.markdown(
+                        ui.eyebrow("Biggest glows") + glow_rows(glow), unsafe_allow_html=True
+                    )
+                    st.caption(
+                        "Which towns light up which part of the horizon (matters most for photos "
+                        "low in the sky). Strength by Walker's law (glow ∝ light ÷ distance²·⁵); "
+                        f"1× is Sacramento's glow seen from 50 km. Total here: "
+                        f"{glow['dome_total']:.2f}×."
+                    )
+            st.markdown(
+                ui.eyebrow(f"How dark the land is within {report['shares_radius_km']} km")
+                + area_bar(report["shares"]),
+                unsafe_allow_html=True,
+            )
+            st.markdown(ui.strip([change_stat(report)]), unsafe_allow_html=True)
 
     with st.expander("How light pollution is measured, and its limits", icon=":material/info:"):
         methodology(ctx)

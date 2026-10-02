@@ -16,7 +16,7 @@ const COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "
 const KIND_ORDER = { moon: 0, planet: 1, star: 2, pattern: 3, cluster: 4, galaxy: 4, nebula: 4 };
 const INK = "#C9D2EA";
 const GOLD = "#F0C987";
-const COLS = "minmax(0,1.4fr) minmax(0,1fr) 96px";
+const COLS = "minmax(0,1.5fr) minmax(0,1fr)";
 
 // ---------- decoding ----------
 
@@ -473,22 +473,30 @@ function listHtml(P, F) {
     ["Star patterns", rows.filter((r) => r.it.k === "pattern").slice(0, 4)],
     ["Clusters, galaxies, nebulae", rows.filter((r) => ["cluster", "galaxy", "nebula"].includes(r.it.k)).slice(0, 4)],
   ];
-  let html = `<div class="sk-eyebrow">Up at ${esc(clock(F.t, P.d.tz))}</div>`;
+  // what you can see gets a row; what's up but too faint is named in one line at the end
+  let html = `<div class="sk-eyebrow">What you can see at ${esc(clock(F.t, P.d.tz))}</div>`;
+  const faint = [];
   for (const [title, group] of groups) {
-    if (!group.length) continue;
+    const seen = group.filter((r) => r.seen);
+    group.filter((r) => !r.seen).forEach((r) => faint.push(r.it.n));
+    if (!seen.length) continue;
     html += `<div class="sk-eyebrow" style="margin-top:14px">${title}</div><div class="sk-list">`;
-    for (const r of group) {
-      const tag = r.seen
-        ? '<span class="sk-badge" style="--c:var(--sk-go)">Visible</span>'
-        : '<span class="sk-badge" title="Too faint to see from here now">Too faint</span>';
+    for (const r of seen) {
       html += `<div class="sk-row" style="--cols:${COLS}"><div class="sk-main"><div class="sk-row-title">${esc(r.it.n)}</div>`
         + `<div class="sk-row-sub">${esc(r.it.s)}</div></div>`
-        + `<div class="sk-row-sub" style="font-size:.86rem">${esc(cap(whereWords(r.alt, r.az)))}</div>`
-        + `<div style="text-align:right">${tag}</div></div>`;
+        + `<div class="sk-row-sub" style="font-size:.86rem;text-align:right">${esc(cap(whereWords(r.alt, r.az)))}</div></div>`;
     }
     html += "</div>";
   }
-  if (!rows.length) html += '<p class="sk-row-sub">Nothing bright is above the horizon right now.</p>';
+  if (!rows.some((r) => r.seen)) {
+    html += `<p class="sk-row-sub" style="margin-top:12px">${rows.length
+      ? "Nothing is bright enough to see yet: the sky is still too bright."
+      : "Nothing bright is above the horizon right now."}</p>`;
+  }
+  if (faint.length) {
+    html += `<p class="sk-row-sub" style="margin-top:14px">Up but too faint to see from here right `
+      + `now: ${esc(faint.join(", "))}.</p>`;
+  }
   return html;
 }
 
@@ -575,11 +583,11 @@ function build(root, P) {
     range.setAttribute("aria-valuetext", label);
     range.style.setProperty("--p", `${((idx / n) * 100).toFixed(2)}%`);
     const what = mode === "here" ? "you can see" : "a perfectly dark sky would show";
-    const stars = count === 0 ? "No stars show yet"
+    const howMany = count === 0 ? "No stars show yet"
       : count === 1 ? "1 star" : `About ${fmtCount(count)} stars`;
     help.textContent = (count === 0
-      ? `${stars} at ${clock(t, d.tz)}: the sky is still too bright.`
-      : `${stars} ${what} at ${clock(t, d.tz)}.`)
+      ? `${howMany} at ${clock(t, d.tz)}: the sky is still too bright.`
+      : `${howMany} ${what} at ${clock(t, d.tz)}.`)
       + " Hold it overhead with north at the top, or turn it so the direction you face is at "
       + "the bottom.";
     // the list changes only every few minutes: rebuild it only when its content would change

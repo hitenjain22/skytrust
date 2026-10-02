@@ -332,14 +332,12 @@ def meteor_events(
                 title=f"{s.name} peak",
                 utc=peak,
                 summary=(
-                    f"Up to {s.zhr:.0f} meteors an hour in a perfect sky; "
-                    f"{rate_words(here['best_rate'])} from here, "
-                    f"{rate_words(top)} from the darkest place on the list."
+                    f"{rate_words(here['best_rate']).capitalize()} from here (up to "
+                    f"{s.zhr:.0f} in a perfect sky)."
                 ),
                 look=(
-                    f"Radiant {here['radiant_where']} (in {here['radiant_con']}). "
-                    "Meteors can appear anywhere: lie back and look about halfway up, "
-                    "away from the radiant. " + moon + "."
+                    f"{moon}. The meteors seem to come from {here['radiant_where']} "
+                    f"(in {here['radiant_con']}) but can appear anywhere."
                 ),
                 outlook=outlook_for(top),
                 best_start=here["best_start"],
@@ -428,8 +426,7 @@ def opposition_events(start: pd.Timestamp, end: pd.Timestamp, site: Site) -> lis
                     f"{name} at opposition",
                     when,
                     (
-                        f"{name} is opposite the Sun: at its closest and brightest for the year "
-                        f"(magnitude {tr['mag']:.1f}) and up all night"
+                        f"{name} is opposite the Sun: at its closest and brightest for the year"
                         + ("." if eye else ", but only in binoculars or a telescope.")
                     ),
                     look=(
@@ -614,6 +611,15 @@ def part_of_night(local: pd.Timestamp) -> str:
     return "before dawn"
 
 
+def apart_words(sep: float) -> str:
+    """'1.1° apart, about one finger's width at arm's length' (a finger covers ~1°)."""
+    if sep < 0.75:
+        return f"{sep:.1f}° apart, less than a finger's width at arm's length"
+    fingers = round(sep)
+    width = {1: "one finger's width", 2: "two fingers' width", 3: "three fingers' width"}
+    return f"{sep:.1f}° apart, about {width.get(fingers, f'{fingers} fingers')} at arm's length"
+
+
 def _pairing(a: str, b: str, when: pd.Timestamp, sep: float, view: dict, site: Site) -> Event:
     local = view["utc"].tz_convert(site.timezone)
     look = f"{part_of_night(local)}, {sky.where_words(view['alt'], view['az'])}."
@@ -621,7 +627,7 @@ def _pairing(a: str, b: str, when: pd.Timestamp, sep: float, view: dict, site: S
         "pairing",
         f"{a} near {b}",
         when,
-        f"{a} and {b} appear about {sep:.1f}° apart (your little finger at arm's length is ~1°).",
+        f"{a} and {b} appear {apart_words(sep)}.",
         look=look[:1].upper() + look[1:],
         best_start=view["utc"] - pd.Timedelta(minutes=45),
         best_end=view["utc"] + pd.Timedelta(minutes=45),
@@ -647,20 +653,18 @@ def merge_moon_pairings(events: list[Event], site: Site) -> list[Event]:
         first = min(g, key=lambda e: e.details["separation"])
         names = [e.details["with"][0] for e in g]
         listing = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
-        seps = "; ".join(f"{e.details['with'][0]} {e.details['separation']:.1f}°" for e in g)
+        closest = first.details["separation"]
         merged.append(
             Event(
                 "pairing",
                 f"The Moon near {listing}",
                 first.utc,
-                (
-                    f"The Moon passes close to {listing} ({seps} apart; "
-                    "your little finger at arm's length is ~1°)."
-                ),
+                f"The Moon passes close to {listing} ({first.details['with'][0]} "
+                f"{apart_words(closest)}).",
                 look=first.look,
                 best_start=first.best_start,
                 best_end=first.best_end,
-                details=first.details,
+                details={**first.details, "with": names},
                 source=first.source,
             )
         )

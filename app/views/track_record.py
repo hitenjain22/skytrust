@@ -88,9 +88,9 @@ def render(ctx: Context, standalone: bool = True) -> None:
     v = report.MetricsView(ctx.metrics)
     meta = ctx.metrics["meta"]
     st.caption(
-        f"Trained on {meta['train_period'][0]} → {meta['train_period'][1]}; tested once on "
-        f"{meta['test_period'][0]} → {meta['test_period'][1]}, nights the model never saw. "
-        "95% confidence intervals resample whole weeks."
+        f"Tested once on {pd.Timestamp(meta['test_period'][0]):%B} – "
+        f"{pd.Timestamp(meta['test_period'][1]):%B %Y}, nights the model never saw. Ranges are "
+        "95% confidence intervals."
     )
     st.markdown(report_card(v), unsafe_allow_html=True)
     show(charts.go_accuracy_by_lead(v.records, ctx.palette))
@@ -103,14 +103,14 @@ def render(ctx: Context, standalone: bool = True) -> None:
         forward_panel.render(ctx.forward_summary)
     statewide_view.render(ctx)
 
-    st.markdown(
-        ui.section(
-            "The full backtest",
-            "For the data-curious: every method, every truth source, every forecast range.",
-            "Details",
-        ),
-        unsafe_allow_html=True,
-    )
+    with st.expander(
+        "The full backtest: every method, every truth source, every forecast range",
+        icon=":material/query_stats:",
+    ):
+        full_backtest(ctx, v)
+
+
+def full_backtest(ctx: Context, v: report.MetricsView) -> None:
     c1, c2 = st.columns(2)
     names = {"primary": "Primary", "asos": "ASOS only", "era5": "ERA5 only", "goes": "Satellite"}
     label = c1.radio(
@@ -141,7 +141,9 @@ def render(ctx: Context, standalone: bool = True) -> None:
     pal = ctx.palette
     best = v.best_single(label, lead)
     shown = [m for m in ["climatology", best, "equal_weight", "nbm_lr", "blend"] if m]
-    tab1, tab2, tab3, tab4 = st.tabs(["False clears", "Calibration", "Skill by range", "Value"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        ["False clears", "Calibration", "Skill by range", "Value", "By site and season"]
+    )
     with tab1:
         show(charts.false_clear_bars(v.records, label, lead, pal))
     with tab2:
@@ -157,7 +159,7 @@ def render(ctx: Context, standalone: bool = True) -> None:
                 "the share of a perfect forecast's benefit you'd get by going out when P ≥ α."
             )
 
-    with st.expander("By site and season", icon=":material/table_rows:"):
+    with tab5:
         st.dataframe(report.breakdown_table(v, label, lead, "site"), width="stretch")
         st.dataframe(report.breakdown_table(v, label, lead, "season"), width="stretch")
         st.caption("Subsets spanning fewer than 8 weeks get no confidence interval.")

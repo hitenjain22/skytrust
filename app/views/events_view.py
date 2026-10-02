@@ -26,33 +26,27 @@ OUTLOOK_COLORS = {
     "Not visible": "var(--sk-skip)",
 }
 
-# Viewing advice, quoted from the organisations that publish these events.
-TIPS = [
-    ("Get away from lights", "“Find an area well away from the city or street lights.”", "NASA"),
-    (
-        "Give your eyes time",
-        "“In less than 30 minutes in the dark, your eyes will adapt and you "
-        "will begin to see meteors.”",
-        "NASA",
-    ),
-    (
-        "Look away from the radiant",
-        "The best views are “45 to 90 degrees away from the radiant”, "
-        "where meteors “appear longer and more spectacular.”",
-        "NASA",
-    ),
-    (
-        "Lie back",
-        "“Lie flat on your back … and look up.” Bring “a sleeping bag, blanket, or lawn chair.”",
-        "NASA",
-    ),
-    (
-        "What the numbers mean",
-        "A shower's ZHR is the rate an ideal observer would see “in "
-        "perfectly clear skies” with the radiant overhead; real rates are lower.",
-        "IMO",
-    ),
-]
+# Viewing advice, quoted from NASA's meteor pages (docs/SKY_EVENTS.md has the sources).
+HOW_TO_WATCH = (
+    "Get “well away from the city or street lights”, “lie flat on your back … and look up”, "
+    "and give your eyes 30 minutes: “in less than 30 minutes in the dark, your eyes will adapt "
+    "and you will begin to see meteors.” Meteors can appear anywhere; the longest are "
+    "“45 to 90 degrees away from the radiant.” (NASA)"
+)
+SOON_DAYS = 42  # the list shows the next six weeks unless asked for all four months
+MIN_PLANET_ALT = 8.0  # a planet's "best showing" lower than this is hard to see in practice
+
+
+def worth_showing(e: Event) -> bool:
+    """Keep the list to what a beginner can enjoy: the Moon passing bright *stars* (Regulus,
+    Spica...) and planet showings too low to see are left out; everything else stays."""
+    from skytrust.events import MOON_STARS
+
+    if e.kind == "pairing" and e.title.startswith("The Moon near"):
+        return any(name not in MOON_STARS for name in e.details.get("with", []))
+    if e.kind == "planet" and "elongation" in e.details:
+        return float(e.details.get("alt", 90)) >= MIN_PLANET_ALT
+    return True
 
 
 def best_moment(e: Event) -> pd.Timestamp | None:
@@ -127,8 +121,9 @@ def event_card(ctx: Context, e: Event) -> str:
         in_range = 0 <= (day.date() - now.tz_convert(tz).date()).days <= 6
         extra = place_chips(ctx, e, in_range)
         notes = e.details["shower"].notes
-        if notes:
-            extra += f'<p class="sk-muted" style="font-size:.84rem">{esc(notes)}</p>'
+        if notes:  # the first sentence: what makes this shower special
+            first = notes.split(". ")[0].rstrip(".") + "."
+            extra += f'<p class="sk-muted" style="font-size:.84rem">{esc(first)}</p>'
         if e.active and e.active[0] <= now <= e.active[1]:
             badge += " " + ui.badge("Active now", "var(--sk-accent)")
     return ui.block(
@@ -189,8 +184,8 @@ def render(ctx: Context) -> None:
     st.markdown(
         ui.section(
             "Sky events",
-            "Meteor showers, the Moon, planets at their best and eclipses over the next four "
-            f"months, with times and directions for {esc(ctx.site_label)}.",
+            "Meteor showers, the Moon, planets at their best and eclipses, with times and "
+            f"directions for {esc(ctx.site_label)}.",
             "Coming up",
         ),
         unsafe_allow_html=True,
@@ -201,16 +196,25 @@ def render(ctx: Context) -> None:
     )
     kinds = FILTERS[pick or "All"]
     st.markdown(happening_now(ctx, events), unsafe_allow_html=True)
+    st.markdown(
+        f'<p class="sk-lede" style="margin:4px 0 8px;font-size:.88rem">'
+        f"<b>How to watch a meteor shower:</b> {esc(HOW_TO_WATCH)}</p>",
+        unsafe_allow_html=True,
+    )
     now = ctx.now_utc or pd.Timestamp.now(tz="UTC")
     shown = [
         e
         for e in events
         if (kinds is None or e.kind in kinds)
         and (e.utc >= now - pd.Timedelta(hours=12) or e.kind == "meteor")
+        and worth_showing(e)
     ]
     shown = [e for e in shown if not (e.kind == "meteor" and e.active and e.active[1] < now)]
+    later = [e for e in shown if e.utc > now + pd.Timedelta(days=SOON_DAYS)]
+    if later and not st.session_state.get("ev_all"):
+        shown = [e for e in shown if e not in later]
     if not shown:
-        st.info("Nothing of this kind in the next four months.")
+        st.info("Nothing of this kind in the next six weeks.")
     html, month = "", None
     for e in shown:
         day = viewing_date(e, tz)
@@ -219,17 +223,8 @@ def render(ctx: Context) -> None:
             html += f'<div class="sk-month">{day:%B %Y}</div>'
         html += event_card(ctx, e)
     st.markdown(html, unsafe_allow_html=True)
-
-    st.markdown(
-        ui.section(
-            "How to watch", "Advice from the organisations that track these events.", "Tips"
-        ),
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        ui.grid([ui.card("meteor", src, title, body=esc(text)) for title, text, src in TIPS], n=3),
-        unsafe_allow_html=True,
-    )
+    if later:
+        st.toggle(f"Show all four months ({len(later)} more events)", key="ev_all")
     with st.expander("Where these events come from", icon=":material/info:"):
         st.markdown(
             """
@@ -242,6 +237,9 @@ def render(ctx: Context) -> None:
   DE421 ephemeris with Skyfield and checked against published dates (the IMO's 2026 lunar phase
   table, Saturn's 2026 opposition, NASA's 2026 lunar eclipse figures).
 - The outlook (Great / Good / Fair / Weak) is the expected rate at the darkest place on the
-  list: 30+ an hour is great, 12+ good, 5+ fair.
+  list: 30+ an hour is great, 12+ good, 5+ fair. A shower's ZHR is the rate an ideal observer
+  would see "in perfectly clear skies" with the radiant overhead (IMO); real rates are lower.
+- Left out of the list: the Moon passing bright stars, and planet showings that stay below 8°
+  (too low to see in practice).
 """
         )

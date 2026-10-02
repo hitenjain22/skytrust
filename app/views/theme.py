@@ -215,6 +215,8 @@ h2, h3 {{ margin-top: .6rem; }}
 .sk-bar > span {{ position:absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--c);
   transform-origin: left; animation: sk-grow 600ms var(--sk-ease) both; }}
 .sk-rank {{ font-family: {MONO_FONT}; font-size: .78rem; color: {_line(45)}; }}
+.sk-headline .sk-dot {{ display: inline-block; width: 11px; height: 11px; margin: 0 12px 4px 0;
+  vertical-align: middle; box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 22%, transparent); }}
 .sk-dots {{ font-family: {MONO_FONT}; letter-spacing: 1px; font-size: .78rem; color: {_line(60)}; white-space: nowrap; }}
 .sk-conds {{ display:flex; flex-wrap: wrap; gap: 4px 12px; justify-content: flex-end; font-size: .8rem;
   font-weight: 500; white-space: nowrap; }}
