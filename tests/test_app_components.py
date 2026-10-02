@@ -235,3 +235,80 @@ def test_a_map_click_opens_the_clicked_place(monkeypatch):
     fake.session_state["map_state"]["selection"]["points"][0]["customdata"] = "CUSTOM_36.1_-117"
     where.open_clicked("map_state")
     assert fake.session_state["site"] == "ridgecrest"
+
+
+def _night(chances, start="2026-10-02 03:00"):
+    from types import SimpleNamespace
+
+    idx = pd.date_range(start, periods=len(chances), freq="h", tz="UTC")
+    return SimpleNamespace(
+        hourly_clear=pd.Series(chances, index=idx),
+        dusk_utc=idx[0],
+        dawn_utc=idx[-1],
+    )
+
+
+@pytest.mark.parametrize(
+    ("chances", "expected"),
+    [  # hours from 8 PM Pacific (03:00 UTC): 8, 9, 10, 11 PM, 12 AM, 1, 2, 3 AM
+        ([0.9] * 8, "Clear skies all night."),
+        ([0.1] * 8, "Cloudy all night."),
+        ([0.9] * 4 + [0.2] * 4, "Clear until about 12 AM, then clouds move in."),
+        ([0.2] * 3 + [0.8] * 5, "Cloudy at first, clearing around 11 PM."),
+        ([0.9, 0.2] + [0.9] * 6, "Clear skies all night."),  # a one-hour blip is ignored
+    ],
+)
+def test_tonight_story_in_plain_words(chances, expected):
+    from views import tonight
+
+    assert tonight.story(_night(chances), "America/Los_Angeles") == expected
+
+
+def test_forecast_agreement_sentence():
+    from types import SimpleNamespace
+
+    from views import tonight
+
+    times = pd.date_range("2026-10-02 03:00", periods=6, freq="h", tz="UTC")
+    rows = []
+    for m in ["gfs", "ecmwf", "gem", "icon", "hrrr"]:
+        for k, t_ in enumerate(times):
+            cloudy = m in ("icon", "hrrr") and k >= 3  # two forecasts cloud over at 11 PM
+            rows.append({"time": t_, "model": m, "cloud_cover": 0.8 if cloudy else 0.05})
+    fc = SimpleNamespace(hourly=pd.DataFrame(rows))
+    night = SimpleNamespace(dusk_utc=times[0], dawn_utc=times[-1])
+    text = tonight.forecast_agreement(fc, night, "America/Los_Angeles", 0.2)
+    assert text.startswith("They agree until about 11 PM; after that they split: about 3 of 5")
+    clear = pd.DataFrame([r | {"cloud_cover": 0.0} for r in rows])
+    assert "All 5 forecasts expect a clear sky all night" in tonight.forecast_agreement(
+        SimpleNamespace(hourly=clear), night, "America/Los_Angeles", 0.2
+    )
+
+
+def test_every_sky_guide_object_has_a_fact():
+    from skytrust import sky
+    from views import skylive
+
+    facts = skylive.load_facts()
+    cat = sky.load_catalog()
+    stars = cat.stars[cat.stars["name"].notna() & (cat.stars["mag"] <= 1.6)]["name"]
+    names = (
+        ["Moon", *sky.PLANETS, *stars, *cat.dsos["name"]]
+        + [p[0] for p in sky.PATTERNS]
+        + list(sky.ASTERISMS)
+    )
+    missing = [n for n in names if not facts.get(n)]
+    assert not missing, missing
+    assert all(len(f.split()) <= 40 for f in facts.values())
+
+
+def test_example_photos_are_credited_and_belong_to_featured_places():
+    from skytrust.config import load_places
+    from views import where
+
+    photos = where.load_photos()
+    ids = {p.id for p in load_places()}
+    assert photos and set(photos) <= ids
+    for p in photos.values():
+        assert p["image"].startswith("https://") and p["page"].startswith("https://commons.")
+        assert p["license"] and p["credit"] and "<" not in p["credit"]

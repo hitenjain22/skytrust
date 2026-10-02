@@ -63,7 +63,7 @@ def _layout(
         if title
         else None,
         height=height,
-        margin={"l": 4, "r": 4, "t": 40 if title else 10, "b": 4},
+        margin={"l": 4, "r": 4, "t": 40 if title else 24, "b": 4},
         paper_bgcolor=pal["paper"],
         plot_bgcolor=pal["paper"],
         font=font,
@@ -117,24 +117,17 @@ def level_color(p: float, pal: dict, go_at: float = 0.7, maybe_at: float = 0.4) 
 # ---------- Tonight: the one chart a beginner needs ----------
 
 
-def night_chart(hourly: pd.DataFrame, night, tz: str, pal: dict, go_at=0.7, maybe_at=0.4):
-    """Hour by hour through the night: the chance each hour is clear (bars, coloured like the
-    verdict), astronomical darkness (shaded), when the Moon is up (band on top), and the best
-    window (gold outline). Falls back to the model median's clear-sky share without the hourly
-    model."""
+def night_chart(hourly: pd.DataFrame, night, tz: str, pal: dict, go_at=0.6, maybe_at=0.35):
+    """Hour by hour through the night: the chance each hour is clear (bars coloured likely
+    clear / either way / likely cloudy), full darkness shaded, and a strip under the bars for
+    when the Moon is up. Labels sit above the plot so they never cover a bar."""
     data = _night_slice(hourly, night)
     med = median_cover(data)
     if night.hourly_clear is not None and not night.hourly_clear.empty:
         p = night.hourly_clear
-        name, hover = (
-            "Chance of clear sky",
-            "%{y:.0f}% chance clear · typical cloud %{customdata:.0f}%",
-        )
     else:
         dark = med[(med.index >= night.dusk_utc.floor("h")) & (med.index <= night.dawn_utc)]
         p = 1 - dark
-        name, hover = "Clear sky (model median)", "%{y:.0f}% clear sky · cloud %{customdata:.0f}%"
-    cloud = med.reindex(p.index).to_numpy() * 100
     fig = go.Figure()
     start, end = night.dusk_utc - PAD, night.dawn_utc + PAD
     fig.add_vrect(
@@ -148,196 +141,78 @@ def night_chart(hourly: pd.DataFrame, night, tz: str, pal: dict, go_at=0.7, mayb
         go.Bar(
             x=_local(p.index, tz),
             y=p.to_numpy() * 100,
-            name=name,
             marker={
-                "color": [ink_level(v, pal, go_at, maybe_at) for v in p.to_numpy()],
+                "color": [level_color(v, pal, go_at, maybe_at) for v in p.to_numpy()],
                 "line": {"width": 0},
                 "cornerradius": 3,
+                "opacity": 0.9,
             },
-            customdata=cloud,
-            hovertemplate=hover + "<extra></extra>",
+            hovertemplate="%{y:.0f}% chance of clear sky<extra></extra>",
             width=1000 * 60 * 60 * 0.62,
         )
     )
-    # Moon-up band above the bars
+    # the Moon: a strip under the bars, so it can't be mistaken for cloud
     for a, b in getattr(night, "moon_up", []) or []:
-        fig.add_shape(
-            type="rect",
-            x0=_local(max(a, start), tz),
-            x1=_local(min(b, end), tz),
-            y0=105,
-            y1=107.5,
-            fillcolor=pal["moon"],
-            line_width=0,
-            opacity=0.6,
-        )
+        fig.add_shape(type="rect", x0=_local(max(a, start), tz), x1=_local(min(b, end), tz),
+                      y0=-13, y1=-7, fillcolor=pal["moon"], line_width=0, opacity=0.75)  # fmt: skip
     if getattr(night, "moon_up", None):
-        first = max(night.moon_up[0][0], start)
-        fig.add_annotation(
-            x=_local(first, tz),
-            y=113,
-            text="Moon up",
-            showarrow=False,
-            xanchor="left",
-            font={"size": 11, "color": pal["muted"]},
-        )
+        a = max(night.moon_up[0][0], start)
+        fig.add_annotation(x=_local(a, tz), y=-10, text=" Moon up ", showarrow=False,
+                           xanchor="right", font={"size": 11, "color": pal["muted"]})  # fmt: skip
     for when, label, anchor in [
-        (night.dusk_utc, "dark", "left"),
-        (night.dawn_utc, "dawn", "right"),
+        (night.dusk_utc, "Dark", "left"),
+        (night.dawn_utc, "Dawn", "right"),
     ]:
         fig.add_vline(x=_local(when, tz), line={"color": pal["accent2"], "width": 1, "dash": "dot"})
         fig.add_annotation(
-            x=_local(when, tz),
-            y=97,
-            text=f"{label} {when.tz_convert(tz):%-I:%M %p}",
-            showarrow=False,
-            xanchor=anchor,
-            xshift=4 if anchor == "left" else -4,
+            x=_local(when, tz), y=1.0, yref="paper", yanchor="bottom",
+            text=f"{label} {when.tz_convert(tz):%-I:%M %p}", showarrow=False, xanchor=anchor,
             font={"size": 11, "color": pal["accent2"]},
-        )
+        )  # fmt: skip
     fig.update_xaxes(type="date", range=[_local(start, tz), _local(end, tz)])
-    return _layout(
+    fig = _layout(
         fig,
         pal,
         height=300,
         time_axis=True,
         legend=False,
         yaxis={
-            "range": [0, 118],
+            "range": [-15, 102],
             "tickvals": [0, 25, 50, 75, 100],
-            "ticksuffix": "%",
-            "title": {"text": "chance clear", "font": {"size": 11}},
+            "ticktext": ["0%", "25%", "50%", "75%", "100%"],
+            "title": {"text": "chance of clear sky", "font": {"size": 11}},
         },
     )
+    fig.update_layout(margin={"l": 4, "r": 4, "t": 26, "b": 4}, hovermode="closest")
+    return fig
 
 
-def hourly_cloud(hourly: pd.DataFrame, night, tz: str, threshold: float, pal: dict) -> go.Figure:
-    """Each model's cloud cover through the night, the cross-model median, and the clear line."""
-    data = _night_slice(hourly, night)
-    fig = go.Figure()
-    for model, g in data.groupby("model", sort=False):
-        fig.add_trace(
-            go.Scatter(
-                x=_local(g["time"], tz),
-                y=g["cloud_cover"] * 100,
-                name=model.upper(),
-                mode="lines",
-                line={"color": pal["models"].get(model), "width": 1.6, "shape": "spline"},
-            )
-        )
-    med = median_cover(data)
-    fig.add_trace(
-        go.Scatter(
-            x=_local(med.index, tz),
-            y=med * 100,
-            name="Median",
-            mode="lines",
-            line={"color": pal["models"]["median"], "width": 3, "dash": "dot"},
-        )
-    )
-    fig.add_vrect(
-        x0=_local(night.dusk_utc, tz),
-        x1=_local(night.dawn_utc, tz),
-        fillcolor=pal["dark"],
-        line_width=0,
-        layer="below",
-    )
-    fig.add_hline(
-        y=threshold * 100,
-        line_dash="dash",
-        line_color=pal["accent"],
-        annotation_text=f"clear ≤ {threshold:.0%}",
-        annotation_position="bottom right",
-        annotation_font_color=pal["accent"],
-    )
-    return _layout(
-        fig, pal, "Cloud cover by weather model (%)", yaxis={"range": [0, 100]}, time_axis=True
-    )
-
-
-def cloud_layers(hourly: pd.DataFrame, night, tz: str, pal: dict) -> go.Figure:
-    """Median across models of low / mid / high cloud (high = cirrus, which ruins deep-sky)."""
-    data = _night_slice(hourly, night)
-    fig = go.Figure()
-    for col, key, name in [
-        ("cloud_cover_low", "low", "Low (fog, stratus)"),
-        ("cloud_cover_mid", "mid", "Mid"),
-        ("cloud_cover_high", "high", "High (thin cirrus)"),
-    ]:
-        med = median_cover(data, col)
-        fig.add_trace(
-            go.Scatter(
-                x=_local(med.index, tz),
-                y=med * 100,
-                name=name,
-                mode="lines",
-                line={"width": 2.2, "color": pal["layers"][key], "shape": "spline"},
-            )
-        )
-    fig.add_vrect(
-        x0=_local(night.dusk_utc, tz),
-        x1=_local(night.dawn_utc, tz),
-        fillcolor=pal["dark"],
-        line_width=0,
-        layer="below",
-    )
-    return _layout(
-        fig,
-        pal,
-        "Cloud layers, median of the models (%)",
-        height=280,
-        yaxis={"range": [0, 100]},
-        time_axis=True,
-    )
-
-
-# ---------- 7 nights ----------
-
-
-def outlook_grid(nights, hourly: pd.DataFrame, tz: str, pal: dict, labels: list[str]) -> go.Figure:
-    """Clear-Sky-Chart-style grid: one row per night, one column per local hour (7 PM-6 AM),
-    colour = median forecast cloud cover (navy = clear, white = overcast), with the number in
-    every cell and a labelled colour bar. Hours outside astronomical darkness are blank."""
-    slots = [19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6]
-    med = median_cover(hourly)
-    z, text = [], []
-    for n in nights:
-        dark = pd.date_range(n.dusk_utc.ceil("h"), n.dawn_utc.floor("h"), freq="h")
-        local = {t.tz_convert(tz).hour: t for t in dark}
-        row = [
-            med.get(local[h]) * 100 if h in local and local[h] in med.index else None for h in slots
-        ]
-        z.append(row)
-        text.append(["" if v is None else f"{v:.0f}" for v in row])
+def model_grid(hourly: pd.DataFrame, night, tz: str, pal: dict, names: dict) -> go.Figure:
+    """One row per weather forecast, one square per dark hour, coloured by the cloud cover it
+    predicts (dark navy = clear, light grey = overcast) with the number in each square. Shows
+    at a glance whether the forecasts agree."""
+    data = hourly[
+        (hourly["time"] >= night.dusk_utc.floor("h")) & (hourly["time"] <= night.dawn_utc)
+    ]
+    cover = data.pivot_table(index="time", columns="model", values="cloud_cover") * 100
+    models = [m for m in names if m in cover.columns] + [m for m in cover.columns if m not in names]
+    z = cover[models].T.to_numpy()
+    x = [t.tz_convert(tz).strftime("%-I %p") for t in cover.index]
+    y = [names.get(m, m.upper()) for m in models]
+    text = [["" if np.isnan(v) else f"{v:.0f}" for v in row] for row in z]
     fig = go.Figure(
         go.Heatmap(
-            z=z,
-            x=[f"{(h % 12) or 12} {'AM' if h < 12 else 'PM'}" for h in slots],
-            y=labels,
-            text=text,
-            texttemplate="%{text}",
-            textfont={"size": 11},
-            colorscale=pal["heat"],
-            zmin=0,
-            zmax=100,
-            xgap=3,
-            ygap=3,
-            colorbar={
-                "title": {"text": "cloud %", "side": "right"},
-                "thickness": 10,
-                "tickvals": [0, 50, 100],
-                "outlinewidth": 0,
-            },
-            hovertemplate="%{y}, %{x}: %{z:.0f}% cloud<extra></extra>",
-            hoverongaps=False,
+            z=z, x=x, y=y, text=text, texttemplate="%{text}", textfont={"size": 10},
+            zmin=0, zmax=100, xgap=2, ygap=2, showscale=False,
+            colorscale=[[0, "#16203A"], [0.2, "#26324E"], [0.5, "#5B6684"], [1, "#D9DCE4"]],
+            hovertemplate="%{y} · %{x}: %{z:.0f}% cloud<extra></extra>",
         )
-    )
-    fig.update_yaxes(autorange="reversed", showgrid=False)
-    fig.update_xaxes(showgrid=False, side="top")
-    return _layout(fig, pal, height=46 * len(nights) + 60, legend=False)
-
-
-# ---------- Where ----------
+    )  # fmt: skip
+    fig = _layout(fig, pal, height=60 + 34 * len(models), legend=False)
+    fig.update_yaxes(autorange="reversed", gridcolor="rgba(0,0,0,0)", ticks="")
+    fig.update_xaxes(side="top", tickfont={"size": 11})
+    fig.update_layout(margin={"l": 4, "r": 4, "t": 30, "b": 4}, hovermode="closest")
+    return fig
 
 
 def site_map(
@@ -427,7 +302,7 @@ def go_accuracy_by_lead(records: pd.DataFrame, pal: dict) -> go.Figure:
         pal,
         "When it said “go”, how often the night was usable",
         height=320,
-        yaxis={"range": [50, 100], "ticksuffix": "%"},
+        yaxis={"range": [50, 103], "tickvals": [50, 60, 70, 80, 90, 100], "ticksuffix": "%"},
     )
 
 
@@ -496,7 +371,7 @@ def reliability(
         pal,
         f"Reliability, lead {lead} (marker size = nights)",
         height=380,
-        yaxis={"title": "Observed frequency", "range": [0, 1]},
+        yaxis={"title": "Observed frequency", "range": [-0.02, 1.04]},
     )
 
 
@@ -557,7 +432,7 @@ def value_curves(
         pal,
         f"Decision value, lead {lead}: % of a perfect forecast's benefit",
         height=360,
-        yaxis={"range": [-20, 100], "title": "%"},
+        yaxis={"range": [-20, 104], "title": "%"},
     )
 
 

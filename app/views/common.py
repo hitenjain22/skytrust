@@ -320,7 +320,8 @@ def footer() -> None:
         "Hipparcos catalogue; constellation figures and Milky Way outline from "
         "[d3-celestial](https://github.com/ofrohn/d3-celestial) (BSD). Meteor showers: the "
         "[IMO](https://www.imo.net/) 2026 calendar. Places: [GeoNames](https://www.geonames.org/) "
-        "(CC BY 4.0). SkyTrust is a student project by Hiten Jain, not an official forecast. "
+        "(CC BY 4.0), the US Census Bureau and USGS. Example photos: Wikimedia Commons, credited "
+        "on each photo. SkyTrust is a student project by Hiten Jain, not an official forecast. "
         "[Code](https://github.com/hitenjain22/skytrust) · "
         "[Full results](https://github.com/hitenjain22/skytrust/blob/main/docs/RESULTS.md)"
     )

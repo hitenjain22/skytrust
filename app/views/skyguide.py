@@ -21,9 +21,9 @@ def render(ctx: Context) -> None:
     st.markdown(
         ui.section(
             f"The sky tonight over {ctx.site_label}",
-            f"{esc(d.title)} sky here "
-            f"({esc(lookup.uncap(sky.brightness_words(d.times_natural)))}): "
-            f"{esc(lookup.uncap(d.verdict))}. Slide through the night to see what's up.",
+            f"{esc(d.title)} sky ({esc(lookup.uncap(sky.brightness_words(d.times_natural)))}): "
+            f"{esc(lookup.uncap(d.verdict))}. Drag the time to move through the night, and tap "
+            "any name to find it on the map.",
             f"Sky guide · {dusk.tz_convert(tz):%a %b %-d}",
         ),
         unsafe_allow_html=True,
@@ -38,33 +38,32 @@ def render(ctx: Context) -> None:
 
     mw = guide["milky_way"]
     when, help_ = lookup.milky_way_text(mw, tz)
-    mw_title = "Visible from here" if mw["visible"] else "Not visible from here tonight"
-    mw_body = (
-        (esc(help_) + " " + esc(mw["looks"]) + ".")
+    dark_enough = mw["zenith_sqm"] >= ctx.settings.raw["light_pollution"]["dark_sqm"]
+    mw_title = (
+        ("Visible from here" if dark_enough else "Faint from here")
         if mw["visible"]
-        else (esc(help_) + " From here, " + esc(lookup.uncap(mw["looks"])) + ".")
+        else "Not visible from here tonight"
     )
+    mw_body = esc(help_) + " " + esc(mw["looks"]) + "."
     cards = [ui.card("milkyway", "The Milky Way", mw_title, where=esc(when), body=mw_body)]
     om = guide["opposite_moon"]
     if om:
         names = [it.name for it, _, _ in om["objects"]]
-        listing = ", ".join(names[:4]) if names else "the stars on that side"
+        listing = ", ".join(names[:3]) if names else "the stars on that side"
         cards.append(
             ui.card(
                 "moon",
-                "With your back to the Moon",
+                "While the Moon is up",
                 f"Face {sky.compass_words(om['face'])}",
                 where=esc(
-                    f"At {lookup.clock(om['utc'], tz)}, the Moon ({om['illum']:.0%} lit) is "
+                    f"At {lookup.clock(om['utc'], tz)} the Moon ({om['illum']:.0%} lit) is "
                     f"{sky.where_words(om['moon_alt'], om['moon_az'])}"
                 ),
                 body=esc(
-                    "The darkest part of the sky is "
-                    f"{sky.where_words(om['darkest_alt'], om['darkest_az'])}, away from the "
-                    f"Moon's glare. Look there for {listing}."
+                    "Its glare is weakest away from it: the darkest part of the sky is "
+                    f"{sky.where_words(om['darkest_alt'], om['darkest_az'])}. Look there for "
+                    f"{listing}."
                 ),
-                meta="Moonlight is scattered least about 90° from the Moon "
-                "(Krisciunas & Schaefer 1991).",
             )
         )
     else:
@@ -84,7 +83,7 @@ def render(ctx: Context) -> None:
             """
 - **Positions** of the stars (ESA's Hipparcos catalogue), planets and Moon (JPL's DE421
   ephemeris) are computed for your place and time with Skyfield. The chart is a planisphere:
-  the centre is straight overhead, the rim is the horizon.
+  the center is straight overhead, the rim is the horizon.
 - **What you can see** depends on how bright the sky is. The light-pollution map gives the sky
   brightness overhead; the Moon's glow is added with the Krisciunas & Schaefer (1991) model of
   scattered moonlight; and the faintest visible star follows Schaefer's (1990) formula for a

@@ -108,7 +108,7 @@ def milky_way_text(mw: dict, tz: str) -> tuple[str, str]:
     if band is None:
         return "Below the horizon tonight", ""
     ends = band["ends"]
-    through = ", ".join(band["through"][:3])
+    through = " and ".join(band["through"][:2])  # the best-known two are plenty
     arc = (
         f"From the {ends[0]} horizon to the {ends[1]}"
         if len(ends) == 2
@@ -118,7 +118,7 @@ def milky_way_text(mw: dict, tz: str) -> tuple[str, str]:
     help_ = f"{arc}, passing through {through}." if through else f"{arc}."
     if mw.get("centre_until") is not None and mw["centre_max_alt"] > 10:
         help_ += (
-            f" Its brightest part, toward the centre of the galaxy in Sagittarius, is "
+            f" Its brightest part, toward the center of the galaxy in Sagittarius, is "
             f"{sky.height_words(mw['centre_max_alt'])} in the "
             f"{sky.compass(mw['centre_az'])} until about {clock(mw['centre_until'], tz)}."
         )

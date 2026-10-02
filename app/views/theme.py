@@ -215,6 +215,13 @@ h2, h3 {{ margin-top: .6rem; }}
 .sk-bar > span {{ position:absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--c);
   transform-origin: left; animation: sk-grow 600ms var(--sk-ease) both; }}
 .sk-rank {{ font-family: {MONO_FONT}; font-size: .78rem; color: {_line(45)}; }}
+.sk-photos {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 10px 0 0; }}
+.sk-photo {{ margin: 0; }}
+.sk-photo img {{ width: 100%; aspect-ratio: 3 / 2; object-fit: cover; border-radius: 12px; display: block;
+  border: 1px solid {_line(10)}; background: {_line(5)}; }}
+.sk-photo figcaption {{ font-size: .82rem; margin-top: 6px; line-height: 1.4; }}
+.sk-photo figcaption span {{ font-size: .72rem; color: {_line(52)}; }}
+@media (max-width: 640px) {{ .sk-photos {{ grid-template-columns: minmax(0, 1fr); }} }}
 .sk-headline .sk-dot {{ display: inline-block; width: 11px; height: 11px; margin: 0 12px 4px 0;
   vertical-align: middle; box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 22%, transparent); }}
 .sk-dots {{ font-family: {MONO_FONT}; letter-spacing: 1px; font-size: .78rem; color: {_line(60)}; white-space: nowrap; }}

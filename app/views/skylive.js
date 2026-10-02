@@ -17,6 +17,8 @@ const KIND_ORDER = { moon: 0, planet: 1, star: 2, pattern: 3, cluster: 4, galaxy
 const INK = "#C9D2EA";
 const GOLD = "#F0C987";
 const COLS = "minmax(0,1.5fr) minmax(0,1fr)";
+const KIND_LABEL = { moon: "The Moon", planet: "Planet", star: "Bright star",
+  pattern: "Star pattern", cluster: "Star cluster", galaxy: "Galaxy", nebula: "Nebula" };
 
 // ---------- decoding ----------
 
@@ -453,17 +455,22 @@ function itemAt(P, it, F) {
   return [alt, az];
 }
 
-function listHtml(P, F) {
+function isSeen(P, F, it, alt, az) {
+  if (alt <= 0) return false;
+  if (it.k === "moon") return true;
+  if (F.mode === "dark") {
+    return it.v <= limitAt(P, F, alt, 180) - (it.x ? P.d.extendedMargin : 0);
+  }
+  const sep = F.moonUp ? separation(alt, az, F.moonAlt, F.moonAz) : 180;
+  return it.v <= limitAt(P, F, alt, sep) - (it.x ? P.d.extendedMargin : 0);
+}
+
+function listHtml(P, F, selected) {
   const rows = [];
-  for (const it of P.d.items) {
+  for (const [index, it] of P.d.items.entries()) {
     const [alt, az] = itemAt(P, it, F);
     if (alt <= 3) continue;
-    let seen = true;
-    if (it.k !== "moon" && F.mode !== "dark") {
-      const sep = F.moonUp ? separation(alt, az, F.moonAlt, F.moonAz) : 180;
-      seen = it.v <= limitAt(P, F, alt, sep) - (it.x ? P.d.extendedMargin : 0);
-    }
-    rows.push({ it, alt, az, seen });
+    rows.push({ it, index, alt, az, seen: isSeen(P, F, it, alt, az) });
   }
   rows.sort((a, b) => (KIND_ORDER[a.it.k] ?? 5) - (KIND_ORDER[b.it.k] ?? 5)
     || (a.it.m ?? 9) - (b.it.m ?? 9));
@@ -474,15 +481,17 @@ function listHtml(P, F) {
     ["Clusters, galaxies, nebulae", rows.filter((r) => ["cluster", "galaxy", "nebula"].includes(r.it.k)).slice(0, 4)],
   ];
   // what you can see gets a row; what's up but too faint is named in one line at the end
-  let html = `<div class="sk-eyebrow">What you can see at ${esc(clock(F.t, P.d.tz))}</div>`;
+  let html = `<div class="sk-eyebrow">What you can see at ${esc(clock(F.t, P.d.tz))}</div>`
+    + '<p class="sk-row-sub" style="margin:4px 0 0">Tap a name to find it on the map.</p>';
   const faint = [];
   for (const [title, group] of groups) {
     const seen = group.filter((r) => r.seen);
-    group.filter((r) => !r.seen).forEach((r) => faint.push(r.it.n));
+    group.filter((r) => !r.seen).forEach((r) => faint.push(r));
     if (!seen.length) continue;
     html += `<div class="sk-eyebrow" style="margin-top:14px">${title}</div><div class="sk-list">`;
     for (const r of seen) {
-      html += `<div class="sk-row" style="--cols:${COLS}"><div class="sk-main"><div class="sk-row-title">${esc(r.it.n)}</div>`
+      const on = r.index === selected ? " is-on" : "";
+      html += `<div class="sk-row sk-pick${on}" role="button" tabindex="0" data-item="${r.index}" style="--cols:${COLS}"><div class="sk-main"><div class="sk-row-title">${esc(r.it.n)}</div>`
         + `<div class="sk-row-sub">${esc(r.it.s)}</div></div>`
         + `<div class="sk-row-sub" style="font-size:.86rem;text-align:right">${esc(cap(whereWords(r.alt, r.az)))}</div></div>`;
     }
@@ -494,10 +503,59 @@ function listHtml(P, F) {
       : "Nothing bright is above the horizon right now."}</p>`;
   }
   if (faint.length) {
+    const names = faint.map((r) => `<span class="sk-pick-name" role="button" tabindex="0" `
+      + `data-item="${r.index}">${esc(r.it.n)}</span>`).join(", ");
     html += `<p class="sk-row-sub" style="margin-top:14px">Up but too faint to see from here right `
-      + `now: ${esc(faint.join(", "))}.</p>`;
+      + `now: ${names}.</p>`;
   }
   return html;
+}
+
+// ---------- a tapped object: where it is now, its best time, a fact ----------
+
+function bestStep(P, it) {
+  // the highest moment while fully dark (else at any time shown)
+  const s = P.d.steps;
+  let best = -1;
+  for (let k = 0; k < s.length; k++) {
+    if (s[k] < P.d.dark0 || s[k] > P.d.dark1) continue;
+    if (best < 0 || it.alt[k] > it.alt[best]) best = k;
+  }
+  if (best < 0 || it.alt[best] < 5) {
+    best = 0;
+    for (let k = 1; k < s.length; k++) if (it.alt[k] > it.alt[best]) best = k;
+  }
+  return best;
+}
+
+function pingSvg(P, F, it) {
+  const [alt, az] = itemAt(P, it, F);
+  if (alt <= 0) return "";
+  const [x, y] = project(alt, az);
+  return `<g class="sk-live-mark"><circle class="sk-live-ping" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="18"/>`
+    + `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="18" fill="none" stroke="${GOLD}" stroke-width="2.5"/>`
+    // planets and the Moon already carry a label on the chart
+    + (it.k === "planet" || it.k === "moon" ? ""
+      : `<text x="${(x + 26).toFixed(1)}" y="${(y - 14).toFixed(1)}" fill="${GOLD}" font-size="24" font-family="Geist, sans-serif" font-weight="600">${esc(it.n)}</text>`)
+    + "</g>";
+}
+
+function infoHtml(P, F, it) {
+  const [alt, az] = itemAt(P, it, F);
+  const b = bestStep(P, it);
+  const bestAlt = it.alt[b];
+  const now = alt <= 0 ? "Below the horizon right now."
+    : isSeen(P, F, it, alt, az) ? `Visible now, ${whereWords(alt, az)}.`
+      : `Up now (${whereWords(alt, az)}) but too faint to see from here.`;
+  const best = bestAlt > 0
+    ? `Best tonight: around ${clock(P.d.steps[b], P.d.tz)}, ${whereWords(bestAlt, it.az[b])}.`
+    : "It doesn't rise tonight.";
+  return `<div class="sk-live-info-head"><div><div class="sk-eyebrow">${esc(KIND_LABEL[it.k] || "")}</div>`
+    + `<div class="sk-live-info-name">${esc(it.n)}</div></div>`
+    + `<button type="button" class="sk-live-close" aria-label="Close">×</button></div>`
+    + `<p><b>${esc(best)}</b> ${esc(now)}</p>`
+    + (it.f ? `<p class="sk-live-fact">${esc(it.f)}</p>` : "")
+    + (bestAlt > 0 ? '<button type="button" class="sk-live-best">Show at its best time</button>' : "");
 }
 
 // ---------- the widget ----------
@@ -530,13 +588,16 @@ function build(root, P) {
       </div>
       <div class="sk-live-body">
         <div class="sk-live-chart"><div class="sk-chart">${chartSvg(P)}</div><div class="sk-chart-help"></div></div>
-        <div class="sk-live-list"></div>
+        <div class="sk-live-side"><div class="sk-live-info" hidden></div><div class="sk-live-list"></div></div>
       </div>
     </div>`;
   const range = root.querySelector(".sk-live-range");
   const clockEl = root.querySelector(".sk-live-clock");
   const help = root.querySelector(".sk-chart-help");
   const listEl = root.querySelector(".sk-live-list");
+  const infoEl = root.querySelector(".sk-live-info");
+  const chartEl = root.querySelector(".sk-live-chart");
+  let selected = null;
   const dyn = root.querySelector(".sk-live-dyn");
   const skyLayer = root.querySelector(".sk-live-sky");
   const stopsC = root.querySelectorAll(".sk-live-c");
@@ -574,7 +635,11 @@ function build(root, P) {
     stopE.setAttribute("stop-color", edge);
     skyLayer.innerHTML = milkyWaySvg(P, F, strength);
     const [stars, count] = starsSvg(P, F);
-    dyn.innerHTML = linesSvg(P, F) + labelsSvg(P, F) + stars + planetsSvg(P, F) + moonSvg(P, F);
+    const pick = selected === null ? null : P.d.items[selected];
+    dyn.innerHTML = linesSvg(P, F) + labelsSvg(P, F) + stars + planetsSvg(P, F) + moonSvg(P, F)
+      + (pick ? pingSvg(P, F, pick) : "");
+    infoEl.hidden = !pick;
+    if (pick) infoEl.innerHTML = infoHtml(P, F, pick);
     const label = F.twilight
       ? `${clock(t, d.tz)} · ${t < d.dark0 ? "evening" : "morning"} twilight`
       : clock(t, d.tz);
@@ -588,12 +653,11 @@ function build(root, P) {
     help.textContent = (count === 0
       ? `${howMany} at ${clock(t, d.tz)}: the sky is still too bright.`
       : `${howMany} ${what} at ${clock(t, d.tz)}.`)
-      + " Hold it overhead with north at the top, or turn it so the direction you face is at "
-      + "the bottom.";
+      + " Face a direction and turn the map so that direction is at the bottom.";
     // the list changes only every few minutes: rebuild it only when its content would change
-    const key = `${mode}|${clock(t, d.tz)}`;
+    const key = `${mode}|${clock(t, d.tz)}|${selected}`;
     if (key !== lastList) {
-      listEl.innerHTML = listHtml(P, F);
+      listEl.innerHTML = listHtml(P, F, selected);
       lastList = key;
     }
   };
@@ -603,6 +667,33 @@ function build(root, P) {
       requestAnimationFrame(draw);
     }
   };
+  const choose = (index) => {
+    selected = selected === index ? null : index;
+    schedule();
+    // on a phone the chart is above the list: bring it into view to show the object
+    if (selected !== null && window.innerWidth < 760) {
+      chartEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+  const onPick = (ev) => {
+    const el = ev.target.closest("[data-item]");
+    if (!el) return;
+    if (ev.type === "keydown" && ev.key !== "Enter" && ev.key !== " ") return;
+    ev.preventDefault();
+    choose(Number(el.dataset.item));
+  };
+  listEl.addEventListener("click", onPick);
+  listEl.addEventListener("keydown", onPick);
+  infoEl.addEventListener("click", (ev) => {
+    if (ev.target.closest(".sk-live-close")) {
+      selected = null;
+      schedule();
+    } else if (ev.target.closest(".sk-live-best") && selected !== null) {
+      const b = bestStep(P, P.d.items[selected]);
+      range.value = String(Math.round((P.d.steps[b] - d.t0) / step));
+      schedule();
+    }
+  });
   range.addEventListener("input", schedule);
   range.addEventListener("change", schedule);
   root.querySelectorAll(".sk-live-mode button").forEach((b) => {

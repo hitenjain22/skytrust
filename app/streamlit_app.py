@@ -332,6 +332,21 @@ def night_window(site: Site) -> tuple[pd.Timestamp, pd.Timestamp]:
     return row["dusk_utc"], row["dawn_utc"]
 
 
+@st.cache_data(ttl=60 * 60, show_spinner=False)
+def _moon_phase(hour: str) -> float:
+    """The Moon's phase right now (0 new, 90 first quarter, 180 full), for the brand icon."""
+    from skyfield import almanac
+
+    from skytrust import astro
+
+    t = astro._to_skyfield(pd.DatetimeIndex([pd.Timestamp(hour)]))
+    return float(almanac.moon_phase(astro._ephemeris(), t).degrees[0])
+
+
+def moon_phase_now() -> float:
+    return _moon_phase(live.utcnow().floor("h").isoformat())
+
+
 def link_coords(query) -> tuple[float, float, bool]:
     """Latitude/longitude from a shared link, or the default spot if they're missing, not
     numbers, or outside the area SkyTrust covers. The flag says whether the link's were used."""
@@ -370,7 +385,7 @@ def top_bar(sites) -> tuple[str, str, float | None, float | None, str]:
         brand.markdown(
             ui.block(
                 '<div class="sk-brand">',
-                ui.moon_svg(300.0, 18),
+                ui.moon_svg(moon_phase_now(), 18),
                 "<span>SkyTrust</span>",
                 "</div>",
             ),

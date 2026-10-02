@@ -51,9 +51,9 @@ SHOWPIECES = [
     ("M42", "Orion Nebula", "nebula", "Ori", "The fuzzy 'star' in Orion's sword"),
     ("M8", "Lagoon Nebula", "nebula", "Sgr", "A glow above the spout of the Teapot"),
     ("M13", "Hercules Cluster", "cluster", "Her", "A ball of ~300,000 stars, a smudge by eye"),
-    ("M22", "M22 globular cluster", "cluster", "Sgr", "Above the lid of the Teapot"),
-    ("M41", "M41 cluster", "cluster", "CMa", "Just below Sirius"),
-    ("M35", "M35 cluster", "cluster", "Gem", "At the feet of Gemini"),
+    ("M22", "Messier 22", "cluster", "Sgr", "Above the lid of the Teapot"),
+    ("M41", "Messier 41", "cluster", "CMa", "Just below Sirius"),
+    ("M35", "Messier 35", "cluster", "Gem", "At the feet of Gemini"),
     ("NGC 5139", "Omega Centauri", "cluster", "Cen", "Low in the south; best from SoCal"),
 ]
 

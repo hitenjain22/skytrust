@@ -70,6 +70,32 @@
 }
 .sk-live-chart { position: sticky; top: 84px; }
 .sk-live .sk-row, .sk-live .sk-list { animation: none !important; }
+/* tappable objects */
+.sk-live .sk-pick { cursor: pointer; border-radius: 10px; transition: background 120ms ease; }
+.sk-live .sk-pick:hover { background: color-mix(in srgb, currentColor 5%, transparent); }
+.sk-live .sk-pick.is-on { background: color-mix(in srgb, var(--sk-accent) 12%, transparent);
+  box-shadow: inset 2px 0 0 var(--sk-accent); }
+.sk-live .sk-pick:focus-visible, .sk-pick-name:focus-visible { outline: 2px solid var(--sk-accent); outline-offset: 2px; }
+.sk-pick-name { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.sk-pick-name:hover { color: var(--sk-accent); }
+.sk-live-info { border: 1px solid color-mix(in srgb, var(--sk-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--sk-accent) 7%, transparent); border-radius: 14px;
+  padding: 14px 16px 12px; margin-bottom: 16px; }
+.sk-live-info p { margin: 8px 0 0; font-size: .9rem; line-height: 1.5; }
+.sk-live-info-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.sk-live-info-name { font-family: "Instrument Serif", Georgia, serif; font-size: 1.5rem; line-height: 1.1; margin-top: 2px; }
+.sk-live-fact { color: color-mix(in srgb, currentColor 72%, transparent); }
+.sk-live-close { font: inherit; font-size: 1.3rem; line-height: 1; border: 0; background: transparent;
+  color: inherit; opacity: .6; cursor: pointer; padding: 2px 6px; }
+.sk-live-close:hover { opacity: 1; }
+.sk-live-best { font: inherit; font-size: .8rem; font-weight: 600; margin-top: 10px; padding: 6px 12px;
+  border-radius: 999px; border: 1px solid var(--sk-accent); background: transparent;
+  color: var(--sk-accent); cursor: pointer; }
+.sk-live-best:hover { background: color-mix(in srgb, var(--sk-accent) 14%, transparent); }
+.sk-live-ping { fill: none; stroke: #F0C987; stroke-width: 3; transform-box: fill-box;
+  transform-origin: center; animation: sk-live-ping 1.6s ease-out infinite; }
+@keyframes sk-live-ping { from { transform: scale(1); opacity: .9; } to { transform: scale(2.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .sk-live-ping { animation: none; opacity: 0; } }
 @media (max-width: 760px) {
   .sk-live-controls { grid-template-columns: minmax(0, 1fr); }
   .sk-live-mode { justify-self: start; }

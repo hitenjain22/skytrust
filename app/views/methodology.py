@@ -172,5 +172,6 @@ lights (VNP46A4/VJ146A4, CC0) via lightpollutionmap.info; place names from
 population estimates) and the USGS (GNIS names, 3DEP elevations), all public domain. Astronomy by
 [Skyfield](https://rhodesmill.org/skyfield/) with JPL's DE421 ephemeris, checked against NASA/JPL
 Horizons; stars from ESA's Hipparcos catalogue; twilight brightness from Patat et al. (2006,
-A&A 455:385); meteor showers from the [IMO](https://www.imo.net/) 2026 calendar.
+A&A 455:385); meteor showers from the [IMO](https://www.imo.net/) 2026 calendar. Example sky
+photos on Where to Go: Wikimedia Commons, with the photographer and licence under each one.
 """

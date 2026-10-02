@@ -4,6 +4,8 @@ the nearest darker skies are, and which towns light up its horizon."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -96,6 +98,47 @@ def site_rows(ctx: Context) -> pd.DataFrame:
     df["_p"] = df["p"].astype(float).fillna(-1)
     df["_sqm"] = df["sqm"].astype(float).fillna(0)
     return df.sort_values(["met", "_p", "_sqm"], ascending=False).drop(columns=["_p", "_sqm"])
+
+
+PHOTOS_PATH = Path(__file__).resolve().parents[2] / "config" / "place_photos.yaml"
+
+
+def load_photos(path: Path = PHOTOS_PATH) -> dict[str, dict]:
+    """Example night-sky photos of the featured places (config/place_photos.yaml)."""
+    import yaml
+
+    if not path.exists():
+        return {}
+    return {p["place"]: p for p in yaml.safe_load(path.read_text())["photos"]}
+
+
+def photo_gallery(table: pd.DataFrame, n: int = 3) -> str:
+    """The top places tonight that have an example photo, darkest-ranked first."""
+    photos = load_photos()
+    figs = []
+    for _, r in table.iterrows():
+        ph = photos.get(r["site"])
+        if ph is None:
+            continue
+        tier = f"{r['tier']} sky" if isinstance(r.get("tier"), str) else ""
+        note = f" ({ph['note']})" if ph.get("note") else ""
+        figs.append(
+            f'<figure class="sk-photo"><a href="{ui.esc(ph["page"])}" target="_blank" '
+            f'rel="noopener"><img src="{ui.esc(ph["image"])}" loading="lazy" '
+            f'alt="{ui.esc("Night sky at " + r["place"])}"></a><figcaption><b>'
+            f"{ui.esc(r['place'])}</b> · {ui.esc(tier)}{ui.esc(note)}<br><span>Photo: "
+            f"{ui.esc(ph['credit'])}, {ui.esc(ph['license'])}</span></figcaption></figure>"
+        )
+        if len(figs) == n:
+            break
+    if not figs:
+        return ""
+    return (
+        ui.eyebrow("What the sky looks like at the top places")
+        + f'<div class="sk-photos">{"".join(figs)}</div>'
+        + '<p class="sk-row-sub" style="margin-top:6px">Photos are long exposures: they show '
+        "more stars than your eyes will, but the difference between places is real.</p>"
+    )
 
 
 def window_text(bw, tz: str) -> str:
@@ -544,6 +587,9 @@ def render(ctx: Context) -> None:
     pal = ctx.palette
     rows = [rank_row(i + 1, r, pal) for i, (_, r) in enumerate(table.iterrows())]
     st.markdown(ui.rows(rows), unsafe_allow_html=True)
+    gallery = photo_gallery(table)
+    if gallery:
+        st.markdown(gallery, unsafe_allow_html=True)
 
     path = lightpollution.OVERLAY_PATH
     overlay = path.read_bytes() if path.exists() else None
@@ -551,7 +597,7 @@ def render(ctx: Context) -> None:
         st.markdown(
             ui.section(
                 "Light pollution across California",
-                "Brighter colours = more city "
+                "Brighter colors = more city "
                 "light in the sky (2025). The dots are the places above.",
                 "Map",
             ),

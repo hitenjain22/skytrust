@@ -1,0 +1,52 @@
+# Example night-sky photos for the featured places, from Wikimedia Commons (chosen and
+# checked by hand on 2026-10-01; licences as listed on each file's page). Long exposures:
+# they show more stars than the eye sees. Big Bear Lake has no suitable free photo.
+photos:
+- place: death-valley
+  image: https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2d/Milky_Way_in_Death_Valley_%2826699047960%29.jpg/960px-Milky_Way_in_Death_Valley_%2826699047960%29.jpg
+  page: https://commons.wikimedia.org/wiki/File:Milky_Way_in_Death_Valley_(26699047960).jpg
+  license: Public domain
+  credit: NPS/Dan Duriscoe
+  note: ''
+- place: joshua-tree
+  image: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d3/Stars_and_Milky_Way_above_a_Joshua_tree_%2853433928626%29.jpg/960px-Stars_and_Milky_Way_above_a_Joshua_tree_%2853433928626%29.jpg
+  page: https://commons.wikimedia.org/wiki/File:Stars_and_Milky_Way_above_a_Joshua_tree_(53433928626).jpg
+  license: Public domain
+  credit: Joshua Tree National Park
+  note: ''
+- place: yosemite
+  image: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1a/Yosemites_night_sky_-_with_Milky_Way_%288069499581%29.jpg/960px-Yosemites_night_sky_-_with_Milky_Way_%288069499581%29.jpg
+  page: https://commons.wikimedia.org/wiki/File:Yosemites_night_sky_-_with_Milky_Way_(8069499581).jpg
+  license: CC BY-SA 2.0
+  credit: steve lyon (Flickr)
+  note: star trails from a long exposure
+- place: lake-tahoe
+  image: https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/The_Milky_Way_at_Lake_Tahoe_-_Flickr_-_micadew.jpg/960px-The_Milky_Way_at_Lake_Tahoe_-_Flickr_-_micadew.jpg
+  page: https://commons.wikimedia.org/wiki/File:The_Milky_Way_at_Lake_Tahoe_-_Flickr_-_micadew.jpg
+  license: CC BY-SA 4.0
+  credit: micadew (Flickr)
+  note: ''
+- place: santa-barbara
+  image: https://thumb.wikimedia.org/wikipedia/commons/thumb/9/92/Dusk_shot_of_Santa_Barbara%2C_California%2C_and_the_Pacific_shore%2C_taken_from_bluffs_high_above_the_city_LCCN2013631573.tif/lossy-page1-960px-Dusk_shot_of_Santa_Barbara%2C_California%2C_and_the_Pacific_shore%2C_taken_from_bluffs_high_above_the_city_LCCN2013631573.tif.jpg
+  page: https://commons.wikimedia.org/wiki/File:Dusk_shot_of_Santa_Barbara,_California,_and_the_Pacific_shore,_taken_from_bluffs_high_above_the_city_LCCN2013631573.tif
+  license: Public domain
+  credit: Carol M. Highsmith
+  note: at dusk
+- place: sacramento
+  image: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bf/Sacramento_Night_Skyline.jpg/960px-Sacramento_Night_Skyline.jpg
+  page: https://commons.wikimedia.org/wiki/File:Sacramento_Night_Skyline.jpg
+  license: CC BY-SA 2.0
+  credit: Vince Viloria (Flickr)
+  note: ''
+- place: san-francisco
+  image: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b1/San_Francisco_nighttime_skyline_from_Bernal_Heights.jpg/960px-San_Francisco_nighttime_skyline_from_Bernal_Heights.jpg
+  page: https://commons.wikimedia.org/wiki/File:San_Francisco_nighttime_skyline_from_Bernal_Heights.jpg
+  license: CC BY-SA 4.0
+  credit: Dllu
+  note: ''
+- place: los-angeles
+  image: https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c9/Los_Angeles_Skyline_at_Night.jpg/960px-Los_Angeles_Skyline_at_Night.jpg
+  page: https://commons.wikimedia.org/wiki/File:Los_Angeles_Skyline_at_Night.jpg
+  license: CC BY 2.0
+  credit: BrianLiao
+  note: ''

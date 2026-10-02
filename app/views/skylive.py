@@ -179,9 +179,21 @@ def item_sub(it: sky.SkyItem) -> str:
     return lookup.KIND_LABELS.get(it.kind, "")
 
 
+FACTS_PATH = HERE.parents[1] / "config" / "sky_facts.yaml"
+
+
+def load_facts(path: Path = FACTS_PATH) -> dict[str, str]:
+    """One or two sentences per object (config/sky_facts.yaml), shown when it's tapped."""
+    import yaml
+
+    return yaml.safe_load(path.read_text())["facts"] if path.exists() else {}
+
+
 def items_block(guide: dict) -> list[dict]:
+    facts = load_facts()
     return [
         {
+            "f": facts.get(it.name, ""),
             "n": it.name,
             "k": it.kind,
             "m": None if it.mag is None else round(float(it.mag), 2),

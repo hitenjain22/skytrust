@@ -83,7 +83,7 @@ def test_tonight_shows_probability_and_verdict(offline, monkeypatch):
     api_up(monkeypatch)
     at = visit("Tonight")
     html = " ".join(m.value for m in at.markdown)
-    assert "chance of a clear night" in html
+    assert "clear hours in a row after dark" in html
     assert "Look up tonight" in html and "The week ahead" in html
     assert "<svg" in html  # the picture of tonight's sky
     assert any(v in html for v in ["GO", "MAYBE", "SKIP"])
@@ -232,10 +232,12 @@ def test_risk_slider_changes_the_call(offline, monkeypatch):
     api_up(monkeypatch)
     at = visit("Tonight")
     assert not at.exception
-    for setting in ["Adventurous: go at 30%+", "Cautious: go at 70%+"]:
-        at.select_slider(key="risk").set_value(setting).run()
+    for bar, words in [(0, "go out every night"), (30, "in 10"), (85, "in 10"),
+                       (100, "never go")]:  # fmt: skip
+        at.slider(key="risk").set_value(bar).run()
         assert not at.exception
-        assert any("At this setting tonight's call is" in m.value for m in at.markdown)
+        shown = " ".join(m.value for m in at.markdown)
+        assert f"at {bar}% the call is" in shown and words in shown
 
 
 def test_custom_location_via_deep_link(offline, monkeypatch):
@@ -334,7 +336,7 @@ def test_any_california_place_can_be_chosen(offline, monkeypatch):
     assert not at.exception, at.exception
     assert at.query_params["site"] == ["davis"]
     html = " ".join(m.value for m in at.markdown)
-    assert "Davis" in html and "chance of a clear night" in html
+    assert "Davis" in html and "clear hours in a row after dark" in html
     at.session_state["page"] = "Sky Guide"
     at.run()
     assert not at.exception

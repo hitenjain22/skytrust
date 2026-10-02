@@ -626,3 +626,25 @@ Hiten asked for the path that is easiest to understand and gives the most consis
 - **Accuracy (5,300 → 2,800 px):** the full backtest, glossary and credits are folded.
 - **Also:** a browser test (`pytest -m browser`) now loads the live chart's script, after a
   duplicate declaration broke it in a local commit (caught before any push).
+
+## 2026-10-01: friends' feedback (people new to astronomy)
+- **Tonight:** the summary is now what happens ("Clear until about 2 AM, then clouds move in"),
+  built from the hourly chance of clear sky, plus what to do (when it's dark, or which night this
+  week looks better). The hour-by-hour chart uses real colours (likely clear / either way / likely
+  cloudy), keeps its labels above the bars and the Moon in a strip below them; nothing is clipped.
+  "What the weather models say" became "Do the weather forecasts agree?": a sentence on what model
+  agreement means, a grid of the five forecasts by agency (US, European, Canadian, German) and a
+  sentence computed from it ("they agree until about 12 AM; after that about 3 of 5 say clear").
+  The cloud-layer chart (often empty, hard to read) was removed.
+- **Should I go?** Any bar from 0 to 100 % in 5 % steps; the answer quotes tonight's call and, from
+  the 2026 test at that bar, how many trips in 10 would have been clouded out and how many good
+  nights skipped (0 % and 100 % are stated logically, as there's nothing to test).
+- **Sky Guide:** tap any object to ring it on the chart, see its best time tonight and whether it
+  shows now, and read a one-to-two-sentence fact (`config/sky_facts.yaml`, 66 entries, standard
+  references); "show at its best time" moves the slider there. Wording tightened, US spelling,
+  "Messier 22/41/35" instead of inconsistent names.
+- **Where to Go:** example night-sky photos of the top places (Wikimedia Commons, public domain or
+  CC BY/BY-SA, credited under each photo; `config/place_photos.yaml`). Big Bear Lake has no
+  suitable free photo, so none is shown. A note says they're long exposures.
+- **Brand:** the moon next to "SkyTrust" shows the current phase.
+- **Charts:** more headroom everywhere (nothing clipped at 100 %), unused chart code removed.
