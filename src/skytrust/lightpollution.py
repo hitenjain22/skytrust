@@ -239,6 +239,22 @@ class Grid:
         vals = self.ucd[r0 : r1 + 1, c0 : c1 + 1]
         return vals[inside], glat[inside], glon[inside], dist[inside]
 
+    def at_points(self, lat: float, lon: float, places: dict, radius_km: float):
+        """Like `around`, but for given places (dict of lat, lon arrays, plus names) instead of
+        every cell: (values, lats, lons, distances, index into places) within radius_km."""
+        plat = np.asarray(places["lat"], dtype=float)
+        plon = np.asarray(places["lon"], dtype=float)
+        dist = haversine_km(lat, lon, plat, plon)
+        inside = np.flatnonzero((dist <= radius_km) & (plat >= self.south) & (plat < self.north)
+                                & (plon >= self.west) & (plon < self.east))  # fmt: skip
+        rows = np.clip(
+            ((self.north - plat[inside]) / self.step).astype(int), 0, self.ucd.shape[0] - 1
+        )
+        cols = np.clip(
+            ((plon[inside] - self.west) / self.step).astype(int), 0, self.ucd.shape[1] - 1
+        )
+        return self.ucd[rows, cols], plat[inside], plon[inside], dist[inside], inside
+
 
 def haversine_km(lat1, lon1, lat2, lon2):
     p1, p2 = np.radians(lat1), np.radians(lat2)
@@ -320,44 +336,64 @@ def point(grid: Grid, lat: float, lon: float, sigma: float = 0.15) -> dict | Non
     }
 
 
-def _describe(grid: Grid, lat, lon, lats, lons, dist, i: int) -> dict:
+def _describe(grid: Grid, lat, lon, lats, lons, dist, i: int, places=None, idx=None) -> dict:
     out = point(grid, float(lats[i]), float(lons[i])) or {}
-    return out | {
-        "lat": float(lats[i]),
-        "lon": float(lons[i]),
-        "distance_km": float(dist[i]),
-        "direction": bearing(lat, lon, float(lats[i]), float(lons[i])),
-    }
+    named = {}
+    if places is not None and idx is not None:
+        k = int(idx[i])
+        named = {key: places[key][k] for key in ("name", "id") if key in places}
+    return (
+        out
+        | named
+        | {
+            "lat": float(lats[i]),
+            "lon": float(lons[i]),
+            "distance_km": float(dist[i]),
+            "direction": bearing(lat, lon, float(lats[i]), float(lons[i])),
+        }
+    )
+
+
+def _candidates(grid: Grid, lat: float, lon: float, radius_km: float, places=None):
+    """Grid cells within radius_km, or only the given places (on land, with names) when
+    `places` is passed; finite values only."""
+    if places is None:
+        vals, lats, lons, dist = grid.around(lat, lon, radius_km)
+        idx = None
+    else:
+        vals, lats, lons, dist, idx = grid.at_points(lat, lon, places, radius_km)
+    ok = np.isfinite(vals)
+    return vals[ok], lats[ok], lons[ok], dist[ok], (None if idx is None else idx[ok])
 
 
 def darkest_within(
-    grid: Grid, lat: float, lon: float, radius_km: float, tolerance: float = 0.15
+    grid: Grid, lat: float, lon: float, radius_km: float, tolerance: float = 0.15, places=None
 ) -> dict | None:
     """The nearest spot within radius_km whose sky is as dark as the darkest one there, up to
     `tolerance` mag/arcsec² (the model's own error: smaller differences aren't meaningful, so a
-    close spot beats a marginally darker far one). Straight-line distance; roads not considered."""
-    vals, lats, lons, dist = grid.around(lat, lon, radius_km)
-    ok = np.isfinite(vals)
-    if not ok.any():
+    close spot beats a marginally darker far one). Straight-line distance; roads not considered.
+    With `places`, only those (named, on land) are candidates."""
+    vals, lats, lons, dist, idx = _candidates(grid, lat, lon, radius_km, places)
+    if not len(vals):
         return None
-    vals, lats, lons, dist = vals[ok], lats[ok], lons[ok], dist[ok]
     m = grid.sqm(vals)
     candidates = np.flatnonzero(m >= m.max() - tolerance)
     i = int(candidates[np.argmin(dist[candidates])])
-    return _describe(grid, lat, lon, lats, lons, dist, i)
+    return _describe(grid, lat, lon, lats, lons, dist, i, places, idx)
 
 
 def nearest_dark(
-    grid: Grid, lat: float, lon: float, max_bortle: float = 3, radius_km: float = 200
-) -> dict | None:
-    """The nearest spot with a Bortle class of max_bortle or darker, within radius_km."""
-    vals, lats, lons, dist = grid.around(lat, lon, radius_km)
-    ok = np.isfinite(vals)
-    good = np.flatnonzero(ok & (bortle_number(grid.sqm(np.where(ok, vals, 0))) <= max_bortle))
+    grid: Grid, lat: float, lon: float, max_bortle: float = 3, radius_km: float = 200,
+    places=None,
+) -> dict | None:  # fmt: skip
+    """The nearest spot with a Bortle class of max_bortle or darker, within radius_km (only the
+    given places, when passed)."""
+    vals, lats, lons, dist, idx = _candidates(grid, lat, lon, radius_km, places)
+    good = np.flatnonzero(bortle_number(grid.sqm(vals)) <= max_bortle)
     if not len(good):
         return None
     i = int(good[np.argmin(dist[good])])
-    return _describe(grid, lat, lon, lats, lons, dist, i)
+    return _describe(grid, lat, lon, lats, lons, dist, i, places, idx)
 
 
 def area_shares(grid: Grid, lat: float, lon: float, radius_km: float) -> dict[str, float]:
@@ -374,8 +410,12 @@ def area_shares(grid: Grid, lat: float, lon: float, radius_km: float) -> dict[st
 
 
 def site_report(
-    grid: Grid, lat: float, lon: float, settings: Settings, base: Grid | None = None
-) -> dict | None:
+    grid: Grid, lat: float, lon: float, settings: Settings, base: Grid | None = None,
+    places: dict | None = None,
+) -> dict | None:  # fmt: skip
+    """Light pollution here, its change since the base year, and darker skies nearby. Pass
+    `places` (named places on land) so the darker-sky suggestions are somewhere you can go,
+    never a grid cell out at sea."""
     cfg = settings.raw["light_pollution"]
     here = point(grid, lat, lon, cfg["sigma_sqm"])
     if here is None:
@@ -393,9 +433,9 @@ def site_report(
         "change": change,
         "here": here,
         "darkest": {
-            r: darkest_within(grid, lat, lon, r, cfg["sigma_sqm"]) for r in cfg["radii_km"]
+            r: darkest_within(grid, lat, lon, r, cfg["sigma_sqm"], places) for r in cfg["radii_km"]
         },
-        "nearest_dark": nearest_dark(grid, lat, lon, 3, max(cfg["radii_km"]) * 2),
+        "nearest_dark": nearest_dark(grid, lat, lon, 3, max(cfg["radii_km"]) * 2, places),
         "shares": area_shares(grid, lat, lon, cfg["radii_km"][1]),
         "shares_radius_km": cfg["radii_km"][1],
     }

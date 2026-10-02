@@ -555,6 +555,14 @@ def load(path: Path = PLACES_PATH) -> Gazetteer | None:
     return Gazetteer(table)
 
 
+def land_points(gaz: Gazetteer) -> dict:
+    """Every named place (not ZIP codes) as arrays: somewhere on land, with a name and an id
+    the app can open. Used to keep "darker skies nearby" off the sea."""
+    named = gaz.table[gaz.table["kind"] != "zip"]
+    return {"lat": named["lat"].to_numpy(dtype=float), "lon": named["lon"].to_numpy(dtype=float),
+            "name": named["name"].tolist(), "id": named["id"].tolist()}  # fmt: skip
+
+
 def nearest_named(gaz: Gazetteer, lats, lons) -> pd.DataFrame:
     """For each point, the nearest named place (city, town, community or neighbourhood; not a
     ZIP code) and how far it is."""

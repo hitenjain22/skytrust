@@ -164,6 +164,36 @@ def test_nearest_dark_finds_a_bortle_3_sky():
     assert lp.nearest_dark(g, 38.0, -121.0, max_bortle=3, radius_km=3) is None
 
 
+def test_darker_skies_can_be_limited_to_places_on_land():
+    """Given candidate places (on land), the searches only ever return one of them, with its
+    name: the atlas has values over the sea too, so a bare grid search from a coastal town can
+    point into the ocean (it once sent Santa Barbara 8 km out into the Channel)."""
+    g = city_grid()
+    places = {"lat": np.array([38.1, 38.6, 38.9]), "lon": np.array([-120.9, -120.4, -120.2]),
+              "name": ["Near Town", "Far Hamlet", "Dark Ridge"], "id": ["a", "b", "c"]}  # fmt: skip
+    d = lp.nearest_dark(g, 38.0, -121.0, max_bortle=3, radius_km=150, places=places)
+    assert d is not None and d["name"] in places["name"] and float(d["bortle"]) <= 3
+    w = lp.darkest_within(g, 38.0, -121.0, 120, places=places)
+    assert (w["lat"], w["lon"]) in set(zip(places["lat"], places["lon"], strict=True))
+    assert w["name"] == "Far Hamlet" and w["id"] == "b"  # as dark as Dark Ridge, and nearer
+    assert lp.darkest_within(g, 38.0, -121.0, 5, places=places) is None  # none that close
+
+
+@pytest.mark.skipif(not (lp.GRID_PATH.exists()), reason="light-pollution grid not built")
+def test_santa_barbaras_darker_sky_is_on_land():
+    from skytrust import gazetteer
+    from skytrust.config import load_settings
+
+    gaz = gazetteer.load()
+    if gaz is None:
+        pytest.skip("gazetteer not built")
+    places = gazetteer.land_points(gaz)
+    report = lp.site_report(lp.load(), 34.42, -119.70, load_settings(), places=places)
+    for d in [report["nearest_dark"], *report["darkest"].values()]:
+        if d is not None:
+            assert d.get("name"), d  # a named place, not a grid cell (maybe at sea)
+
+
 def test_area_shares_add_up_to_one():
     shares = lp.area_shares(city_grid(), 38.0, -121.0, 50)
     assert sum(shares.values()) == pytest.approx(1.0)
