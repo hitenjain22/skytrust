@@ -285,3 +285,27 @@ def test_places_that_were_never_evaluated_use_the_unseen_site_blend(settings):
     assert n.track_record is None or n.track_record.get("kind") == "unseen"
     assert not live.uses_site_blend(place)
     assert all(live.uses_site_blend(s) for s in load_sites())
+
+
+def test_a_slow_elevation_service_never_holds_up_a_custom_spot(monkeypatch):
+    """Regression (CI, 2026-10-01): the height lookup for exact coordinates retried 5 times with
+    a 30 s timeout, so a slow service froze the page for minutes. One try, 5 s, then the forecast
+    falls back to the provider's own terrain data."""
+    import math
+
+    from skytrust.config import load_settings
+    from skytrust.data.http import SourceUnavailableError
+
+    seen = {}
+
+    class SlowClient:
+        def __init__(self, settings):
+            seen["settings"] = settings
+
+        def get_json(self, url, params):
+            raise SourceUnavailableError("timed out")
+
+    monkeypatch.setattr(live, "HttpClient", SlowClient)
+    site = live.custom_site(36.45, -117.6, "Somewhere", load_settings())
+    assert math.isnan(site.elevation_m)
+    assert seen["settings"].max_attempts == 1 and seen["settings"].timeout_s <= 5

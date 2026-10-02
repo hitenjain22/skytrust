@@ -14,6 +14,7 @@ recorded payload; `get_forecast` adds the network and the last-good cache around
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import json
 import logging
@@ -58,7 +59,11 @@ def custom_site(
     (la0, la1), (lo0, lo1) = CUSTOM_BOUNDS["lat"], CUSTOM_BOUNDS["lon"]
     if not (la0 <= lat <= la1 and lo0 <= lon <= lo1):
         raise ValueError(f"custom locations must be within lat {la0}-{la1}, lon {lo0}-{lo1}")
-    client = client or HttpClient(settings.http)
+    # One quick try: the height is a refinement (the forecast API falls back to its own terrain
+    # data), so a slow elevation service must never hold up the page (retries took minutes).
+    client = client or HttpClient(
+        dataclasses.replace(settings.http, timeout_s=5.0, max_attempts=1, polite_delay_s=0.0)
+    )
     try:
         elevation = float(
             client.get_json(ELEVATION_URL, {"latitude": lat, "longitude": lon})["elevation"][0]

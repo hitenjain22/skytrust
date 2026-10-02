@@ -29,12 +29,27 @@ NOW = pd.Timestamp("2026-09-25 01:00", tz="UTC")
 def offline(monkeypatch, tmp_path):
     """Freeze time, isolate the last-good cache, and start with empty Streamlit caches."""
     monkeypatch.setattr(live, "utcnow", lambda: NOW)
+    # exact coordinates look up the terrain height online; the tests stay offline (a slow
+    # elevation service on GitHub's runners once timed a test out)
+    monkeypatch.setattr(live, "custom_site", _offline_custom_site)
     monkeypatch.setenv("SKYTRUST_LIVE_CACHE", str(tmp_path))
     # No network for the live-verification record: point it at a file that doesn't exist.
     monkeypatch.setenv("SKYTRUST_FORWARD_SUMMARY", str(tmp_path / "no_summary.json"))
     st.cache_data.clear()
     yield tmp_path
     st.cache_data.clear()
+
+
+def _offline_custom_site(lat, lon, name, settings, client=None):
+    import math
+
+    from skytrust.config import Site
+
+    (la0, la1), (lo0, lo1) = live.CUSTOM_BOUNDS["lat"], live.CUSTOM_BOUNDS["lon"]
+    if not (la0 <= lat <= la1 and lo0 <= lon <= lo1):
+        raise ValueError(f"custom locations must be within lat {la0}-{la1}, lon {lo0}-{lo1}")
+    return Site(f"CUSTOM_{lat:.3f}_{lon:.3f}", name, lat, lon, math.nan, "custom",
+                "America/Los_Angeles")  # fmt: skip
 
 
 def api_up(monkeypatch):
