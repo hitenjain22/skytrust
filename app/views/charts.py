@@ -607,9 +607,14 @@ def light_map(
     zoom: float = 5.3,
     height: int = 460,
     spots: pd.DataFrame | None = None,
+    pickable: pd.DataFrame | None = None,
 ) -> go.Figure:
     """The atlas as a warm glow over a dark base map (light pollution is a night-time view, so
     the base stays dark in both themes), with site markers and optional darker-sky spots.
+
+    `pickable` (columns lat, lon, id, label, visible): points a click can open. Visible ones are
+    faint town dots; invisible ones fill the gaps between towns, so a click anywhere lands on
+    the nearest town. The place id travels as the point's customdata.
 
     `markers` columns: lat, lon, label, color, position. `spots` columns: lat, lon, label and
     optionally position."""
@@ -623,6 +628,21 @@ def light_map(
         [grid.west, grid.south],
     ]
     fig = go.Figure()
+    if pickable is not None and len(pickable):
+        for visible, sub in pickable.groupby("visible"):
+            fig.add_trace(
+                go.Scattermap(
+                    lat=sub["lat"],
+                    lon=sub["lon"],
+                    mode="markers",
+                    customdata=sub["id"],
+                    text=sub["label"],
+                    hovertemplate="%{text}<extra></extra>",
+                    marker={"size": 4, "color": "#D9DCE4", "opacity": 0.45}
+                    if visible
+                    else {"size": 12, "color": "#D9DCE4", "opacity": 0.01},
+                )
+            )
     for _, r in (spots if spots is not None else pd.DataFrame()).iterrows():
         fig.add_trace(
             go.Scattermap(
@@ -644,6 +664,7 @@ def light_map(
                 lon=[r["lon"]],
                 mode="markers",
                 text=[text],
+                customdata=[r.get("site")],  # a click on a place opens it
                 marker={"size": 13, "color": r["color"], "opacity": 0.95},
                 hovertemplate="%{text}<extra></extra>",
             )
@@ -691,6 +712,7 @@ def light_map(
         margin={"l": 0, "r": 0, "t": 0, "b": 0},
         paper_bgcolor=pal["paper"],
         showlegend=False,
+        clickmode="event+select" if pickable is not None else "event",
     )
     return fig
 

@@ -416,6 +416,88 @@ def map_spots(report: dict, site_lat: float, site_lon: float, min_gap_km: float 
     )
 
 
+CLICK_NOTE = (
+    "Click anywhere on a map to open the nearest town. The light-pollution map is about 1 km "
+    "fine, but SkyTrust has forecasts and details for California's towns and communities, so a "
+    "click opens the nearest one: that's as precise as it gets."
+)
+
+
+@st.cache_data(max_entries=64, show_spinner=False)
+def _pickable(bounds: tuple[float, float, float, float], step: float, version: int):
+    from skytrust import gazetteer
+
+    gaz = gazetteer.load()
+    grid = gazetteer.click_grid(gaz, bounds, step)
+    grid = grid.assign(
+        label=[
+            f"Nearest town: {n} ({k:.0f} km) · click to open"
+            for n, k in zip(grid["name"], grid["km"], strict=True)
+        ],  # fmt: skip
+        visible=False,
+    )
+    t = gaz.table[gaz.table["kind"] != "zip"]
+    west, south, east, north = bounds
+    t = t[t["lat"].between(south, north) & t["lon"].between(west, east)]
+    towns = pd.DataFrame(
+        {
+            "lat": t["lat"],
+            "lon": t["lon"],
+            "id": t.index,
+            "label": t["name"] + " · click to open",
+            "visible": True,
+        }
+    )
+    return pd.concat([grid[["lat", "lon", "id", "label", "visible"]], towns], ignore_index=True)
+
+
+def pickable_points(ctx: Context, bounds=None, step: float = 0.2) -> pd.DataFrame | None:
+    """Town dots plus an invisible grid (each point labelled with its nearest town) for a map
+    that opens whatever spot is clicked. `bounds` = (west, south, east, north)."""
+    from skytrust import gazetteer
+
+    gaz = gazetteer.load()
+    if gaz is None or ctx.light is None:
+        return None
+    g = ctx.light
+    bounds = bounds or (g.west, g.south, g.east, g.north)
+    bounds = tuple(round(float(b), 2) for b in bounds)  # a stable cache key
+    return _pickable(bounds, step, len(gaz.table))
+
+
+def open_clicked(key: str) -> None:
+    """Map click callback: switch the app to the clicked place (runs before the rerun, so the
+    location menu can still be changed)."""
+    state = st.session_state.get(key) or {}
+    try:
+        points = state["selection"]["points"]
+    except (KeyError, TypeError):
+        return
+    if not points:
+        return
+    pid = points[0].get("customdata")
+    if isinstance(pid, list):
+        pid = pid[0] if pid else None
+    if not pid or str(pid).startswith("CUSTOM") or pid == st.session_state.get("site"):
+        return  # nothing new, or a spot given by coordinates (not a menu entry)
+    st.session_state["site"] = pid
+    st.session_state["clicked_from"] = (points[0].get("lat"), points[0].get("lon"), pid)
+
+
+def clickable(fig, key: str) -> None:
+    from views.common import PLOT_CONFIG
+
+    st.plotly_chart(
+        fig,
+        width="stretch",
+        config=PLOT_CONFIG,
+        theme="streamlit",
+        on_select=lambda: open_clicked(key),
+        selection_mode="points",
+        key=key,
+    )
+
+
 def local_map(ctx: Context, report: dict, overlay: bytes) -> None:
     pal = ctx.palette
     here = pd.DataFrame(
@@ -436,8 +518,13 @@ def local_map(ctx: Context, report: dict, overlay: bytes) -> None:
         zoom=7.4,
         height=380,
         spots=map_spots(report, ctx.site.lat, ctx.site.lon),
+        pickable=pickable_points(
+            ctx,
+            (ctx.site.lon - 1.6, ctx.site.lat - 1.1, ctx.site.lon + 1.6, ctx.site.lat + 1.1),
+            step=0.04,
+        ),
     )
-    show(fig)
+    clickable(fig, "map_local")
 
 
 # ---------- page ----------
@@ -472,6 +559,7 @@ def render(ctx: Context) -> None:
         )
         markers = pd.DataFrame(
             {
+                "site": table["site"],
                 "lat": table["lat"],
                 "lon": table["lon"],
                 "label": [marker_label(r) for _, r in table.iterrows()],
@@ -488,11 +576,20 @@ def render(ctx: Context) -> None:
             }
         )
         # whole state: San Francisco and Lake Tahoe to Joshua Tree and Los Angeles
-        show(
+        clickable(
             charts.light_map(
-                ctx.light, overlay, markers, pal, center=(36.4, -118.9), zoom=4.85, height=620
-            )
+                ctx.light,
+                overlay,
+                markers,
+                pal,
+                center=(36.4, -118.9),
+                zoom=4.85,
+                height=620,
+                pickable=pickable_points(ctx),
+            ),  # fmt: skip
+            "map_state",
         )
+        st.caption(CLICK_NOTE)
         key = [
             ("dot: all 3 tonight", pal["Go"]),
             ("2 of 3", pal["Maybe"]),
@@ -505,6 +602,17 @@ def render(ctx: Context) -> None:
         ui.section(f"How dark is it at {ctx.site_label}?", "", "Light pollution"),
         unsafe_allow_html=True,
     )
+    clicked = st.session_state.get("clicked_from")
+    if clicked and clicked[2] != ctx.site.id:
+        st.session_state.pop("clicked_from", None)  # another place was chosen since
+    elif clicked and None not in clicked:
+        km = float(lightpollution.haversine_km(clicked[0], clicked[1], ctx.site.lat, ctx.site.lon))
+        where_ = "right where you clicked" if km < 1.5 else f"{km:.0f} km from where you clicked"
+        st.info(
+            f"Showing {ctx.site_label}, the nearest town ({where_}). That's as precise as the "
+            "light-pollution map gets in SkyTrust.",
+            icon=":material/touch_app:",
+        )
     if report is None:
         st.info("No light-pollution data for this location (outside the mapped region).")
     else:

@@ -143,3 +143,12 @@ def test_featured_places_match_their_gazetteer_entries(gaz):
         if p.id in t.index:
             d = g.haversine_km(p.lat, p.lon, t.loc[p.id, "lat"], t.loc[p.id, "lon"])
             assert float(d) < 3.0, p.id
+
+
+def test_a_click_anywhere_maps_to_the_nearest_town(gaz):
+    near = g.nearest_named(gaz, [38.5449, 36.4500], [-121.7405, -117.6000])
+    assert near["id"].iloc[0] == "davis" and near["km"].iloc[0] < 0.5
+    assert near["km"].iloc[1] > 0 and not near["id"].iloc[1].startswith("zip-")
+    grid = g.click_grid(gaz, (-120.0, 35.0, -119.0, 36.0), step=0.25)
+    assert len(grid) == 16  # 4 x 4 points, none farther than 60 km from a town here
+    assert grid["lat"].between(35.0, 36.0).all() and (grid["km"] <= 60).all()

@@ -553,3 +553,38 @@ def load(path: Path = PLACES_PATH) -> Gazetteer | None:
     raw = json.loads(path.read_text())
     table = pd.DataFrame(raw["rows"], columns=raw["columns"]).set_index("id", drop=False)
     return Gazetteer(table)
+
+
+def nearest_named(gaz: Gazetteer, lats, lons) -> pd.DataFrame:
+    """For each point, the nearest named place (city, town, community or neighbourhood; not a
+    ZIP code) and how far it is."""
+    named = gaz.table[gaz.table["kind"] != "zip"]
+    plat, plon = named["lat"].to_numpy(), named["lon"].to_numpy()
+    lats, lons = np.atleast_1d(np.asarray(lats, float)), np.atleast_1d(np.asarray(lons, float))
+    best = np.empty(len(lats), dtype=int)
+    dist = np.empty(len(lats))
+    for k in range(0, len(lats), 500):  # 500 points x every place at a time keeps memory small
+        d = haversine_km(lats[k : k + 500, None], lons[k : k + 500, None], plat, plon)
+        best[k : k + 500] = np.argmin(d, axis=1)
+        dist[k : k + 500] = d[np.arange(len(d)), best[k : k + 500]]
+    return pd.DataFrame(
+        {"id": named.index[best], "name": named["name"].to_numpy()[best], "km": dist}
+    )
+
+
+def click_grid(
+    gaz: Gazetteer,
+    bounds: tuple[float, float, float, float],
+    step: float = 0.2,
+    max_km: float = 60.0,
+) -> pd.DataFrame:
+    """A regular grid over (west, south, east, north), each point labelled with its nearest
+    named place, so a click anywhere on a map can open the nearest town. Points more than
+    `max_km` from any place (open ocean, deep Nevada) are dropped."""
+    west, south, east, north = bounds
+    lats = np.arange(south + step / 2, north, step)
+    lons = np.arange(west + step / 2, east, step)
+    la, lo = (a.ravel() for a in np.meshgrid(lats, lons, indexing="ij"))
+    near = nearest_named(gaz, la, lo)
+    grid = pd.DataFrame({"lat": la, "lon": lo}).join(near)
+    return grid[grid["km"] <= max_km].reset_index(drop=True)

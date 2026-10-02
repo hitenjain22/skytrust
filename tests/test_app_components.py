@@ -216,3 +216,22 @@ def test_map_labels_sit_beside_their_dots():
     assert -118.0 - lon == pytest.approx(360 * 6 / (512 * 2**4.85))
     lat, lon = charts.label_anchor(34.0, -118.0, "top center", zoom=4.85)
     assert lat > 34.0 and lon == -118.0
+
+
+def test_a_map_click_opens_the_clicked_place(monkeypatch):
+    from views import where
+
+    class FakeSt:
+        session_state: dict = {}
+
+    fake = FakeSt()
+    point = {"lat": 35.6, "lon": -117.4, "customdata": "ridgecrest"}
+    fake.session_state = {"site": "los-angeles", "map_state": {"selection": {"points": [point]}}}
+    monkeypatch.setattr(where, "st", fake)
+    where.open_clicked("map_state")
+    assert fake.session_state["site"] == "ridgecrest"
+    assert fake.session_state["clicked_from"] == (35.6, -117.4, "ridgecrest")
+    # a click on a spot given by coordinates (not a menu entry) changes nothing
+    fake.session_state["map_state"]["selection"]["points"][0]["customdata"] = "CUSTOM_36.1_-117"
+    where.open_clicked("map_state")
+    assert fake.session_state["site"] == "ridgecrest"
