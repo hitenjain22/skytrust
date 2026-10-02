@@ -18,3 +18,4 @@ data/live_cache/
 # Forward-test log lives on the `forward-data` branch (written by the scheduled workflow)
 forward/
 logs/
+pytest.log

@@ -21,4 +21,13 @@ jobs:
       - name: Type check
         run: uv run mypy
       - name: Tests (all offline, incl. app smoke tests) with coverage
-        run: uv run pytest -m "not network" --cov --cov-report=term-missing
+        run: |
+          set -o pipefail
+          uv run pytest -m "not network" --cov --cov-report=term-missing -rfE 2>&1 | tee pytest.log
+      # Failing tests become annotations, shown on the run's summary page (and readable through
+      # the public API) without opening the full log.
+      - name: Report failing tests
+        if: failure()
+        run: |
+          grep -E "^(FAILED|ERROR) " pytest.log | head -20 | sed 's/^/::error title=Test failed::/' || true
+          grep -E "^E  " pytest.log | head -30 | sed 's/^/::warning title=Assertion::/' || true
