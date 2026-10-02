@@ -312,3 +312,44 @@ def test_example_photos_are_credited_and_belong_to_featured_places():
     for p in photos.values():
         assert p["image"].startswith("https://") and p["page"].startswith("https://commons.")
         assert p["license"] and p["credit"] and "<" not in p["credit"]
+
+
+# ---------- the night the clocks go back (Nov 1, 2026: 1 AM happens twice) ----------
+
+
+def _fall_back_night():
+    """Dark 8 PM PDT Oct 31 (03:00 UTC) to 5 AM PST Nov 1 (13:00 UTC): 11 hours, two of them
+    labelled 1 AM (08:00 UTC = 1 AM PDT, 09:00 UTC = 1 AM PST)."""
+    idx = pd.date_range("2026-11-01 03:00", "2026-11-01 13:00", freq="h", tz="UTC")
+    night = SimpleNamespace(hourly_clear=pd.Series(0.8, index=idx), dusk_utc=idx[0],
+                            dawn_utc=idx[-1], moon_up=[])  # fmt: skip
+    hourly = pd.DataFrame(
+        [(t, m, 0.3) for t in idx for m in ("gfs_seamless", "ecmwf_ifs025")],
+        columns=["time", "model", "cloud_cover"],
+    )
+    return idx, night, hourly
+
+
+def test_the_hour_by_hour_chart_keeps_both_1_ams_apart():
+    from views import charts, theme
+
+    idx, night, hourly = _fall_back_night()
+    fig = charts.night_chart(hourly, night, "America/Los_Angeles", theme.palette())
+    x = pd.to_datetime(pd.Series(fig.data[0].x))
+    assert len(x) == len(idx) and x.is_monotonic_increasing and x.is_unique
+    assert (x.diff().dropna() == pd.Timedelta(hours=1)).all()  # no hour stacked on another
+    # each tick says what the clock really reads at that moment
+    start = idx[0].tz_convert("America/Los_Angeles").tz_localize(None)
+    for v, label in zip(fig.layout.xaxis.tickvals, fig.layout.xaxis.ticktext, strict=True):
+        real = (idx[0] + (pd.Timestamp(v) - start)).tz_convert("America/Los_Angeles")
+        assert real.strftime("%-I %p") == label
+
+
+def test_the_forecast_grid_keeps_both_1_ams_apart():
+    from views import charts, theme
+
+    idx, night, hourly = _fall_back_night()
+    names = {"gfs_seamless": "US", "ecmwf_ifs025": "European"}
+    fig = charts.model_grid(hourly, night, "America/Los_Angeles", theme.palette(), names)
+    assert len(set(fig.data[0].x)) == len(idx)  # one column per hour, none merged
+    assert list(fig.layout.xaxis.ticktext).count("1 AM") == 2

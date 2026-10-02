@@ -36,13 +36,24 @@ FONT = "Geist, system-ui, sans-serif"
 MAP_FONT = "Open Sans Regular"
 
 
-def _local(ts, tz: str):
-    """Plotly shows naive datetimes as-is, so convert to local wall-clock time first."""
-    return (
-        pd.DatetimeIndex(ts).tz_convert(tz).tz_localize(None)
-        if hasattr(ts, "__len__")
-        else (pd.Timestamp(ts).tz_convert(tz).tz_localize(None))
-    )
+def _axis(ts, tz: str, ref: pd.Timestamp):
+    """Positions on a night's time axis. Plotly shows naive datetimes as they are, so times are
+    placed by the real time elapsed since `ref`, starting from the clock reading at `ref`. Plain
+    wall-clock times would put both 1 AMs of the night the clocks go back on the same spot."""
+    start = pd.Timestamp(ref).tz_convert(tz).tz_localize(None)
+    if hasattr(ts, "__len__"):
+        return start + (pd.DatetimeIndex(ts) - ref)
+    return start + (pd.Timestamp(ts) - ref)
+
+
+def _clock_ticks(
+    start: pd.Timestamp, end: pd.Timestamp, tz: str, ref: pd.Timestamp, every_h: int = 2
+) -> dict:
+    """Tick positions on that axis, labelled with what the clock really reads ("1 AM" twice on
+    the night the clocks go back)."""
+    hours = pd.date_range(start.ceil("h"), end, freq=f"{every_h}h")
+    return {"tickvals": list(_axis(hours, tz, ref)),
+            "ticktext": [t.tz_convert(tz).strftime("%-I %p") for t in hours]}  # fmt: skip
 
 
 def _layout(
@@ -74,8 +85,6 @@ def _layout(
         | ({"bgcolor": pal["surface"], "bordercolor": pal["border"]} if pal.get("surface") else {}),
     )
     fig.update_xaxes(showgrid=False, zeroline=False, showline=False, ticks="")
-    if time_axis:
-        fig.update_xaxes(tickformat="%-I %p", hoverformat="%-I:%M %p")
     fig.update_yaxes(gridcolor=pal["grid"], zeroline=False, showline=False, **(yaxis or {}))
     return fig
 
@@ -129,17 +138,18 @@ def night_chart(hourly: pd.DataFrame, night, tz: str, pal: dict, go_at=0.6, mayb
         dark = med[(med.index >= night.dusk_utc.floor("h")) & (med.index <= night.dawn_utc)]
         p = 1 - dark
     fig = go.Figure()
+    ref = night.dusk_utc
     start, end = night.dusk_utc - PAD, night.dawn_utc + PAD
     fig.add_vrect(
-        x0=_local(night.dusk_utc, tz),
-        x1=_local(night.dawn_utc, tz),
+        x0=_axis(night.dusk_utc, tz, ref),
+        x1=_axis(night.dawn_utc, tz, ref),
         fillcolor=pal["dark"],
         line_width=0,
         layer="below",
     )
     fig.add_trace(
         go.Bar(
-            x=_local(p.index, tz),
+            x=_axis(p.index, tz, ref),
             y=p.to_numpy() * 100,
             marker={
                 "color": [level_color(v, pal, go_at, maybe_at) for v in p.to_numpy()],
@@ -153,23 +163,28 @@ def night_chart(hourly: pd.DataFrame, night, tz: str, pal: dict, go_at=0.6, mayb
     )
     # the Moon: a strip under the bars, so it can't be mistaken for cloud
     for a, b in getattr(night, "moon_up", []) or []:
-        fig.add_shape(type="rect", x0=_local(max(a, start), tz), x1=_local(min(b, end), tz),
+        fig.add_shape(type="rect", x0=_axis(max(a, start), tz, ref), x1=_axis(min(b, end), tz, ref),
                       y0=-13, y1=-7, fillcolor=pal["moon"], line_width=0, opacity=0.75)  # fmt: skip
     if getattr(night, "moon_up", None):
         a = max(night.moon_up[0][0], start)
-        fig.add_annotation(x=_local(a, tz), y=-10, text=" Moon up ", showarrow=False,
+        fig.add_annotation(x=_axis(a, tz, ref), y=-10, text=" Moon up ", showarrow=False,
                            xanchor="right", font={"size": 11, "color": pal["muted"]})  # fmt: skip
     for when, label, anchor in [
         (night.dusk_utc, "Dark", "left"),
         (night.dawn_utc, "Dawn", "right"),
     ]:
-        fig.add_vline(x=_local(when, tz), line={"color": pal["accent2"], "width": 1, "dash": "dot"})
+        line = {"color": pal["accent2"], "width": 1, "dash": "dot"}
+        fig.add_vline(x=_axis(when, tz, ref), line=line)
         fig.add_annotation(
-            x=_local(when, tz), y=1.0, yref="paper", yanchor="bottom",
+            x=_axis(when, tz, ref), y=1.0, yref="paper", yanchor="bottom",
             text=f"{label} {when.tz_convert(tz):%-I:%M %p}", showarrow=False, xanchor=anchor,
             font={"size": 11, "color": pal["accent2"]},
         )  # fmt: skip
-    fig.update_xaxes(type="date", range=[_local(start, tz), _local(end, tz)])
+    fig.update_xaxes(
+        type="date",
+        range=[_axis(start, tz, ref), _axis(end, tz, ref)],
+        **_clock_ticks(start, end, tz, ref),
+    )
     fig = _layout(
         fig,
         pal,
@@ -197,7 +212,8 @@ def model_grid(hourly: pd.DataFrame, night, tz: str, pal: dict, names: dict) -> 
     cover = data.pivot_table(index="time", columns="model", values="cloud_cover") * 100
     models = [m for m in names if m in cover.columns] + [m for m in cover.columns if m not in names]
     z = cover[models].T.to_numpy()
-    x = [t.tz_convert(tz).strftime("%-I %p") for t in cover.index]
+    x = list(range(len(cover.index)))  # one column per hour: clock labels repeat once a year
+    labels = [t.tz_convert(tz).strftime("%-I %p") for t in cover.index]
     y = [names.get(m, m.upper()) for m in models]
     text = [["" if np.isnan(v) else f"{v:.0f}" for v in row] for row in z]
     fig = go.Figure(
@@ -205,12 +221,13 @@ def model_grid(hourly: pd.DataFrame, night, tz: str, pal: dict, names: dict) -> 
             z=z, x=x, y=y, text=text, texttemplate="%{text}", textfont={"size": 10},
             zmin=0, zmax=100, xgap=2, ygap=2, showscale=False,
             colorscale=[[0, "#16203A"], [0.2, "#26324E"], [0.5, "#5B6684"], [1, "#D9DCE4"]],
-            hovertemplate="%{y} · %{x}: %{z:.0f}% cloud<extra></extra>",
+            customdata=[labels] * len(y),
+            hovertemplate="%{y} · %{customdata}: %{z:.0f}% cloud<extra></extra>",
         )
     )  # fmt: skip
     fig = _layout(fig, pal, height=60 + 34 * len(models), legend=False)
     fig.update_yaxes(autorange="reversed", gridcolor="rgba(0,0,0,0)", ticks="")
-    fig.update_xaxes(side="top", tickfont={"size": 11})
+    fig.update_xaxes(side="top", tickfont={"size": 11}, tickvals=x, ticktext=labels)
     fig.update_layout(margin={"l": 4, "r": 4, "t": 30, "b": 4}, hovermode="closest")
     return fig
 
