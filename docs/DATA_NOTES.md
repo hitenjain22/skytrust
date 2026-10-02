@@ -472,3 +472,25 @@ The atlas gives the glow overhead only. `skytrust.domes` spreads it over the sky
   cities, where lights within a few hundred metres dominate (as Cinzano & Elvidge note too).
 - Twilight's direction uses Schaefer's (1998) term: B ∝ 10^(0.4 Z/360k)(1 − 10^(−0.4kX))/RS,
   Z zenith distance (°), X his sky airmass, RS distance from the Sun (°); only its shape is used.
+
+## 19. The statewide network's data (32 stations), added 2026-10-02
+
+Downloads finished 2026-10-02 (2025 forecasts after 00:05 UTC, 2024 after 19:35 UTC, split for
+Open-Meteo's daily limit); the cache re-check made no further requests. Network dataset:
+218,176 rows (station-night-lead) at 32 stations, 2024-01-01 to 2026-08-31. Results are
+generated in RESULTS §14 from `artifacts/statewide.json`.
+
+- **Chester (O05, Lake Almanor basin, 1,382 m):** its ASOS sensor and ERA5 agree on whether a
+  night is usable only 60 % of the time (lead-1 rows), the lowest of the 32 stations (median
+  76 %). The sensor calls nights cloudy that ERA5 calls clear on 28 % of nights, most of all in
+  summer (usable: ASOS 30–43 %, ERA5 70–85 %, every summer 2024–2026, so not one fire season).
+  Local valley cloud and a ceilometer quirk both fit; there's no satellite label for the network
+  stations to decide. The forecasts follow ERA5 there (BSS 0.69 against ERA5, −0.16 against
+  ASOS). Per the plan fixed beforehand, the station stays in; it's flagged in RESULTS.
+- **Regularisation:** the shipped statewide blends chose C inside the grid (0.003–0.03), but
+  inside some evaluation folds (mostly long leads and the single-model baselines) the CV picked
+  the grid's edge, C = 0.001 (251 warnings in the run log). The grid (`c_grid_log10` in
+  settings) was fixed before the test and is not widened after seeing results; a stronger
+  penalty could only help those folds slightly.
+- **LORO vs LOSO agree to within 0.001 in Brier:** expected for a heavily regularised model on
+  ~22,000 training nights, where removing one region barely moves the coefficients.

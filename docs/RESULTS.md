@@ -444,6 +444,39 @@ Planning *when* to image needs hour-level forecasts. A second logistic model per
 | L6 | 9235 | 47.6% | 0.276 [0.219, 0.334] | 0.202 [0.123, 0.274] | 0.000 [0.000, 0.000] |
 | L7 | 9196 | 47.1% | 0.168 [0.098, 0.228] | -0.003 [-0.113, 0.101] | 0.000 [0.000, 0.000] |
 
+## 14. Across California (32 weather stations)
+
+The five airports are all inland Northern California. The forecast for places without their own record was tested at 32 ASOS stations in all ten National Weather Service regions (selection rule in `config/network.yaml`), trained on 2024-2025 and scored once on 2026-01-01 to 2026-08-31. Every station is scored as a place the model never saw: trained on the other regions (leave-one-region-out), cross-checked by leaving out one station at a time (LOSO). "New" = the 27 stations that aren't the five airports; Brier differences are paired on the same nights (week-block bootstrap; ✓ statewide significantly better, ✗ significantly worse). LORO − LOSO near zero means the two ways of holding places out agree.
+
+| lead | BSS, all stations | BSS new: Statewide blend | BSS new: Five-airport geo blend | BSS new: Equal-weight average | statewide − five-airport (Brier) | LORO − LOSO (Brier) |
+|---|---|---|---|---|---|---|
+| L1 | 0.561 [0.516, 0.605] | 0.550 [0.499, 0.596] | 0.552 [0.500, 0.599] | 0.518 [0.463, 0.569] | +0.0005 [-0.0011, +0.0020] | +0.0000 [-0.0002, +0.0003] |
+| L2 | 0.496 [0.438, 0.546] | 0.485 [0.422, 0.539] | 0.477 [0.412, 0.533] | 0.448 [0.377, 0.513] | -0.0017 [-0.0034, -0.0001] ✓ | -0.0004 [-0.0007, -0.0001] |
+| L3 | 0.430 [0.369, 0.481] | 0.411 [0.344, 0.466] | 0.407 [0.338, 0.466] | 0.386 [0.313, 0.449] | -0.0009 [-0.0040, +0.0023] | -0.0000 [-0.0006, +0.0005] |
+| L4 | 0.374 [0.305, 0.430] | 0.359 [0.287, 0.416] | 0.348 [0.273, 0.412] | 0.336 [0.261, 0.399] | -0.0024 [-0.0053, +0.0003] | +0.0001 [-0.0003, +0.0004] |
+| L5 | 0.295 [0.224, 0.356] | 0.277 [0.198, 0.342] | 0.271 [0.192, 0.340] | 0.257 [0.177, 0.328] | -0.0013 [-0.0047, +0.0021] | -0.0000 [-0.0004, +0.0003] |
+| L6 | 0.244 [0.171, 0.308] | 0.224 [0.148, 0.293] | 0.190 [0.106, 0.271] | 0.201 [0.117, 0.280] | -0.0078 [-0.0127, -0.0034] ✓ | -0.0000 [-0.0004, +0.0004] |
+| L7 | 0.144 [0.073, 0.213] | 0.129 [0.054, 0.201] | 0.092 [0.007, 0.172] | 0.074 [-0.024, 0.168] | -0.0084 [-0.0140, -0.0037] ✓ | +0.0002 [-0.0003, +0.0006] |
+
+At lead 1, statewide: BSS 0.561 [0.516, 0.605], false-clear 11.7% [10.1%, 13.4%], AUC 0.935 (7,331 station-nights). Shipping rule (fixed before the results): the statewide blend replaces the five-airport geo blend unless significantly worse at the new stations at any lead. It was not worse at any lead, so it now forecasts every place without its own record.
+
+| region (NWS office), lead 1 | stations | nights | usable rate | BSS | false-clear |
+|---|---|---|---|---|---|
+| Far north interior | 2 | 466 | 47.0% | 0.675 [0.607, 0.738] | 7.9% [3.9%, 13.1%] |
+| Bay Area and Central Coast | 4 | 934 | 39.5% | 0.603 [0.528, 0.677] | 13.6% [9.1%, 18.1%] |
+| San Joaquin Valley and Kern | 3 | 662 | 65.0% | 0.592 [0.514, 0.657] | 9.8% [6.8%, 13.1%] |
+| Sacramento Valley and foothills | 5 | 1152 | 50.6% | 0.561 [0.477, 0.641] | 11.6% [8.7%, 14.3%] |
+| Mojave Desert and Inyo | 2 | 451 | 66.3% | 0.546 [0.443, 0.634] | 11.1% [7.4%, 15.0%] |
+| North Coast | 2 | 476 | 36.8% | 0.546 [0.452, 0.632] | 9.8% [4.3%, 17.4%] |
+| Los Angeles to San Luis Obispo | 5 | 1147 | 50.0% | 0.544 [0.467, 0.617] | 13.5% [10.6%, 16.3%] |
+| Imperial Valley and the Colorado River | 2 | 458 | 71.8% | 0.542 [0.417, 0.645] | 5.4% [2.4%, 9.3%] |
+| Tahoe, Mono and the northeast | 2 | 415 | 54.2% | 0.538 [0.412, 0.646] | 11.8% [7.5%, 16.2%] |
+| San Diego, Orange County and the Inland Empire | 5 | 1170 | 56.1% | 0.506 [0.410, 0.588] | 15.0% [11.4%, 19.7%] |
+
+Weakest station: Chester (O05), BSS 0.05; judged by ERA5 alone 0.69, by its own ASOS sensor alone -0.16: there the station's own sensor reports cloud that the reanalysis (and the forecasts) don't. Strongest: Redding Municipal (RDD), BSS 0.71.
+
+Label sensitivity, lead 1: ASOS only: statewide 0.178 [0.049, 0.285], equal-weight -0.403 [-0.657, -0.192]; ERA5 only: statewide 0.573 [0.525, 0.617], equal-weight 0.557 [0.514, 0.596].
+
 ## Caveats
 
 - **One test period.** Testing covers Jan–Aug 2026 only (36 weeks of labeled nights), so intervals are wide-ish and a different year could rank close methods differently. The test-period base rate of usable nights is lower than in training at 4 of 5 sites (AUN, BIH, SAC, TRK).

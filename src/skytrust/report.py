@@ -1236,6 +1236,144 @@ def hourly_section(h: dict | None) -> list[str]:
     ]
 
 
+STATEWIDE_NAMES = {
+    "statewide_loro": "Statewide blend",
+    "geo_airports": "Five-airport geo blend",
+    "equal_weight": "Equal-weight average",
+}
+
+
+def _brier_diff(d: dict, marks: bool = True) -> str:
+    mark = " ✓" if d["significant"] and d["hi"] < 0 else (" ✗" if d["significant"] else "")
+    mark = mark if marks else ""
+    return f"{d['brier_diff']:+.4f} [{d['lo']:+.4f}, {d['hi']:+.4f}]{mark}"
+
+
+def statewide_lead_table(sw: dict) -> pd.DataFrame:
+    rows = {}
+    for e in sw["labels"]["primary"]:
+        new, every = e["subsets"]["new_stations"], e["subsets"]["all"]
+        row = {"BSS, all stations": with_ci(pd.Series(every["methods"]["statewide_loro"]), "bss")}
+        for m, name in STATEWIDE_NAMES.items():
+            if m in new["methods"]:
+                row[f"BSS new: {name}"] = with_ci(pd.Series(new["methods"][m]), "bss")
+        paired = new["paired"]
+        if "statewide_minus_airport_geo" in paired:
+            d = paired["statewide_minus_airport_geo"]
+            row["statewide − five-airport (Brier)"] = _brier_diff(d)
+        row["LORO − LOSO (Brier)"] = _brier_diff(paired["loro_minus_loso"], marks=False)
+        rows[f"L{e['lead']}"] = row
+    table = pd.DataFrame(rows).T
+    table.index.name = "lead"
+    return table
+
+
+def statewide_region_table(sw: dict, lead: int = RESULTS_LEAD) -> pd.DataFrame:
+    e = next(x for x in sw["labels"]["primary"] if x["lead"] == lead)
+    n_st = pd.Series([s["region"] for s in sw["stations"]]).value_counts()
+    rows = {}
+    order = sorted(e["regions"].items(), key=lambda kv: -kv[1]["methods"]["statewide_loro"]["bss"])
+    for g, v in order:
+        m = pd.Series(v["methods"]["statewide_loro"])
+        rows[sw["region_names"].get(g, g)] = {
+            "stations": int(n_st.get(g, 0)),
+            "nights": v["n"],
+            "usable rate": _fmt(v["base_rate"], "pct"),
+            "BSS": with_ci(m, "bss"),
+            "false-clear": with_ci(m, "false_clear_rate", "pct"),
+        }
+    table = pd.DataFrame(rows).T
+    table.index.name = f"region (NWS office), lead {lead}"
+    return table
+
+
+def statewide_section(sw: dict | None) -> list[str]:
+    """RESULTS §14: the forecast for places without their own record, tested at 32 weather
+    stations across California, each scored as a place the model had never seen."""
+    if not sw:
+        return []
+    lead = RESULTS_LEAD
+    e = next(x for x in sw["labels"]["primary"] if x["lead"] == lead)
+    every = e["subsets"]["all"]
+    m = pd.Series(every["methods"]["statewide_loro"])
+    names = {s["id"]: s["name"].title() for s in sw["stations"]}
+    by_bss = sorted(e["stations"].items(), key=lambda kv: kv[1]["methods"]["statewide_loro"]["bss"])
+    worst_id, worst = by_bss[0]
+    labels = {
+        lab: sw["labels"][lab][0]["stations"].get(worst_id, {}).get("methods", {})
+        for lab in ("asos", "era5")
+        if lab in sw["labels"]
+    }
+    worst_line = (
+        f"Weakest station: {names.get(worst_id, worst_id)} ({worst_id}), BSS "
+        f"{worst['methods']['statewide_loro']['bss']:.2f}"
+        + (
+            f"; judged by ERA5 alone {labels['era5']['statewide_loro']['bss']:.2f}, by its own "
+            f"ASOS sensor alone {labels['asos']['statewide_loro']['bss']:.2f}: there the "
+            "station's own sensor reports cloud that the reanalysis (and the forecasts) don't"
+            if "era5" in labels and "asos" in labels and labels["era5"] and labels["asos"]
+            else ""
+        )
+        + f". Strongest: {names.get(by_bss[-1][0], by_bss[-1][0])} ({by_bss[-1][0]}), BSS "
+        f"{by_bss[-1][1]['methods']['statewide_loro']['bss']:.2f}."
+    )
+    shipping = sw.get("shipping")
+    ship_line = ""
+    if shipping:
+        ship_line = (
+            "Shipping rule (fixed before the results): the statewide blend replaces the "
+            "five-airport geo blend unless significantly worse at the new stations at any lead. "
+            + (
+                "It was not worse at any lead, so it now forecasts every place without its own "
+                "record."
+                if shipping["method"] == "statewide_loro"
+                else f"It was worse at lead(s) {shipping['worse_at_leads']}, so the five-airport "
+                "blend stays."
+            )
+        )
+    sens = []
+    for lab, name in (("asos", "ASOS only"), ("era5", "ERA5 only")):
+        if lab in sw["labels"]:
+            x = sw["labels"][lab][0]["subsets"]["all"]["methods"]
+            sens.append(
+                f"{name}: statewide {with_ci(pd.Series(x['statewide_loro']), 'bss')}, "
+                f"equal-weight {with_ci(pd.Series(x['equal_weight']), 'bss')}"
+            )
+    return [
+        "## 14. Across California (32 weather stations)",
+        "",
+        f"The five airports are all inland Northern California. The forecast for places without "
+        f"their own record was tested at {every['n_stations']} ASOS stations in all ten National "
+        "Weather Service regions (selection rule in `config/network.yaml`), trained on 2024-2025 "
+        f"and scored once on {sw['period']['test'][0]} to {sw['period']['test'][1]}. Every "
+        "station is scored as a place the model never saw: trained on the other regions "
+        "(leave-one-region-out), cross-checked by leaving out one station at a time (LOSO). "
+        f'"New" = the {e["subsets"]["new_stations"]["n_stations"]} stations that aren\'t the '
+        "five airports; Brier differences are paired on "
+        "the same nights (week-block bootstrap; ✓ statewide significantly better, ✗ significantly "
+        "worse). LORO − LOSO near zero means the two ways of holding places out agree.",
+        "",
+        md_table(statewide_lead_table(sw)),
+        "",
+        f"At lead {lead}, statewide: BSS {with_ci(m, 'bss')}, false-clear "
+        f"{with_ci(m, 'false_clear_rate', 'pct')}, AUC {m['auc']:.3f} ({every['n']:,} station-"
+        "nights). " + ship_line,
+        "",
+        md_table(statewide_region_table(sw, lead)),
+        "",
+        worst_line,
+        "",
+        f"Label sensitivity, lead {lead}: " + "; ".join(sens) + ".",
+        "",
+    ]
+
+
+def statewide_results() -> dict | None:
+    from skytrust import statewide
+
+    return statewide.load()
+
+
 def decision_section(v: MetricsView, figure_paths: dict[str, str]) -> list[str]:
     lead = RESULTS_LEAD
     best = v.best_single("primary", lead)
@@ -1447,6 +1585,7 @@ def results_markdown(metrics: dict, figure_paths: dict[str, str]) -> str:
         *walkforward_section(walkforward_results(), figure_paths),
         *spatial_section(spatial_results()),
         *hourly_section(hourly_results()),
+        *statewide_section(statewide_results()),
         "## Caveats",
         "",
         *[f"- {c}" for c in data_caveats(v) + CAVEATS],

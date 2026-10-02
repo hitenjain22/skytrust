@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from skytrust import inference
+from skytrust import inference, network
 from views import charts
 from views import components as ui
 from views.common import Context, held_with_ci, show, station_label, with_ci
@@ -24,6 +24,13 @@ LEAD = 1  # headline numbers: one day ahead, like the rest of the Accuracy page
 def load() -> dict | None:
     path = inference.STATEWIDE_PATH
     return json.loads(path.read_text()) if path.exists() else None
+
+
+def _days_list(leads: list[int]) -> str:
+    """[2, 6, 7] -> '2, 6 and 7 days'."""
+    words = [str(x) for x in leads]
+    joined = words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+    return f"{joined} day{'s' if leads != [1] else ''}"
 
 
 def _verdict(paired: dict | None, better: str, worse: str, same: str) -> str:
@@ -39,8 +46,8 @@ def headline(entry: dict, method: str) -> str:
     m = sub["methods"][method]
     vs_avg = _verdict(
         sub["paired"].get("statewide_minus_equal_weight"),
-        "Better, with 95% confidence",
-        "Worse, with 95% confidence",
+        "Better",
+        "Worse",
         "No clear difference",
     )
     return ui.strip(
@@ -48,21 +55,22 @@ def headline(entry: dict, method: str) -> str:
             ui.stat(
                 "“Go” calls that held",
                 f"{1 - m['false_clear_rate']:.0%}",
-                f"one day ahead, at {sub['n_stations']} stations as never-seen places "
-                f"({held_with_ci(m)}, {sub['n']:,} station-nights in 2026)",
+                f"one day ahead, {sub['n_stations']} stations scored as never seen · 95% range "
+                f"{1 - m['false_clear_rate_hi']:.0%}–{1 - m['false_clear_rate_lo']:.0%} · "
+                f"{sub['n']:,} station-nights in 2026",
                 big=True,
             ),
             ui.stat(
                 "Skill vs the season",
                 f"{m['bss']:.2f}",
-                f"0 = no better than each station's seasonal rate, 1 = perfect "
-                f"({with_ci(m, 'bss', 'num')})",
+                f"0 = no better than each station's usual rate, 1 = perfect · 95% range "
+                f"{m['bss_lo']:.2f}–{m['bss_hi']:.2f}",
                 big=True,
             ),
             ui.stat(
                 "Versus the simple average",
                 vs_avg,
-                "of the five weather models on the same nights (Brier score, week-block bootstrap)",
+                "than simply averaging the five weather models, same nights, 95% confidence",
                 big=True,
             ),
         ],
@@ -139,23 +147,29 @@ def crosschecks(result: dict, entry: dict, method: str) -> list[str]:
     sub = entry["subsets"]["all"]
     loso = sub["paired"].get("loro_minus_loso")
     if loso:
+        size = max(abs(loso["lo"]), abs(loso["hi"]))
         out.append(
-            "Holding out one station at a time instead of a whole region changes the Brier "
-            f"score by {-loso['brier_diff']:+.3f} (95% range {-loso['hi']:+.3f} to "
-            f"{-loso['lo']:+.3f}): {'a real' if loso['significant'] else 'no clear'} "
-            "difference, so the result doesn't hinge on how the stations were held out."
+            "Holding out one station at a time instead of a whole region gives the same accuracy "
+            f"(Brier scores within {max(size, 0.001):.3f}), so the result doesn't hinge on how "
+            "the stations were held out."
         )
     new = entry["subsets"]["new_stations"]
     airport = new["paired"].get("statewide_minus_airport_geo")
     if airport:
-        verdict = _verdict(
-            airport, "more accurate than", "less accurate than", "about as accurate as"
-        )
+        verdict = _verdict(airport, "more accurate than", "less accurate than", "as accurate as")
+        better_at = [
+            int(x["lead"])
+            for x in result["labels"]["primary"]
+            if (d := x["subsets"]["new_stations"]["paired"].get("statewide_minus_airport_geo"))
+            and d["significant"]
+            and d["brier_diff"] < 0
+        ]
+        later = [ld for ld in better_at if ld != LEAD]
+        extra = f", and more accurate {_days_list(later)} ahead (95% confidence)" if later else ""
         out.append(
-            f"At the {new['n_stations']} stations the old model never saw, the statewide model "
-            f"was {verdict} the earlier one trained on five Northern California airports "
-            f"(Brier difference {airport['brier_diff']:+.3f}, 95% range {airport['lo']:+.3f} to "
-            f"{airport['hi']:+.3f})."
+            f"At the {new['n_stations']} stations the old model (trained on five Northern "
+            f"California airports) never saw, the statewide model was {verdict} that model one "
+            f"day ahead{extra}. That's why it now forecasts every place without its own record."
         )
     for label, name in [("asos", "airport ceilometers only"), ("era5", "the ERA5 reanalysis only")]:
         e = next((x for x in result["labels"].get(label, []) if x["lead"] == LEAD), None)
@@ -169,22 +183,21 @@ def crosschecks(result: dict, entry: dict, method: str) -> list[str]:
 
 
 def render(ctx: Context) -> None:
+    result = load()
+    n = len(result["stations"]) if result else len(network.load_network_table())
     st.markdown(
         ui.section(
             "Across California",
-            "The five airports above are all in Northern California's interior. To check every "
-            "kind of place (the coast, the deserts, the mountains, Southern California), the "
-            "forecast for places without their own record was also tested at weather stations "
-            "in all ten National Weather Service regions of the state, each scored as if "
-            "SkyTrust had never seen it.",
+            "The airports above are all inland Northern California. To cover the coast, deserts, "
+            f"mountains and Southern California, the forecast was also tested at {n} weather "
+            "stations in every region of the state, each scored as a place it had never seen.",
             "Statewide test",
         ),
         unsafe_allow_html=True,
     )
-    result = load()
     if result is None:
         st.info(
-            "The statewide test is still running: forecasts for 2024–2026 at 32 weather "
+            f"The statewide test is still running: forecasts for 2024–2026 at {n} weather "
             "stations are being downloaded within the weather service's free limits. This "
             "section fills in when it's done.",
             icon=":material/hourglass_top:",

@@ -259,7 +259,7 @@ def test_custom_site_forecast_uses_geo_blend_and_unseen_record(settings):
     fc = live.build_forecast(site, payload, now, now, settings)
     n = fc.nights[0]
     assert n.p_usable is not None and 0 <= n.p_usable <= 1
-    assert n.track_record is None or n.track_record.get("kind") == "unseen"
+    assert n.track_record is None or n.track_record.get("kind") == _new_place_record_kind()
 
 
 def test_hourly_clear_probabilities_come_from_the_shipped_hourly_model(forecast):
@@ -282,7 +282,7 @@ def test_places_that_were_never_evaluated_use_the_unseen_site_blend(settings):
     now = pd.Timestamp("2026-09-25 01:00", tz="UTC")
     place = next(p for p in load_places() if p.id == "sacramento")
     n = live.build_forecast(place, payload, now, now, settings).nights[0]
-    assert n.track_record is None or n.track_record.get("kind") == "unseen"
+    assert n.track_record is None or n.track_record.get("kind") == _new_place_record_kind()
     assert not live.uses_site_blend(place)
     assert all(live.uses_site_blend(s) for s in load_sites())
 
@@ -309,3 +309,11 @@ def test_a_slow_elevation_service_never_holds_up_a_custom_spot(monkeypatch):
     site = live.custom_site(36.45, -117.6, "Somewhere", load_settings())
     assert math.isnan(site.elevation_m)
     assert seen["settings"].max_attempts == 1 and seen["settings"].timeout_s <= 5
+
+
+def _new_place_record_kind() -> str:
+    """The record a place without its own shown: the statewide test once it has run (shipped
+    2026-10-02), else the five-airport leave-one-site-out test."""
+    from skytrust import inference
+
+    return "statewide" if inference.STATEWIDE_PATH.exists() else "unseen"

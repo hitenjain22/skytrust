@@ -672,3 +672,13 @@ Hiten asked for the path that is easiest to understand and gives the most consis
 - **Darker skies nearby** search named places only (the gazetteer), never bare grid cells: the
   atlas has values at sea, and the old search sent Santa Barbara 8 km into the Channel.
 - **Bug fixed:** on the night the clocks go back (Nov 1), charts placed both 1 AMs on one spot.
+
+## 2026-10-02: statewide test done; the statewide blend ships
+- Applied the rule fixed on 2026-10-01 in code (`statewide.shipping_decision`, tested;
+  `python -m skytrust statewide --ship`): the statewide blend was not significantly worse than the
+  five-airport geo blend at the 27 new stations at any lead (tie at lead 1; significantly better
+  at leads 2, 6 and 7), so `artifacts/geo` now holds it and `statewide.json` records
+  `shipped_method: statewide_loro`. The five airports keep their site-aware blend, so the forward
+  test is unchanged. Numbers: RESULTS §14 (generated).
+- Chester (O05) is the one weak station, a label disagreement between its sensor and ERA5
+  (DATA_NOTES §19); kept in, as planned.
