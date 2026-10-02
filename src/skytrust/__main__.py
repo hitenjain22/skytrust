@@ -306,6 +306,11 @@ def cmd_spatial(args: argparse.Namespace) -> int:
 def cmd_statewide(args: argparse.Namespace) -> int:
     from skytrust import dataset, statewide
 
+    if args.ship:  # apply the pre-registered shipping rule to the finished evaluation
+        d = statewide.ship()
+        worse = d["worse_at_leads"] or "none"
+        print(f"Shipped {d['method']} (significantly worse at leads: {worse})")
+        return 0
     settings = load_settings()
     if args.rebuild or not statewide.NETWORK_DATASET.exists():
         df = statewide.build(settings)
@@ -432,6 +437,8 @@ def build_parser() -> argparse.ArgumentParser:
         "statewide", help="Accuracy at the statewide network (leave-one-region-out) + candidates"
     )
     sw.add_argument("--rebuild", action="store_true", help="rebuild the network dataset first")
+    sw.add_argument("--ship", action="store_true",
+                    help="apply the shipping rule to artifacts/statewide.json")  # fmt: skip
     sw.set_defaults(func=cmd_statewide)
     hr = sub.add_parser("hourly", help="Hourly P(clear) model: build, train, evaluate")
     hr.set_defaults(func=cmd_hourly)

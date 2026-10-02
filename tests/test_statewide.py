@@ -123,3 +123,38 @@ def test_place_record_lists_the_nearest_stations(synthetic_built, fast_settings,
     assert inference.place_record(*davis, lead=1, path=tmp_path / "absent.json") == (
         inference.unseen_site_record(1)
     )
+
+
+def _verdicts(*diffs):
+    """A statewide.json skeleton with the paired statewide-minus-airport-geo Brier difference
+    (point, lo, hi) at the new stations for each lead."""
+    return {"labels": {"primary": [
+        {"lead": i + 1, "subsets": {"new_stations": {"paired": {"statewide_minus_airport_geo": {
+            "brier_diff": d, "lo": lo, "hi": hi, "significant": bool(hi < 0 or lo > 0)}}}}}
+        for i, (d, lo, hi) in enumerate(diffs)]}}  # fmt: skip
+
+
+def test_the_shipping_rule_is_the_one_fixed_before_the_results():
+    """DECISIONS 2026-10-01: the statewide blend ships unless it is significantly *worse* than
+    the five-airport geo blend at the new stations (at any lead); ties and wins ship it."""
+    tie_and_wins = _verdicts((0.0005, -0.001, 0.002), (-0.002, -0.003, -0.0001))
+    assert statewide.shipping_decision(tie_and_wins)["method"] == "statewide_loro"
+    worse = _verdicts((0.0005, -0.001, 0.002), (0.003, 0.001, 0.005))
+    d = statewide.shipping_decision(worse)
+    assert d["method"] == "geo_airports" and d["worse_at_leads"] == [2]
+
+
+def test_shipping_copies_the_winner_and_records_it(tmp_path):
+    import json
+
+    cand, live = tmp_path / "geo_statewide", tmp_path / "geo"
+    cand.mkdir()
+    live.mkdir()
+    (cand / "model_geo_lead1.json").write_text('{"who": "statewide"}')
+    (live / "model_geo_lead1.json").write_text('{"who": "airports"}')
+    path = tmp_path / "statewide.json"
+    path.write_text(json.dumps(_verdicts((-0.001, -0.002, -0.0005))))
+    decision = statewide.ship(path, candidates=cand, live=live)
+    assert decision["method"] == "statewide_loro"
+    assert json.loads((live / "model_geo_lead1.json").read_text())["who"] == "statewide"
+    assert json.loads(path.read_text())["shipped_method"] == "statewide_loro"

@@ -267,6 +267,38 @@ def train_final(df: pd.DataFrame, settings: Settings, root: Path = CANDIDATE_DIR
     return paths
 
 
+def shipping_decision(result: dict) -> dict:
+    """The shipping rule fixed before any result (DECISIONS 2026-10-01): the statewide blend
+    replaces the five-airport geo blend for places without their own record, unless it scores
+    significantly worse than it at the new stations (paired week-block Brier difference, 95% CI
+    above zero) at any lead."""
+    worse = []
+    for e in result["labels"]["primary"]:
+        d = e["subsets"]["new_stations"]["paired"].get("statewide_minus_airport_geo")
+        if d is not None and d["lo"] > 0:
+            worse.append(int(e["lead"]))
+    return {"method": "geo_airports" if worse else "statewide_loro", "worse_at_leads": worse}
+
+
+def ship(path: Path = STATEWIDE_PATH, candidates: Path = CANDIDATE_DIR,
+         live: Path | None = None) -> dict:  # fmt: skip
+    """Apply the shipping rule: copy the statewide blend into the live geo directory when it
+    wins (else keep the five-airport one) and record the choice in statewide.json, which the
+    app reads to show the matching track record."""
+    import shutil
+
+    live = live or inference.ARTIFACTS / "geo"
+    result = json.loads(path.read_text())
+    decision = shipping_decision(result)
+    if decision["method"] == "statewide_loro":
+        for f in sorted(candidates.glob("model_geo_lead*.json")):
+            shutil.copyfile(f, live / f.name)
+    result["shipped_method"] = decision["method"]
+    result["shipping"] = decision
+    path.write_text(json.dumps(result, indent=1))
+    return decision
+
+
 def save(result: dict, path: Path = STATEWIDE_PATH) -> Path:
     path.write_text(json.dumps(evaluate._clean(result), indent=1))
     return path
