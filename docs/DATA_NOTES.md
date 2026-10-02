@@ -416,9 +416,59 @@ from >2,000 FORS1 frames. (The PDF's text layer drops the minus sign of the quad
 the negative sign reaches the night level, 21.32 at ζ = 105°, where the paper says the night sky
 takes over at ζ ≈ 105°–106°.) SkyTrust takes the twilight glow as the brightness above the fit's
 105° value, zero below a 15° solar depression, and brightens it towards the horizon like the dark
-sky. **Limits:** the extra glow on the side of the set Sun isn't modelled (low western sky after
-sunset is brighter than shown), and the paper finds deep twilight ~30 % brighter at a 600 m site
+sky. **Update (2026-10-02):** the glow's spread over the sky now follows Schaefer's twilight term
+(§18), brightest low on the side of the set Sun; Patat's value stays the zenith level. **Limits:**
+the paper finds deep twilight ~30 % brighter at a 600 m site
 than at Paranal (2,600 m), so near sea level twilight lasts slightly longer than shown. Result at
 a dark site: faintest star −0.4 at civil dusk (Sun −6°), 4.0 at −10°, 5.3 at −12°, full darkness
 by −15°; in a city the light pollution takes over by about −12°. The Sky Guide's slider now runs
 from civil dusk to civil dawn with the fully dark part (Sun below −18°) marked.
+
+## 17. Smoke and haze (aerosol optical depth), added 2026-10-02
+
+Source: Open-Meteo air-quality API (`air-quality-api.open-meteo.com/v1/air-quality`,
+`hourly=aerosol_optical_depth`), probed 2026-10-01. Its docs describe the variable as "aerosol
+optical depth at 550 nm of the entire atmosphere"; over California it comes from CAMS global
+(0.4°, ~45 km, updated every 12 h, ~5 days ahead). Probe from Santa Barbara: 120 hourly values,
+the last 11 null (the forecast's end), values 0.06–0.13 (a clean autumn day). Attribution: CAMS
+and Open-Meteo (credits on the Methodology page). Fixture: `tests/fixtures/air_quality_santa_barbara.json`.
+
+How it's used (`skytrust.haze`): extinction k = 0.1066 e^(−h/8.2 km) (Rayleigh) + 0.031 (ozone) +
+1.086 AOD, the V-band split of Schaefer's VISLIMIT program (*Sky & Telescope* May 1998; read from
+the JavaScript port at bogan.ca, which reproduces his constants). His standard aerosol term is
+0.1 mag (AOD ≈ 0.092); the limiting-magnitude formula assumes a typical sky, so only aerosol
+above that counts as haze. A night's value is the median over its dark hours; none after ~5 days.
+**Limits:** AOD doesn't say whether it's smoke, dust or humid haze; water-vapour absorption (weak
+in V) is left out; how smoke *brightens* city glow (more scattering) isn't modelled, so in towns
+smoke may hide even more than shown. The app mentions it only from 0.2 mag of extra dimming.
+
+## 18. City glow by direction (light domes), added 2026-10-02
+
+The atlas gives the glow overhead only. `skytrust.domes` spreads it over the sky:
+
+- **Shape of one dome** by single scattering, with the classic Garstang (1986) atmosphere as
+  restated by Cinzano, Falchi, Elvidge & Baugh (2000, MNRAS 318:641, §4; read from arXiv
+  astro-ph/0003412): molecules ∝ e^(−0.104 h/km), N_m0 = 2.55×10¹⁹ cm⁻³; aerosols K = 1 with
+  a = 0.657 + 0.059K /km; Rayleigh and McClatchey/Garstang aerosol phase functions (eq. 14);
+  Garstang's emission function with a1 = 0.46, a2 = 0.54 (eq. 15); spherical Earth.
+- **Discrepancy found:** the paper's text gives the V-band Rayleigh cross-section as
+  1.136×10⁻²⁶ cm² and B as 4.6×10⁻²⁷. Only 4.6×10⁻²⁷ reproduces its own stated V extinction for
+  K = 1 (0.33 mag, τ = 0.30), and Rayleigh scattering is weaker in V than B, so the labels are
+  swapped in the text; SkyTrust uses 4.6×10⁻²⁷ for V (test pins τ = 0.30, 0.33 mag).
+- **Checks:** both phase functions integrate to 1 (aerosol 1.003); the emission function to 1;
+  with molecules only, a uniform lit plain brightens like sec z (6.1× at 10° vs 5.8), so the
+  geometry is right; aerosols' forward scattering roughly doubles that (12× at 10°). The site grid
+  (sources binned by distance and 5° of azimuth) is within 15 % (~0.15 mag) of summing each
+  source exactly. The horizon row uses the 1° values: a horizontal sight line skims point sources
+  (1/s² blows up); real lights are spread out and hidden by terrain.
+- **Putting it together:** each NASA night-lights source's share of the zenith glow comes from
+  the fitted ring kernel (§12); the atlas keeps the zenith value; the physics only spreads it.
+- **Sanity:** from Santa Barbara the sky 10° up towards Los Angeles (ESE) is brighter than over the
+  ocean; from Joshua Tree the glow is towards Palm Springs and LA, the desert side darker; at
+  Death Valley it's nearly even with a slight bump towards Las Vegas, consistent with the Garstang
+  model's agreement with all-sky measurements at Sunrise Rock (Mojave) in Cinzano & Elvidge (2004).
+- **Limits:** single scattering, sea-level observer (mountain sites above the haze see domes
+  dimmer than shown), no terrain shadowing, K fixed at 1. Least certain: low sky *inside* big
+  cities, where lights within a few hundred metres dominate (as Cinzano & Elvidge note too).
+- Twilight's direction uses Schaefer's (1998) term: B ∝ 10^(0.4 Z/360k)(1 − 10^(−0.4kX))/RS,
+  Z zenith distance (°), X his sky airmass, RS distance from the Sun (°); only its shape is used.

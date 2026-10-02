@@ -648,3 +648,27 @@ Hiten asked for the path that is easiest to understand and gives the most consis
   suitable free photo, so none is shown. A note says they're long exposures.
 - **Brand:** the moon next to "SkyTrust" shows the current phase.
 - **Charts:** more headroom everywhere (nothing clipped at 100 %), unused chart code removed.
+
+## 2026-10-02: the sky by direction, smoke and haze, one clear-sky story
+- **Why:** the Sky Guide treated every direction alike. From a town, low sky towards a city is
+  far brighter than the other way; right after sunset the west is brighter than the east; and
+  October smoke can dim a cloud-free night. These are the biggest remaining gaps between what the
+  app says and what a beginner sees.
+- **Choice:** keep the calibrated pieces (atlas at the zenith, Patat's twilight level, K&S
+  moonlight) and add published *shapes* on top: Garstang single-scattering domes weighted by the
+  fitted night-lights kernel, Schaefer's twilight term, Schaefer's extinction split with CAMS
+  aerosol optical depth. A plain zenith number still gives the old model exactly (tested), so
+  nothing else moved.
+- **Browser:** the live chart now adds the parts of the sky's brightness itself (small tables
+  plus per-step factors) instead of one table per step; a Playwright test runs the real script
+  on a real night (Moon, twilight, haze, LA's glow) and matches Python (99 % within 0.06 mag).
+- **Haze is a qualifier, not a new forecast:** the tested probability is about clouds only; a
+  clear but hazy night says "Clear but hazy tonight" and the note says what to expect.
+- **One clear-sky story:** "Clearest" (and the week ahead and Where to Go) now come from the same
+  calibrated hourly chances as the summary sentence; they once disagreed (median-model window).
+  Times are the half hour between hourly readings.
+- **Early evening:** the tested hourly model covers dark hours only, so the evening note just
+  counts the forecasts showing a clear sky (a baseline already in the hourly evaluation).
+- **Darker skies nearby** search named places only (the gazetteer), never bare grid cells: the
+  atlas has values at sea, and the old search sent Santa Barbara 8 km into the Channel.
+- **Bug fixed:** on the night the clocks go back (Nov 1), charts placed both 1 AMs on one spot.

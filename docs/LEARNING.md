@@ -942,3 +942,45 @@ drag. Moving the drawing to the browser (not the physics) makes it smooth with n
 1. Why didn't you port the moonlight model to JavaScript?
 2. How do you get a star's altitude and azimuth without calling atan2 for each star every frame?
 3. How did you test JavaScript code from a Python test suite?
+
+## `skytrust/domes.py`: city glow in every direction
+**What:** Spreads the atlas's overhead light pollution over the whole sky, so a star low towards
+Los Angeles is marked as lost in its glow while the same height over the ocean is fine.
+
+**Why:** Light pollution is directional. Beginners standing in a town see domes of light on the
+horizon; a zenith-only number can't say which way to face.
+
+**Key concepts:**
+- **Calibrate the level, model the shape:** the atlas (fitted to thousands of sky-meter readings)
+  keeps the zenith value; a physical model only supplies the ratio of each direction to the zenith,
+  so its absolute errors cancel.
+- **Single scattering, numerically:** for a light source at distance D, integrate along the line of
+  sight: light emitted (Garstang's function) × transmission to the point × scattering towards you
+  (Rayleigh + aerosol phase functions) × transmission back. Tabulate once, interpolate in the app.
+- **Limiting cases as tests:** with molecules only, a uniform lit plain must brighten like sec z;
+  the phase functions must integrate to 1; the atmosphere must give the paper's 0.33 mag. One of
+  these checks exposed a swapped constant in the source paper.
+
+**Interview questions:**
+1. Why use the physics only for the ratio to the zenith?
+2. How would you validate a sky-brightness model with no all-sky measurements of your own?
+3. Why does the model give the horizon row the 1° values?
+
+## `skytrust/haze.py`: smoke and haze dim a clear night
+**What:** Turns the CAMS aerosol forecast into V-band extinction and a plain note ("Smoke or haze
+in the forecast: fewer stars, and the Milky Way is washed out").
+
+**Why:** In a California autumn a cloud-free night can still be a poor one; the cloud forecast
+alone would send people out under smoke.
+
+**Key concepts:**
+- **Optical depth to magnitudes:** transmission e^(−τ X) is a dimming of 1.086 τ X magnitudes.
+- **Only the excess counts:** limiting-magnitude formulas already assume a typical sky, so haze is
+  measured against Schaefer's standard aerosol (0.1 mag), never as a bonus for unusually clean air.
+- **A qualifier, not a new score:** the tested probability stays about clouds; haze changes the
+  words and the Sky Guide's star counts, not the number.
+
+**Interview questions:**
+1. Why not fold haze into the "chance of a clear night"?
+2. What does aerosol optical depth not tell you about smoke?
+3. How do you keep an optional data source from slowing or breaking the page?
