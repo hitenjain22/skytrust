@@ -183,7 +183,7 @@ def _stars_svg(x, y, mags, bvs, limits, names, scale: float) -> list[str]:
 def sky_svg(
     site: Site,
     utc: pd.Timestamp,
-    zenith_sqm: float,
+    zenith_sqm,  # sky.Conditions (or a plain zenith brightness)
     *,
     mode: str = "here",
     labels: bool = True,
@@ -199,16 +199,20 @@ def sky_svg(
     uid = "c" + format(abs(hash((site.id, str(utc), mode, compact))) % 16**8, "08x")
     moon = obs.moon(t)
     moon_up = float(moon["alt"][0]) > 0
-    sqm_here = zenith_sqm if mode == "here" else sky.NATURAL_SQM
+    cond = sky.conditions(zenith_sqm)
+    sqm_here = cond if mode == "here" else cond.natural()
     # twilight (leftover sunlight) applies in both modes: it is nature, not light pollution
-    sun_alt = float(obs.body("sun", t)["alt"][0])
+    sun = obs.body("sun", t)
+    sun_alt, sun_az = float(sun["alt"][0]), float(sun["az"][0])
 
     s = cat.stars
     alt, az = obs.altaz(s["ra"].to_numpy(), s["dec"].to_numpy(), t, key="stars")
     alt, az = alt[0], az[0]
     up = alt > 0
     m_state = sky.moon_at(moon, 0, alt[up], az[up]) if mode == "here" else None
-    limit = sky.faintest_visible(alt[up], sqm_here, m_state, sun_alt=sun_alt)
+    sun_sep = sky.separation_deg(az[up], alt[up], sun_az, sun_alt)
+    limit = sky.faintest_visible(alt[up], sqm_here, m_state, sun_alt=sun_alt, az=az[up],
+                                 sun_sep=sun_sep)  # fmt: skip
     mags = s["mag"].to_numpy()[up]
     show = mags <= limit
     x, y = project(alt[up][show], az[up][show])
@@ -226,6 +230,7 @@ def sky_svg(
             sqm_here,
             sky.moon_at(moon, 0, 90.0, 0.0) if mode == "here" else None,
             sun_alt=sun_alt,
+            az=0.0,
         )
     )
     mw_strength = float(
@@ -244,6 +249,8 @@ def sky_svg(
                 sqm_here,
                 sky.moon_at(moon, 0, a, z) if mode == "here" else None,
                 sun_alt=sun_alt,
+                az=z,
+                sun_sep=sky.separation_deg(z, a, sun_az, sun_alt),
             )
         )
         if mg > lim:

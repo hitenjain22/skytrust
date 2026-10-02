@@ -547,6 +547,20 @@ def bearings(lat, lon, lat2, lon2) -> np.ndarray:
     return (np.degrees(np.arctan2(x, y)) + 360) % 360
 
 
+def zenith_shares(src: Sources, lat: float, lon: float, radius_km: float = 300.0):
+    """Each light source within `radius_km`: distance (km), bearing (deg) and its share of the
+    artificial glow overhead under the fitted kernel (emission x K(distance))."""
+    near = (np.abs(src.lat - lat) < radius_km / 111) & (
+        np.abs(src.lon - lon) < radius_km / (111 * max(math.cos(math.radians(lat)), 0.2))
+    )
+    la, lo, e = src.lat[near], src.lon[near], src.emission[near]
+    d = haversine_km(lat, lon, la, lo)
+    keep = d <= radius_km
+    la, lo, e, d = la[keep], lo[keep], e[keep], d[keep]
+    ring = np.clip(np.searchsorted(src.edges, d, side="right") - 1, 0, len(src.kernel) - 1)
+    return d, bearings(lat, lon, la, lo), e * src.kernel[ring]
+
+
 def darkest_window(dome: np.ndarray, size: int = 4) -> int:
     """Start sector of the `size` adjacent sectors with the least dome light. Ties (common when
     most directions have no lights at all) go to the window facing farthest from the strongest

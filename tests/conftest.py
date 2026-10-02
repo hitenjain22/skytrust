@@ -62,3 +62,23 @@ def synthetic_built(tmp_path_factory, settings) -> tuple[pd.DataFrame, Path]:
     root = tmp_path_factory.mktemp("raw")
     write_synthetic_cache(root, settings.forecast_models, SYNTH_FIRST, SYNTH_LAST)
     return dataset.build_dataset(settings, SYNTH_SITES, SYNTH_FIRST, SYNTH_LAST, root=root), root
+
+
+@pytest.fixture(autouse=True)
+def _no_live_haze(request, monkeypatch):
+    """Offline tests never ask for the smoke-and-haze forecast (a test passing its own client
+    still can); `network` tests use the real service."""
+    if request.node.get_closest_marker("network"):
+        yield
+        return
+    from skytrust import haze
+
+    real = haze.fetch
+    monkeypatch.setattr(
+        haze,
+        "fetch",
+        lambda lat, lon, settings, client=None: (
+            real(lat, lon, settings, client) if client is not None else None
+        ),
+    )
+    yield

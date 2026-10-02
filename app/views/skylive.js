@@ -1,9 +1,10 @@
 // SkyTrust · live sky chart for the Sky Guide.
 //
-// Python (app/views/skylive.py, src/skytrust/sky.py) computes every position and the visibility
-// tables; this file only interpolates between the night's 20-minute steps, turns RA/Dec of date
-// into altitude/azimuth with the local sidereal time (the formula of
-// sky.Observer.altaz_from_radec), projects onto the planisphere (skychart.project) and draws.
+// Python (app/views/skylive.py, src/skytrust/sky.py) computes every position and tabulates the
+// parts of the sky's brightness; this file interpolates between the night's 20-minute steps,
+// turns RA/Dec of date into altitude/azimuth with the local sidereal time (the formula of
+// sky.Observer.altaz_from_radec), adds up the brightness (the arithmetic of
+// sky.limit_from_tables), projects onto the planisphere (skychart.project) and draws.
 // The chart is redrawn on every movement of the slider, so it follows the finger or mouse.
 
 const SIZE = 1000;
@@ -65,14 +66,23 @@ function prepare(d) {
     stars,
     milkyWay: d.milkyWay.map(rings),
     lines: rings(d.figures.lines),
-    tables: d.tables.map((t) => (t ? Float64Array.from(decode(t, Int16Array), (v) => v / 100)
-      : null)),
-    maxHere: Math.max(...d.curveHere) + 0.05,
-    maxDark: Math.max(...d.curveDark) + 0.05,
+    vis: Object.fromEntries(Object.entries(d.vis).map(([k, v]) => [k, decode(v, Float32Array)])),
+    moonK: decode(d.moonK, Float32Array),
+    twK: decode(d.twK, Float32Array),
     latRad: d.lat * D2R,
     sinLat: Math.sin(d.lat * D2R),
     cosLat: Math.cos(d.lat * D2R),
   };
+}
+
+// The faintest star anywhere can't beat the natural sky with no Moon or twilight: stars fainter
+// than that are skipped before any other work.
+function maxLimit(P) {
+  let best = -9;
+  for (let i = 0; i < P.d.alts.length; i++) {
+    best = Math.max(best, nelmOf(P.vis.nat[i]) - P.d.k * P.vis.xExt[i] + P.d.kRef);
+  }
+  return best + 0.05;
 }
 
 // ---------- geometry ----------
@@ -114,10 +124,15 @@ function place(P, F, set, i) {
   return OUT;
 }
 
-// Angle from the Moon (deg) for a point with horizontal unit vector (north, east, up).
+// Angles from the Moon and the Sun (deg) for a point with horizontal unit vector (north, east, up).
 function moonSep(F, north, east, up) {
   if (!F.moonUp) return 180;
   const c = north * F.mN + east * F.mE + up * F.mU;
+  return Math.acos(Math.max(-1, Math.min(1, c))) / D2R;
+}
+
+function sunSep(F, north, east, up) {
+  const c = north * F.sN + east * F.sE + up * F.sU;
   return Math.acos(Math.max(-1, Math.min(1, c))) / D2R;
 }
 
@@ -187,29 +202,60 @@ function bracket(grid, v) {
   return [lo, (v - grid[lo]) / (grid[lo + 1] - grid[lo])];
 }
 
-function curveAt(P, curve, alt) {
-  const [i, f] = bracket(P.d.alts, alt);
-  return lerp(curve[i], curve[i + 1], f);
+// Sky brightness in nanolamberts -> faintest star a typical observer sees (sky.nl_to_mag, then
+// sky.limiting_magnitude: Schaefer 1990 as converted by Unihedron).
+function nelmOf(nl) {
+  const m = (20.7233 - Math.log(nl / 34.08)) / 0.92104;
+  return 7.93 - 5 * Math.log10(10 ** (4.316 - m / 5) + 1);
 }
 
-function tableAt(P, table, alt, sep) {
-  const nSep = P.d.seps.length;
-  const [i, fa] = bracket(P.d.alts, alt);
-  const [j, fs] = bracket(P.d.seps, sep);
-  const top = lerp(table[i * nSep + j], table[i * nSep + j + 1], fs);
-  const bottom = lerp(table[(i + 1) * nSep + j], table[(i + 1) * nSep + j + 1], fs);
+function glowAt(P, i, fa, az) {
+  const g = P.vis.glow;
+  const n = P.d.glowAz.length;
+  const a = ((((az % 360) + 360) % 360) / 360) * n;
+  const j = Math.floor(a) % n;
+  const j2 = (j + 1) % n;
+  const fz = a - Math.floor(a);
+  const top = g[i * n + j] * (1 - fz) + g[i * n + j2] * fz;
+  const bottom = g[(i + 1) * n + j] * (1 - fz) + g[(i + 1) * n + j2] * fz;
   return lerp(top, bottom, fa);
 }
 
-// Faintest visible magnitude at (alt, separation from the Moon) at the current moment.
-function limitAt(P, F, alt, sep) {
-  if (F.mode === "dark") {  // no light pollution or Moon; twilight still counts
-    const dk = (k) => curveAt(P, P.d.darkTwilight[k] || P.d.curveDark, alt);
-    return lerp(dk(F.s), dk(F.s + 1), F.f);
+// The parts of the sky's brightness (nL) at (alt, az) now, given the distances from the Moon and
+// the Sun: the natural sky, city glow, moonlight and twilight. "A perfectly dark sky" drops the
+// glow and the Moon; twilight is nature and always counts.
+function skyParts(P, F, alt, az, mSep, sSep) {
+  const V = P.vis;
+  const [i, fa] = bracket(P.d.alts, alt);
+  const out = { i, fa, nat: lerp(V.nat[i], V.nat[i + 1], fa), glow: 0, moon: 0, tw: 0 };
+  if (F.mode !== "dark") {
+    out.glow = glowAt(P, i, fa, az);
+    if (F.moonK > 0) {
+      const [j, fs] = bracket(P.d.seps, mSep);
+      out.moon = F.moonK * 10 ** lerp(V.moonSep[j], V.moonSep[j + 1], fs)
+        * lerp(V.moonAlt[i], V.moonAlt[i + 1], fa);
+    }
   }
-  const one = (k) => (P.tables[k] ? tableAt(P, P.tables[k], alt, sep)
-    : curveAt(P, P.d.curveHere, alt));
-  return lerp(one(F.s), one(F.s + 1), F.f);
+  if (F.twK > 0) {
+    out.tw = (F.twK * lerp(V.twAlt[i], V.twAlt[i + 1], fa)) / Math.min(180, Math.max(1, sSep));
+  }
+  return out;
+}
+
+function limitOf(P, parts) {
+  const { i, fa } = parts;
+  const b = parts.nat + parts.glow + parts.moon + parts.tw;
+  return nelmOf(b) - P.d.k * lerp(P.vis.xExt[i], P.vis.xExt[i + 1], fa) + P.d.kRef;
+}
+
+// Faintest visible magnitude at (alt, az) at the current moment.
+function limitAt(P, F, alt, az, mSep, sSep) {
+  return limitOf(P, skyParts(P, F, alt, az, mSep, sSep));
+}
+
+function seps(F, alt, az) {
+  return [F.moonUp ? separation(alt, az, F.moonAlt, F.moonAz) : 180,
+    separation(alt, az, F.sunAlt, F.sunAz)];
 }
 
 // ---------- words ----------
@@ -334,7 +380,8 @@ function starsSvg(P, F) {
     const o = place(P, F, s, i);
     const alt = o[0];
     if (alt <= 0) continue;
-    const lm = limitAt(P, F, alt, F.mode === "dark" ? 180 : moonSep(F, o[3], o[4], o[5]));
+    const az = Math.atan2(o[4], o[3]) / D2R;
+    const lm = limitAt(P, F, alt, az, moonSep(F, o[3], o[4], o[5]), sunSep(F, o[3], o[4], o[5]));
     if (mg > lm) continue;
     count++;
     const x = o[1];
@@ -371,8 +418,7 @@ function planetsSvg(P, F) {
     const mg = lerp(p.mag[F.s], p.mag[F.s + 1], F.f);
     const [alt, az] = altazDeg(P, ra, dec, F.lst);
     if (alt <= 0) continue;
-    const sep = F.moonUp ? separation(alt, az, F.moonAlt, F.moonAz) : 180;
-    if (mg > limitAt(P, F, alt, sep)) continue;
+    if (mg > limitAt(P, F, alt, az, ...seps(F, alt, az))) continue;
     const [x, y] = project(alt, az);
     const r = Math.min(7.5, Math.max(3.2, 4.6 - 0.55 * mg));
     out += `<g><title>${esc(p.name)} (mag ${mg.toFixed(1)})</title>`
@@ -381,6 +427,29 @@ function planetsSvg(P, F) {
       + `<text x="${(x + r + 9).toFixed(1)}" y="${(y + 5).toFixed(1)}" fill="${GOLD}" font-size="22" font-family="Geist, sans-serif">${esc(p.name)}</text></g>`;
   }
   return out;
+}
+
+// City glow on the horizon: an amber haze along the rim, as strong as the glow 3° up compared
+// with the natural sky there.
+function domesSvg(P, F) {
+  if (F.mode === "dark") return "";
+  const n = P.d.glowAz.length;
+  const [i, fa] = bracket(P.d.alts, 3);
+  const nat = lerp(P.vis.nat[i], P.vis.nat[i + 1], fa);
+  let out = "";
+  for (let j = 0; j < n; j++) {
+    const az = (j * 360) / n;
+    const ratio = glowAt(P, i, fa, az) / nat;
+    const op = Math.min(0.5, 0.11 * Math.log2(1 + ratio));
+    if (op < 0.04) continue;
+    const a0 = (az - 180 / n) * D2R;
+    const a1 = (az + 180 / n) * D2R;
+    const rr = R - 16;
+    out += `<path d="M${(CX - rr * Math.sin(a0)).toFixed(1)} ${(CY - rr * Math.cos(a0)).toFixed(1)} `
+      + `A${rr} ${rr} 0 0 0 ${(CX - rr * Math.sin(a1)).toFixed(1)} ${(CY - rr * Math.cos(a1)).toFixed(1)}" `
+      + `stroke-opacity="${op.toFixed(2)}"/>`;
+  }
+  return out ? `<g fill="none" stroke="#E9A55E" stroke-width="44" filter="url(#mwblur-${P.uid})">${out}</g>` : "";
 }
 
 function moonSvg(P, F) {
@@ -414,11 +483,21 @@ function frame(P, t, mode) {
   F.mN = Math.cos(moonAlt * D2R) * Math.cos(moonAz * D2R);
   F.mE = Math.cos(moonAlt * D2R) * Math.sin(moonAz * D2R);
   F.mU = Math.sin(moonAlt * D2R);
-  F.zen = mode === "dark" ? lerp(P.d.zenDark[s], P.d.zenDark[s + 1], f)
-    : lerp(P.d.zen[s], P.d.zen[s + 1], f);
+  const sun = P.d.sun;
+  const [sunAlt, sunAz] = altazDeg(P, lerpAngle(sun.ra[s], sun.ra[s + 1], f),
+    lerp(sun.dec[s], sun.dec[s + 1], f), lst);
+  F.sunAlt = sunAlt;
+  F.sunAz = sunAz;
+  F.sN = Math.cos(sunAlt * D2R) * Math.cos(sunAz * D2R);
+  F.sE = Math.cos(sunAlt * D2R) * Math.sin(sunAz * D2R);
+  F.sU = Math.sin(sunAlt * D2R);
+  F.moonK = F.moonUp ? lerp(P.moonK[s], P.moonK[s + 1], f) : 0;
+  F.twK = lerp(P.twK[s], P.twK[s + 1], f);
+  // the sky overhead (mag/arcsec²) sets the chart's colour and the Milky Way's strength
+  const z = skyParts(P, F, 90, 0, 90 - moonAlt, 90 - sunAlt);
+  F.zen = (20.7233 - Math.log((z.nat + z.glow + z.moon + z.tw) / 34.08)) / 0.92104;
   F.twilight = t < P.d.dark0 - 60000 || t > P.d.dark1 + 60000;
-  // nothing anywhere can beat the moonless sky's best (moonlight only brightens the sky)
-  F.maxLimit = mode === "dark" ? P.maxDark : P.maxHere;
+  F.maxLimit = P.maxLimit;
   return F;
 }
 
@@ -458,11 +537,7 @@ function itemAt(P, it, F) {
 function isSeen(P, F, it, alt, az) {
   if (alt <= 0) return false;
   if (it.k === "moon") return true;
-  if (F.mode === "dark") {
-    return it.v <= limitAt(P, F, alt, 180) - (it.x ? P.d.extendedMargin : 0);
-  }
-  const sep = F.moonUp ? separation(alt, az, F.moonAlt, F.moonAz) : 180;
-  return it.v <= limitAt(P, F, alt, sep) - (it.x ? P.d.extendedMargin : 0);
+  return it.v <= limitAt(P, F, alt, az, ...seps(F, alt, az)) - (it.x ? P.d.extendedMargin : 0);
 }
 
 function listHtml(P, F, selected) {
@@ -540,13 +615,28 @@ function pingSvg(P, F, it) {
     + "</g>";
 }
 
+// Why something that's up can't be seen: the biggest extra light where it is, in plain words.
+function whyHidden(P, F, alt, az) {
+  const p = skyParts(P, F, alt, az, ...seps(F, alt, az));
+  const extra = { tw: p.tw, moon: p.moon, glow: p.glow };
+  const top = Object.keys(extra).reduce((a, b) => (extra[a] >= extra[b] ? a : b));
+  if (extra[top] < p.nat) {
+    return alt < 15 ? "too low: the thick air near the horizon dims it"
+      : P.d.haze ? `too faint through tonight's ${P.d.haze}` : "too faint to see from here";
+  }
+  if (top === "tw") return "too faint in the twilight";
+  if (top === "moon") return "washed out by moonlight";
+  const dome = (P.d.domes || []).find((x) => Math.abs(((az - x.b + 540) % 360) - 180) <= 30);
+  return dome ? `lost in the glow of ${dome.n}` : "lost in the light pollution";
+}
+
 function infoHtml(P, F, it) {
   const [alt, az] = itemAt(P, it, F);
   const b = bestStep(P, it);
   const bestAlt = it.alt[b];
   const now = alt <= 0 ? "Below the horizon right now."
     : isSeen(P, F, it, alt, az) ? `Visible now, ${whereWords(alt, az)}.`
-      : `Up now (${whereWords(alt, az)}) but too faint to see from here.`;
+      : `Up now (${whereWords(alt, az)}) but ${whyHidden(P, F, alt, az)}.`;
   const best = bestAlt > 0
     ? `Best tonight: around ${clock(P.d.steps[b], P.d.tz)}, ${whereWords(bestAlt, it.az[b])}.`
     : "It doesn't rise tonight.";
@@ -633,7 +723,7 @@ function build(root, P) {
     const [centre, edge] = skyFillStops(F.zen);
     stopsC.forEach((el) => el.setAttribute("stop-color", centre));
     stopE.setAttribute("stop-color", edge);
-    skyLayer.innerHTML = milkyWaySvg(P, F, strength);
+    skyLayer.innerHTML = domesSvg(P, F) + milkyWaySvg(P, F, strength);
     const [stars, count] = starsSvg(P, F);
     const pick = selected === null ? null : P.d.items[selected];
     dyn.innerHTML = linesSvg(P, F) + labelsSvg(P, F) + stars + planetsSvg(P, F) + moonSvg(P, F)
@@ -730,6 +820,7 @@ export default function (component) {
   root.dataset.id = data.id;
   try {
     const P = prepare(data);
+    P.maxLimit = maxLimit(P);
     P.uid = "lv" + Math.random().toString(36).slice(2, 9);
     build(root, P);
   } catch (err) {

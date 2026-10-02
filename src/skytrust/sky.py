@@ -255,41 +255,117 @@ def twilight_nl(sun_alt_deg):
     return np.where(zeta >= hi, 0.0, glow)
 
 
-def sky_brightness(alt_deg, zenith_sqm, moon=None, k=EXTINCTION_K, sun_alt=None):
-    """Sky brightness (mag/arcsec²) at altitude(s) `alt_deg`. `zenith_sqm` is the moonless
-    zenith brightness here (natural + light pollution). `moon` = dict(alt, sep, phase_angle)
-    with `sep` the angular distance of each sky position from the Moon (same shape as alt).
-    `sun_alt` adds twilight: the measured zenith glow, brightened towards the horizon the way
-    the dark sky is (the extra glow on the side of the set Sun isn't modelled)."""
+def twilight_shape(zenith_deg, sun_sep_deg, sun_alt, k):
+    """How twilight brightness varies over the sky, relative to the zenith, from Schaefer's
+    (1998) twilight term: B ~ 10^(0.4 Z / 360k) (1 - 10^(-0.4 k X)) / RS, with Z the zenith
+    distance in degrees, X his sky airmass and RS the distance from the Sun in degrees (so the
+    sky is brightest low on the side of the set Sun). Only the shape is used: the zenith level
+    is Patat's measurement. Without `sun_sep` only the altitude part applies."""
+    z = np.clip(np.asarray(zenith_deg, dtype=float), 0, 90)
+    cz = np.cos(np.radians(z))
+    x = 1 / (cz + 0.025 * np.exp(-11 * cz))
+    rs0 = 90.0 - np.asarray(sun_alt, dtype=float)  # the zenith's distance from the Sun
+    rs = rs0 if sun_sep_deg is None else np.clip(np.asarray(sun_sep_deg, dtype=float), 1, 180)
+    top = 10 ** (0.4 * z / (360 * k)) * (1 - 10 ** (-0.4 * k * x)) / rs
+    return top / ((1 - 10 ** (-0.4 * k)) / rs0)
+
+
+@dataclass(frozen=True)
+class Conditions:
+    """Everything apart from the Moon and the Sun that sets how bright the sky is at one place
+    tonight: the light pollution overhead (atlas), how that glow spreads over the sky (`domes`),
+    and how clear the air is (`haze`). A plain number in place of Conditions means "this zenith
+    brightness, glow spread evenly, a typical clear night"."""
+
+    zenith_sqm: float
+    k: float = EXTINCTION_K  # tonight's extinction, mag per airmass
+    k_ref: float = EXTINCTION_K  # a typical clear night's here (what NELM formulas assume)
+    glow: np.ndarray | None = field(default=None, repr=False)  # GLOW_ALTS x GLOW_AZ, 1 overhead
+
+    @property
+    def haze_mag(self) -> float:
+        """Extra dimming overhead from smoke or haze (mag)."""
+        return max(self.k - self.k_ref, 0.0)
+
+    def natural(self) -> Conditions:
+        """The same night under a perfectly dark sky: no light pollution, same air."""
+        return Conditions(NATURAL_SQM, self.k, self.k_ref)
+
+
+def conditions(sky) -> Conditions:
+    return sky if isinstance(sky, Conditions) else Conditions(float(sky))
+
+
+def glow_at(glow: np.ndarray, alt, az):
+    """Bilinear lookup in a glow grid (GLOW_ALTS x GLOW_AZ, azimuth wraps)."""
+    alt = np.clip(np.asarray(alt, dtype=float), GLOW_ALTS[0], GLOW_ALTS[-1])
+    i = np.clip(np.searchsorted(GLOW_ALTS, alt, side="right") - 1, 0, len(GLOW_ALTS) - 2)
+    fa = (alt - GLOW_ALTS[i]) / (GLOW_ALTS[i + 1] - GLOW_ALTS[i])
+    step = 360.0 / len(GLOW_AZ)
+    a = (np.asarray(az, dtype=float) % 360) / step
+    j = np.floor(a).astype(int) % len(GLOW_AZ)
+    j2 = (j + 1) % len(GLOW_AZ)
+    fz = a - np.floor(a)
+    top = glow[i, j] * (1 - fz) + glow[i, j2] * fz
+    bottom = glow[i + 1, j] * (1 - fz) + glow[i + 1, j2] * fz
+    return top * (1 - fa) + bottom * fa
+
+
+def sky_nl(alt_deg, sky, moon=None, sun_alt=None, az=None, sun_sep=None):
+    """Sky brightness in nanolamberts, as the sum of its parts:
+
+    - natural sky: the atlas's natural zenith value, brighter towards the horizon (K&S's van
+      Rhijn term with extinction);
+    - city glow: the atlas's artificial zenith value, spread over the sky by the light domes
+      (`Conditions.glow`, needs `az`), or like the natural sky when there's no glow grid;
+    - moonlight (K&S 1991) when `moon` = dict(alt, sep, phase_angle) is given and the Moon is up;
+    - twilight for the Sun at `sun_alt`: Patat's zenith value x Schaefer's shape (`sun_sep` =
+      distance of each position from the Sun)."""
+    c = conditions(sky)
     z = 90 - np.asarray(alt_deg, dtype=float)
     x = airmass(z)
-    base = mag_to_nl(zenith_sqm)
+    # the glow's spread uses a typical night's extinction: smoke also scatters light (city glow
+    # most of all), which this model doesn't follow, so it acts on starlight and moonlight only
+    rhijn = 10 ** (-0.4 * c.k_ref * (x - 1)) * x
+    natural = mag_to_nl(max(NATURAL_SQM, c.zenith_sqm))  # the atlas can read darker
+    artificial = max(float(mag_to_nl(c.zenith_sqm) - mag_to_nl(NATURAL_SQM)), 0.0)
+    spread = rhijn if c.glow is None or az is None else glow_at(c.glow, 90 - z, az)
+    b = natural * rhijn + artificial * spread
     if sun_alt is not None:
-        base = base + twilight_nl(sun_alt)
-    b = base * 10 ** (-0.4 * k * (x - 1)) * x
+        b = b + twilight_nl(sun_alt) * twilight_shape(z, sun_sep, sun_alt, c.k_ref)
     if moon is not None and moon["alt"] > 0:
-        b = b + moon_sky_nl(moon["sep"], z, 90 - moon["alt"], moon["phase_angle"], k)
-    return nl_to_mag(b)
+        b = b + moon_sky_nl(moon["sep"], z, 90 - moon["alt"], moon["phase_angle"], c.k)
+    return b
 
 
-def faintest_visible(alt_deg, zenith_sqm, moon=None, k=EXTINCTION_K, sun_alt=None):
-    """Catalogue magnitude of the faintest star visible at each altitude: the limiting magnitude
-    for the local sky brightness, minus the extra extinction an object there suffers compared
-    with the zenith (NELM is quoted for the zenith, so the zenith's own extinction is already in
-    it)."""
+def sky_brightness(alt_deg, sky, moon=None, sun_alt=None, az=None, sun_sep=None):
+    """Sky brightness (mag/arcsec²) at altitude(s) `alt_deg`; see `sky_nl`."""
+    return nl_to_mag(sky_nl(alt_deg, sky, moon, sun_alt, az, sun_sep))
+
+
+def nelm_to_limit(nelm, alt_deg, sky):
+    """From the limiting magnitude for the local sky brightness to the faintest star visible
+    at that altitude: minus the star's own extinction, k X. NELM is quoted for the zenith on a
+    typical clear night, whose extinction k_ref is already in it, so k_ref is added back: on a
+    typical night that is the usual -k (X - 1), and smoke or haze dims everything further."""
+    c = conditions(sky)
+    return nelm - c.k * extinction_airmass(90 - np.asarray(alt_deg, dtype=float)) + c.k_ref
+
+
+def faintest_visible(alt_deg, sky, moon=None, sun_alt=None, az=None, sun_sep=None):
+    """Catalogue magnitude of the faintest star visible at each position."""
     alt = np.asarray(alt_deg, dtype=float)
-    nelm = limiting_magnitude(sky_brightness(alt, zenith_sqm, moon, k, sun_alt))
-    return nelm - k * (extinction_airmass(90 - alt) - 1)
+    nelm = limiting_magnitude(sky_brightness(alt, sky, moon, sun_alt, az, sun_sep))
+    return nelm_to_limit(nelm, alt, sky)
 
 
 # ---------- visibility tables for the browser's live chart ----------
-# The Sky Guide's chart is redrawn in the browser while the time slider moves. The visibility
-# physics stays here, in one place: for each Moon state the faintest visible magnitude is
-# tabulated on an (altitude x distance-from-the-Moon) grid and the browser interpolates
-# bilinearly. Distance from the Moon is spaced tightly near the Moon, where the glare changes
-# fastest. `interpolate_limit` is the same lookup in Python, used to bound the error in tests.
-# Altitude steps are fine near the horizon, where the air path (and so the extinction) changes
-# fastest: from 38 airmasses at 0° to 10 at 5°.
+# The Sky Guide's chart is redrawn in the browser while the time slider moves. The physics stays
+# here: each part of the sky's brightness is tabulated on small grids and the browser adds them
+# up (linear interpolation; moonlight's fall-off with distance from the Moon in log space) and
+# applies the same limiting-magnitude formula. `limit_from_tables` is the browser's arithmetic
+# in Python, used to bound its error in tests. Altitude steps are fine near the horizon, where
+# the air path (and so the extinction) changes fastest: 38 airmasses at 0°, 10 at 5°.
 LIMIT_ALTS = np.array(
     [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 10, 12, 14, 17, 20, 24, 28, 33, 40, 48, 56, 65,
      75, 90.0]
@@ -300,30 +376,126 @@ LIMIT_SEPS = np.array(
     [0.5, 1, 1.5, 2, 3, 4, 5, 6, 7, 8.5, 9.999, 10, 11.5, 13, 15, 17, 20, 24, 28, 35, 45, 55, 70,
      85, 100, 120, 140, 160, 180.0]
 )  # fmt: skip
+GLOW_ALTS = LIMIT_ALTS
+GLOW_AZ = np.arange(0, 360, 10.0)  # = domes.SITE_AZ
 
 
-def limit_table(
-    zenith_sqm: float, moon_alt: float, phase_angle: float, sun_alt: float | None = None
-) -> np.ndarray:
-    """Faintest visible magnitude on the LIMIT_ALTS x LIMIT_SEPS grid with the Moon at
-    `moon_alt` (and twilight for the Sun at `sun_alt`); without the Moon (moon_alt <= 0) every
-    column is the same."""
-    aa, ss = np.meshgrid(LIMIT_ALTS, LIMIT_SEPS, indexing="ij")
-    moon = {"alt": float(moon_alt), "sep": ss, "phase_angle": float(phase_angle)}
-    return np.asarray(faintest_visible(aa, zenith_sqm, moon, sun_alt=sun_alt), dtype=float)
+def moon_scale(moon_alt, phase_angle, k):
+    """The per-moment factor of K&S's moonlight: the Moon's brightness for its phase, dimmed
+    by the air in front of it (airmass at the horizon when it's below, so the factor changes
+    smoothly as it rises; the browser ignores it while the Moon is down)."""
+    alpha = np.abs(np.asarray(phase_angle, dtype=float))
+    i_star = 10 ** (-0.4 * (3.84 + 0.026 * alpha + 4e-9 * alpha**4))
+    return i_star * 10 ** (-0.4 * k * airmass(90 - np.asarray(moon_alt, dtype=float)))
 
 
-def interpolate_limit(table: np.ndarray, alt, sep) -> np.ndarray:
-    """Bilinear lookup in a limit_table (what the browser does)."""
-    alt = np.clip(np.asarray(alt, dtype=float), LIMIT_ALTS[0], LIMIT_ALTS[-1])
-    sep = np.clip(np.asarray(sep, dtype=float), LIMIT_SEPS[0], LIMIT_SEPS[-1])
-    i = np.clip(np.searchsorted(LIMIT_ALTS, alt, side="right") - 1, 0, len(LIMIT_ALTS) - 2)
-    j = np.clip(np.searchsorted(LIMIT_SEPS, sep, side="right") - 1, 0, len(LIMIT_SEPS) - 2)
-    fa = (alt - LIMIT_ALTS[i]) / (LIMIT_ALTS[i + 1] - LIMIT_ALTS[i])
-    fs = (sep - LIMIT_SEPS[j]) / (LIMIT_SEPS[j + 1] - LIMIT_SEPS[j])
-    top = table[i, j] * (1 - fs) + table[i, j + 1] * fs
-    bottom = table[i + 1, j] * (1 - fs) + table[i + 1, j + 1] * fs
-    return top * (1 - fa) + bottom * fa
+def moon_sep_term(sep_deg):
+    """K&S's scattering by distance from the Moon: Rayleigh + Mie (the formula changes at 10°)."""
+    rho = np.clip(np.asarray(sep_deg, dtype=float), 0.5, 180)
+    rayleigh = 10**5.36 * (1.06 + np.cos(np.radians(rho)) ** 2)
+    return rayleigh + np.where(rho >= 10, 10 ** (6.15 - rho / 40), 6.2e7 * rho**-2.0)
+
+
+def browser_tables(sky) -> dict:
+    """The static parts, on LIMIT_ALTS (and GLOW_AZ, LIMIT_SEPS):
+
+    - nat: natural sky (nL); glow: city glow (nL, alts x azimuths);
+    - moonAlt: K&S's 1 - 10^(-0.4 k X) for the observed position; moonSep: log10 of
+      `moon_sep_term`; twAlt: Schaefer's twilight shape without its 1/RS factor (x RS0 / RS);
+    - xExt: the star's own airmass (Kasten & Young); k, kRef."""
+    c = conditions(sky)
+    z = 90 - LIMIT_ALTS
+    x = airmass(z)
+    rhijn = 10 ** (-0.4 * c.k_ref * (x - 1)) * x
+    natural = float(mag_to_nl(max(NATURAL_SQM, c.zenith_sqm)))
+    artificial = max(float(mag_to_nl(c.zenith_sqm) - mag_to_nl(NATURAL_SQM)), 0.0)
+    if c.glow is None:
+        glow = np.repeat((artificial * rhijn)[:, None], len(GLOW_AZ), axis=1)
+    else:
+        glow = artificial * c.glow
+    cz = np.cos(np.radians(z))
+    xs = 1 / (cz + 0.025 * np.exp(-11 * cz))
+    kr = c.k_ref
+    tw = 10 ** (0.4 * z / (360 * kr)) * (1 - 10 ** (-0.4 * kr * xs)) / (1 - 10 ** (-0.4 * kr))
+    return {
+        "nat": natural * rhijn,
+        "glow": glow,
+        "moonAlt": 1 - 10 ** (-0.4 * c.k * x),
+        "moonSep": np.log10(moon_sep_term(LIMIT_SEPS)),
+        "twAlt": tw,
+        "xExt": extinction_airmass(z),
+        "k": c.k,
+        "kRef": c.k_ref,
+    }
+
+
+def step_scalars(sky, moon_alt, phase_angle, sun_alt) -> dict:
+    """Per-moment factors: moonlight (`moon_scale`) and twilight (Patat's zenith value x RS0,
+    the browser divides by each position's distance from the Sun)."""
+    c = conditions(sky)
+    sun_alt = np.asarray(sun_alt, dtype=float)
+    return {
+        "moonK": moon_scale(moon_alt, phase_angle, c.k),
+        "twK": twilight_nl(sun_alt) * (90.0 - sun_alt),
+    }
+
+
+def _lerp_axis(nodes, values, x):
+    x = np.clip(np.asarray(x, dtype=float), nodes[0], nodes[-1])
+    return np.interp(x, nodes, values)
+
+
+def limit_from_tables(t: dict, alt, az, moon_sep=None, moon_k=0.0, sun_sep=None, tw_k=0.0,
+                      dark: bool = False):  # fmt: skip
+    """The browser's arithmetic: faintest visible magnitude from the tables. `dark` drops light
+    pollution and the Moon ("a perfectly dark sky"); twilight always counts."""
+    alt = np.asarray(alt, dtype=float)
+    b = _lerp_axis(LIMIT_ALTS, t["nat"], alt)
+    if not dark:
+        b = b + glow_at(t["glow"], alt, az)
+        if moon_sep is not None and moon_k > 0:
+            sep_term = 10 ** _lerp_axis(LIMIT_SEPS, t["moonSep"], moon_sep)
+            b = b + moon_k * sep_term * _lerp_axis(LIMIT_ALTS, t["moonAlt"], alt)
+    if sun_sep is not None and tw_k > 0:
+        b = b + tw_k * _lerp_axis(LIMIT_ALTS, t["twAlt"], alt) / np.clip(sun_sep, 1, 180)
+    nelm = limiting_magnitude(nl_to_mag(b))
+    return nelm - t["k"] * _lerp_axis(LIMIT_ALTS, t["xExt"], alt) + t["kRef"]
+
+
+def site_conditions(site: Site, zenith_sqm: float, aod: float | None = None) -> Conditions:
+    """Tonight's Conditions at a place: the atlas's zenith brightness, the light domes around
+    it, and the extinction for its height and tonight's smoke or haze (None = typical)."""
+    from skytrust import haze
+
+    elev = site.elevation_m if site.elevation_m == site.elevation_m else 0.0  # NaN -> sea level
+    return Conditions(
+        float(zenith_sqm),
+        k=haze.extinction(elev, aod),
+        k_ref=haze.extinction(elev, None),
+        glow=_glow(round(site.lat, 3), round(site.lon, 3)),
+    )
+
+
+@lru_cache(maxsize=256)
+def _glow(lat: float, lon: float) -> np.ndarray | None:
+    from skytrust import domes, skyglow
+
+    src = _sources()
+    if src is None or domes.load_shape() is None:
+        return None
+    d, az, w = skyglow.zenith_shares(src, lat, lon)
+    if not len(w) or w.sum() <= 0:
+        return None
+    g = domes.sky_shape(d, az, w, alts=GLOW_ALTS, az=GLOW_AZ)
+    g.setflags(write=False)
+    return g
+
+
+@lru_cache(maxsize=1)
+def _sources():
+    from skytrust import skyglow
+
+    return skyglow.load_sources()
 
 
 # ---------- catalogue ----------
@@ -634,17 +806,17 @@ def moon_at(moon: dict, i: int, alt, az) -> dict:
 
 
 def is_visible(
-    alt: float, az: float, vis_mag: float, extended: bool, zenith_sqm: float, moon: dict, i: int
+    alt: float, az: float, vis_mag: float, extended: bool, cond, moon: dict, i: int
 ) -> bool:
     """Can a typical observer see it with the naked eye here, at time index i?"""
     if alt <= 0:
         return False
-    limit = float(faintest_visible(alt, zenith_sqm, moon_at(moon, i, alt, az)))
+    limit = float(faintest_visible(alt, cond, moon_at(moon, i, alt, az), az=az))
     return vis_mag <= limit - (EXTENDED_MARGIN if extended else 0.0)
 
 
 def _finish(
-    item: SkyItem, times: pd.DatetimeIndex, min_alt: float, zenith_sqm: float, moon: dict
+    item: SkyItem, times: pd.DatetimeIndex, min_alt: float, cond, moon: dict
 ) -> SkyItem | None:
     """Best moment = highest point; drop it if it never gets `min_alt` high."""
     item.best = int(np.argmax(item.track_alt))
@@ -653,9 +825,7 @@ def _finish(
     above = np.flatnonzero(item.track_alt >= min_alt)
     item.up_from, item.up_until = times[above[0]], times[above[-1]]
     item.best_utc = times[item.best]
-    item.visible = is_visible(
-        item.alt, item.az, item.vis_mag, item.extended, zenith_sqm, moon, item.best
-    )
+    item.visible = is_visible(item.alt, item.az, item.vis_mag, item.extended, cond, moon, item.best)
     return item
 
 
@@ -663,7 +833,7 @@ def tonight(
     site: Site,
     dusk: pd.Timestamp,
     dawn: pd.Timestamp,
-    zenith_sqm: float,
+    cond,
     catalog: Catalog | None = None,
 ) -> dict:
     """Everything the sky guide needs for one night of darkness (dusk -> dawn, UTC)."""
@@ -683,7 +853,7 @@ def tonight(
                 SkyItem(label, "planet", mag, mag, False, b["alt"], b["az"], con=con),
                 times,
                 5.0,
-                zenith_sqm,
+                cond,
                 moon,
             )
         )
@@ -692,7 +862,7 @@ def tonight(
         SkyItem("Moon", "moon", -12.0, -12.0, False, moon["alt"], moon["az"]),
         times,
         0.0,
-        zenith_sqm,
+        cond,
         moon,
     )
     if moon_item:
@@ -708,7 +878,7 @@ def tonight(
                 SkyItem(s["name"], "star", m, m, False, alt[:, k], az[:, k], con=s["con"]),
                 times,
                 10.0,
-                zenith_sqm,
+                cond,
                 moon,
             )
         )
@@ -727,7 +897,7 @@ def tonight(
             note=o["note"],
             con=o["con"],
         )
-        found.append(_finish(item, times, 15.0 if o["dec"] > -40 else 3.0, zenith_sqm, moon))
+        found.append(_finish(item, times, 15.0 if o["dec"] > -40 else 3.0, cond, moon))
 
     patterns = pattern_positions(obs, cat, times)
     for name, con, how in PATTERNS:
@@ -735,7 +905,7 @@ def tonight(
         item = SkyItem(
             name, "pattern", p["mag"], p["faint_mag"], False, p["alt"], p["az"], note=how, con=con
         )
-        found.append(_finish(item, times, 20.0, zenith_sqm, moon))
+        found.append(_finish(item, times, 20.0, cond, moon))
     for name, members in ASTERISMS.items():
         s = cat.stars[cat.stars["name"].isin(members)]
         a, z = obs.altaz(s["ra"].to_numpy(), s["dec"].to_numpy(), times)
@@ -751,7 +921,7 @@ def tonight(
             z[np.arange(len(times)), mid],
             note=" + ".join(members),
         )
-        found.append(_finish(item, times, 15.0, zenith_sqm, moon))
+        found.append(_finish(item, times, 15.0, cond, moon))
 
     items = [f for f in found if f is not None]
     band = milky_way_band(obs, times)
@@ -760,10 +930,10 @@ def tonight(
         "times": times,
         "items": items,
         "moon": moon,
-        "milky_way": milky_way_tonight(band, band_cons, moon, times, zenith_sqm, cat),
-        "opposite_moon": opposite_moon(items, moon, times, zenith_sqm),
-        "darkness": darkness(zenith_sqm),
-        "stars_visible": stars_visible_count(obs, cat, times, moon, zenith_sqm),
+        "milky_way": milky_way_tonight(band, band_cons, moon, times, cond, cat),
+        "opposite_moon": opposite_moon(items, moon, times, cond),
+        "darkness": darkness(conditions(cond).zenith_sqm),
+        "stars_visible": stars_visible_count(obs, cat, times, moon, cond),
     }
 
 
@@ -797,7 +967,7 @@ def milky_way_tonight(
     band_cons: list[str],
     moon: dict,
     times: pd.DatetimeIndex,
-    zenith_sqm: float,
+    cond,
     cat: Catalog,
 ) -> dict:
     """When and where the Milky Way is best tonight, and whether it shows from here.
@@ -808,7 +978,7 @@ def milky_way_tonight(
     score = np.clip(band["alt"][:, inner], 0, None).sum(axis=1)
     moon_down = moon["alt"] <= 0
     i = int(np.argmax(np.where(moon_down, score, score * 0.25)))
-    zen = float(sky_brightness(90.0, zenith_sqm, moon_at(moon, i, 90.0, 0.0)))
+    zen = float(sky_brightness(90.0, cond, moon_at(moon, i, 90.0, 0.0), az=0.0))
     desc = describe_band(band["alt"][i], band["az"][i], band["l"], band_cons, cat)
     centre = int(np.flatnonzero(band["l"] == 0)[0])
     centre_alt = band["alt"][:, centre]
@@ -817,7 +987,11 @@ def milky_way_tonight(
         "best_utc": times[i],
         "moon_down": bool(moon_down[i]),
         "zenith_sqm": zen,
-        "visible": zen >= MILKY_WAY_MIN_SQM and desc is not None and desc["top_alt"] > 20,
+        # smoke or haze dims the band as it dims stars: compare limiting magnitudes
+        "visible": float(limiting_magnitude(zen)) - conditions(cond).haze_mag
+        >= float(limiting_magnitude(MILKY_WAY_MIN_SQM))
+        and desc is not None
+        and desc["top_alt"] > 20,
         "looks": darkness(zen).milky_way,
         "band": desc,
         # the galactic centre (in Sagittarius, the brightest part) above 10° during darkness
@@ -828,9 +1002,7 @@ def milky_way_tonight(
     }
 
 
-def opposite_moon(
-    items: list[SkyItem], moon: dict, times: pd.DatetimeIndex, zenith_sqm: float
-) -> dict | None:
+def opposite_moon(items: list[SkyItem], moon: dict, times: pd.DatetimeIndex, cond) -> dict | None:
     """Where the sky is darkest while the Moon is up, and what to look at there.
 
     Evaluated in the middle of the Moon's hours above the horizon during darkness. Scattered
@@ -843,7 +1015,7 @@ def opposite_moon(
     i = int(up[len(up) // 2])
     alts, azs = np.arange(20, 90, 5.0), np.arange(0, 360, 10.0)
     aa, zz = np.meshgrid(alts, azs, indexing="ij")
-    b = sky_brightness(aa, zenith_sqm, moon_at(moon, i, aa, zz))
+    b = sky_brightness(aa, cond, moon_at(moon, i, aa, zz), az=zz)
     r, c = np.unravel_index(int(np.argmax(b)), b.shape)
     picks = []
     for it in items:
@@ -853,9 +1025,9 @@ def opposite_moon(
         sep = float(separation_deg(z, a, moon["az"][i], moon["alt"][i]))
         if a < 20 or sep < 60:
             continue
-        if not is_visible(a, z, it.vis_mag, it.extended, zenith_sqm, moon, i):
+        if not is_visible(a, z, it.vis_mag, it.extended, cond, moon, i):
             continue
-        picks.append((float(sky_brightness(a, zenith_sqm, moon_at(moon, i, a, z))), it, a, z))
+        picks.append((float(sky_brightness(a, cond, moon_at(moon, i, a, z), az=z)), it, a, z))
     order = {"planet": 0, "pattern": 1, "star": 2}
     picks.sort(key=lambda p: (order.get(p[1].kind, 3), -p[0]))
     return {
@@ -873,7 +1045,7 @@ def opposite_moon(
 
 
 def stars_visible_count(
-    obs: Observer, cat: Catalog, times: pd.DatetimeIndex, moon: dict, zenith_sqm: float
+    obs: Observer, cat: Catalog, times: pd.DatetimeIndex, moon: dict, cond
 ) -> dict:
     """How many stars a typical observer can see at the darkest moment of the night (the Moon
     lowest), from here and from a natural sky at the same moment."""
@@ -888,7 +1060,7 @@ def stars_visible_count(
     m = moon_at(moon, i, alt[up], az[up])
     return {
         "utc": times[i],
-        "here": int((mags <= faintest_visible(alt[up], zenith_sqm, m)).sum()),
-        "natural": int((mags <= faintest_visible(alt[up], NATURAL_SQM, m)).sum()),
+        "here": int((mags <= faintest_visible(alt[up], cond, m, az=az[up])).sum()),
+        "natural": int((mags <= faintest_visible(alt[up], conditions(cond).natural(), m)).sum()),
         "moon_up": bool(moon["alt"][i] > 0),
     }

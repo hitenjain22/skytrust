@@ -6,12 +6,15 @@ Python computes everything that is astronomy or physics, once per place and nigh
   < 0.001° over a night), and the local sidereal time at dusk;
 - RA/Dec of date of the Moon and planets at every step of the night's 20-minute grid (seen from
   the place, so with the local sidereal time they give Skyfield's altitude/azimuth);
-- the faintest visible magnitude on an altitude x distance-from-the-Moon grid for every step
-  (sky.limit_table: light pollution, moonlight, extinction);
+- the parts of the sky's brightness on small grids (sky.browser_tables: the natural sky, city
+  glow by direction, moonlight, twilight, extinction for tonight's air) and the per-step
+  factors for the Moon and the Sun (sky.step_scalars);
 - each object's track for the "Up at ..." list.
 
-The browser (skylive.js) only interpolates in time, turns RA/Dec into altitude/azimuth with the
-sidereal time (the same formula as sky.Observer.altaz_from_radec), projects and draws. Numbers
+The browser (skylive.js) interpolates in time, turns RA/Dec into altitude/azimuth with the
+sidereal time (the same formula as sky.Observer.altaz_from_radec), adds up the brightness parts
+and applies the limiting-magnitude formula (the arithmetic of sky.limit_from_tables), projects
+and draws. Numbers
 travel as base64 typed arrays to keep the page light (~250 KB for a whole night).
 """
 
@@ -127,47 +130,48 @@ def bodies_block(obs: sky.Observer, times: pd.DatetimeIndex, moon: dict) -> dict
     }
 
 
-def tables_block(
-    times: pd.DatetimeIndex, moon: dict, zenith_sqm: float, sun_alt: np.ndarray
-) -> dict:
-    """Visibility tables per step for "your sky" (light pollution, the Moon and twilight), and
-    the curves for steps with no Moon and no twilight. "A perfectly dark sky" removes light
-    pollution and the Moon but not twilight: the Sun's glow is nature, not pollution."""
-    tables, dark_twilight = [], []
-    for i in range(len(times)):
-        twilight = bool(sky.twilight_nl(sun_alt[i]) > 0)
-        sun = float(sun_alt[i]) if twilight else None
-        if float(moon["alt"][i]) <= 0 and not twilight:
-            tables.append(None)  # no moonlight, no twilight: the moonless curve applies
-        else:
-            t = sky.limit_table(
-                zenith_sqm, float(moon["alt"][i]), float(moon["phase_angle"][i]), sun
-            )
-            tables.append(_b64(np.round(t * 100), "<i2"))
-        dark_twilight.append(
-            _round(sky.limit_table(sky.NATURAL_SQM, -1.0, 0.0, sun)[:, 0], 3) if twilight else None
-        )
-    here = sky.limit_table(zenith_sqm, -1.0, 0.0)[:, 0]
-    dark = sky.limit_table(sky.NATURAL_SQM, -1.0, 0.0)[:, 0]
-    zen = [
-        float(
-            sky.sky_brightness(
-                90.0, zenith_sqm, sky.moon_at(moon, i, 90.0, 0.0), sun_alt=float(sun_alt[i])
-            )
-        )  # fmt: skip
-        for i in range(len(times))
-    ]
-    zen_dark = [float(sky.sky_brightness(90.0, sky.NATURAL_SQM, sun_alt=float(h))) for h in sun_alt]
+def tables_block(obs: sky.Observer, times: pd.DatetimeIndex, moon: dict, cond: sky.Conditions,
+                 sun_alt: np.ndarray) -> dict:  # fmt: skip
+    """The visibility physics for the browser: static grids plus the Moon's and Sun's factors
+    at every step, and the Sun's RA/Dec of date (its distance from each point sets twilight)."""
+    t = sky.browser_tables(cond)
+    f = sky.step_scalars(cond, moon["alt"], moon["phase_angle"], sun_alt)
+    sra, sdec = obs.radec_of_date("sun", times)
+    f32 = lambda v: _b64(np.asarray(v, dtype=float).ravel(), "<f4")  # noqa: E731
     return {
         "alts": _round(sky.LIMIT_ALTS, 3),
         "seps": _round(sky.LIMIT_SEPS, 3),
-        "tables": tables,
-        "darkTwilight": dark_twilight,
-        "curveHere": _round(here, 3),
-        "curveDark": _round(dark, 3),
-        "zen": _round(zen, 3),
-        "zenDark": _round(zen_dark, 3),
+        "glowAz": _round(sky.GLOW_AZ, 1),
+        "vis": {
+            name: f32(t[name]) for name in ("nat", "glow", "moonAlt", "moonSep", "twAlt", "xExt")
+        },  # fmt: skip
+        "k": round(t["k"], 4),
+        "kRef": round(t["kRef"], 4),
+        "moonK": f32(f["moonK"]),
+        "twK": f32(f["twK"]),
+        "sun": {"ra": _round(sra, 4), "dec": _round(sdec, 4)},
     }
+
+
+def _haze_word(cond: sky.Conditions) -> str:
+    """'smoke or haze' when tonight's air dims the stars noticeably (for "too faint through
+    tonight's smoke or haze"), else ''."""
+    from skytrust import haze
+
+    w = haze.words_for_dimming(cond.haze_mag)
+    return "smoke or haze" if w and w[0] != "Some haze" else ("haze" if w else "")
+
+
+def domes_block(site: Site, light_sources) -> list[dict]:
+    """The biggest named light domes on the horizon (bearing, name), so the chart can say a
+    star is lost "in the glow of Los Angeles"."""
+    if light_sources is None:
+        return []
+    from skytrust import skyglow
+
+    glow = skyglow.city_glow(light_sources, site.lat, site.lon)
+    top = [c for c in glow["cities"] if c["share"] >= 0.05 and c["distance_km"] >= 3][:5]
+    return [{"b": round(c["bearing"], 1), "n": c["name"]} for c in top]
 
 
 def item_sub(it: sky.SkyItem) -> str:
@@ -210,13 +214,14 @@ def items_block(guide: dict) -> list[dict]:
 def payload(
     site: Site,
     guide: dict,
-    zenith_sqm: float,
+    cond,  # sky.Conditions (or a plain zenith brightness)
     start: pd.Timestamp,
     dark: tuple[pd.Timestamp, pd.Timestamp] | None = None,
 ) -> dict:
     """Everything the browser needs to draw the night. `guide` covers the whole window shown
     (civil dusk to civil dawn, twilight included); `dark` is the fully dark part (astronomical
     dusk to dawn), which the slider marks."""
+    cond = sky.conditions(cond)
     times = pd.DatetimeIndex(guide["times"])
     dusk, dawn = times[0], times[-1]
     dark = dark or (dusk, dawn)
@@ -226,7 +231,7 @@ def payload(
     cat = sky.load_catalog()
     lst0 = float(obs.lst_deg(pd.DatetimeIndex([dusk]))[0])
     return {
-        "id": f"{site.id}|{dusk.isoformat()}|{zenith_sqm:.3f}",
+        "id": f"{site.id}|{dusk.isoformat()}|{cond.zenith_sqm:.3f}|{cond.k:.3f}",
         "tz": site.timezone,
         "lat": site.lat,
         "t0": _ms(dusk),
@@ -244,7 +249,9 @@ def payload(
         "tints": [c for _, c in BV_TINTS],
         "items": items_block(guide),
         **bodies_block(obs, times, guide["moon"]),
-        **tables_block(times, guide["moon"], zenith_sqm, sun_alt),
+        **tables_block(obs, times, guide["moon"], cond, sun_alt),
+        "domes": domes_block(site, sky._sources()),
+        "haze": _haze_word(cond),
         "place": site.name,
         "minMilkyWaySqm": sky.MILKY_WAY_MIN_SQM,
         "extendedMargin": sky.EXTENDED_MARGIN,

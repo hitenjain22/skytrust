@@ -272,6 +272,13 @@ def cmd_build_sky(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build_domes(args: argparse.Namespace) -> int:
+    from skytrust import domes
+
+    print(f"Wrote the light-dome shape table to {domes.build_shape()}")
+    return 0
+
+
 def cmd_sensitivity(args: argparse.Namespace) -> int:
     from skytrust import sensitivity
 
@@ -408,6 +415,9 @@ def build_parser() -> argparse.ArgumentParser:
         "build-sky", help="Star, constellation and Milky Way catalogues for the app"
     )
     sk.set_defaults(func=cmd_build_sky)
+    sub.add_parser(
+        "build-domes", help="How city glow spreads over the sky (Garstang single scattering)"
+    ).set_defaults(func=cmd_build_domes)
     pl = sub.add_parser(
         "build-places", help="Every California place and ZIP code for the location menu"
     )

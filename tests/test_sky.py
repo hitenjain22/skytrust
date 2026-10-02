@@ -125,25 +125,76 @@ def test_star_extinction_uses_a_real_airmass_near_the_horizon():
     assert drop > 0.2 * (10.31 - 1)
 
 
+def _bumpy_glow():
+    """A glow grid with a strong dome in the east, like a city 30 km away."""
+    az = sky.GLOW_AZ[None, :]
+    alt = sky.GLOW_ALTS[:, None]
+    dome = 1 + 40 * np.exp(-((((az - 90 + 180) % 360 - 180) / 25) ** 2)) * np.exp(-alt / 8)
+    return dome / dome[-1:, :]
+
+
 def test_browser_visibility_tables_match_the_physics():
-    """The live chart interpolates sky.limit_table; across light pollution, Moon heights and
-    phases, the lookup stays within 0.05 mag of the exact model for 99% of the sky (and the
-    largest error, beside a bright Moon where nothing faint shows, stays under 0.2 mag)."""
+    """The live chart adds up tabulated parts of the sky's brightness (sky.browser_tables);
+    across light pollution, city domes, haze, Moon heights and phases and twilight, its result
+    (limit_from_tables, the same arithmetic) stays within 0.05 mag of the exact model for 99% of
+    the sky and within 0.2 mag everywhere."""
     rng = np.random.default_rng(7)
     worst99, worst = 0.0, 0.0
     for zen in (17.2, 19.4, 21.9):
-        for moon_alt in (-3.0, 4.0, 35.0, 80.0):
-            for phase in (0.0, 70.0, 140.0):
-                table = sky.limit_table(zen, moon_alt, phase)
-                alt, sep = rng.uniform(0, 90, 3000), rng.uniform(0.5, 180, 3000)
-                exact = sky.faintest_visible(alt, zen, {"alt": moon_alt, "sep": sep,
-                                                        "phase_angle": phase})  # fmt: skip
-                err = np.abs(exact - sky.interpolate_limit(table, alt, sep))[exact > -1.5]
+        for glow, k in ((None, sky.EXTINCTION_K), (_bumpy_glow(), 0.6)):
+            cond = sky.Conditions(zen, k=k, k_ref=sky.EXTINCTION_K, glow=glow)
+            t = sky.browser_tables(cond)
+            for moon_alt, phase, sun_alt in (
+                (-3, 0, -20),
+                (4, 70, -8),
+                (35, 0, -13),
+                (80, 140, -30),
+            ):
+                alt, az = rng.uniform(0, 90, 3000), rng.uniform(0, 360, 3000)
+                sep, ssep = rng.uniform(0.5, 180, 3000), rng.uniform(5, 180, 3000)
+                moon = {"alt": moon_alt, "sep": sep, "phase_angle": phase}
+                exact = sky.faintest_visible(alt, cond, moon, sun_alt=sun_alt, az=az,
+                                             sun_sep=ssep)  # fmt: skip
+                f = sky.step_scalars(cond, moon_alt, phase, sun_alt)
+                got = sky.limit_from_tables(t, alt, az, sep, f["moonK"] if moon_alt > 0 else 0,
+                                            ssep, f["twK"])  # fmt: skip
+                err = np.abs(exact - got)[exact > -1.5]
                 worst99, worst = max(worst99, np.percentile(err, 99)), max(worst, err.max())
     assert worst99 < 0.05 and worst < 0.2
-    # without the Moon the table doesn't depend on the distance from it
-    flat = sky.limit_table(20.0, -1.0, 0.0)
-    assert np.allclose(flat, flat[:, :1])
+
+
+def test_a_plain_number_means_a_typical_night_with_even_glow():
+    """Conditions are optional: a zenith brightness alone gives the old model (glow spread
+    like the natural sky, typical extinction), so nothing changes for callers that don't know
+    about domes or haze."""
+    alt = np.array([5.0, 20.0, 60.0, 90.0])
+    plain = sky.faintest_visible(alt, 19.4)
+    same = sky.faintest_visible(alt, sky.Conditions(19.4), az=np.zeros(4))
+    assert np.allclose(plain, same)
+    # at the zenith the sky reads exactly the atlas value, glow grid or not
+    cond = sky.Conditions(19.4, glow=_bumpy_glow())
+    assert float(sky.sky_brightness(90.0, cond, az=123.0)) == pytest.approx(19.4, abs=1e-6)
+
+
+def test_a_city_dome_hides_stars_low_on_its_side_only():
+    cond = sky.Conditions(20.5, glow=_bumpy_glow())
+    east, west = (float(sky.faintest_visible(10.0, cond, az=a)) for a in (90.0, 270.0))
+    assert east < west - 1.0  # a magnitude and more lost towards the city
+    assert float(sky.faintest_visible(80.0, cond, az=90.0)) == pytest.approx(
+        float(sky.faintest_visible(80.0, cond, az=270.0)), abs=0.1)  # fmt: skip
+
+
+def test_smoke_dims_every_star_by_the_extra_extinction():
+    """With extinction k instead of the typical k_ref, a star at airmass X fades by
+    (k - k_ref) X on top of the usual: overhead that's exactly the extra k."""
+    typical = sky.Conditions(21.0, k=0.25, k_ref=0.25)
+    smoky = sky.Conditions(21.0, k=0.85, k_ref=0.25)
+    for alt in (90.0, 30.0):
+        x = float(sky.extinction_airmass(90 - alt))
+        drop = float(sky.faintest_visible(alt, typical)) - float(sky.faintest_visible(alt, smoky))
+        # the sky glow changes a little too (more extinction dims it towards the horizon)
+        assert drop == pytest.approx(0.6 * x, abs=0.15 * x)
+    assert smoky.haze_mag == pytest.approx(0.6)
 
 
 def test_moon_position_from_ra_dec_of_date_matches_skyfield():
@@ -181,3 +232,16 @@ def test_twilight_follows_the_paranal_measurements():
     # in a city, light pollution swamps the fading twilight sooner
     city = float(sky.sky_brightness(90.0, 17.3, sun_alt=-12.0))
     assert city == pytest.approx(17.3, abs=0.15)
+
+
+def test_twilight_is_brightest_on_the_side_of_the_set_sun():
+    """Schaefer's twilight shape: 1 at the zenith, brighter towards the horizon, and at the
+    same height brighter towards the Sun than away from it (by the ratio of the distances)."""
+    k, sun_alt = 0.25, -10.0
+    assert float(sky.twilight_shape(0.0, 100.0, sun_alt, k)) == pytest.approx(1.0)
+    toward = float(sky.twilight_shape(70.0, 25.0, sun_alt, k))
+    away = float(sky.twilight_shape(70.0, 155.0, sun_alt, k))
+    assert toward / away == pytest.approx(155 / 25) and away > 1.0
+    west = float(sky.faintest_visible(20.0, 21.9, sun_alt=-10.0, sun_sep=35.0))
+    east = float(sky.faintest_visible(20.0, 21.9, sun_alt=-10.0, sun_sep=145.0))
+    assert east > west + 1.0

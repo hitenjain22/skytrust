@@ -140,20 +140,46 @@ def test_live_payload_is_complete_and_light(live_payload):
 
     guide, data = live_payload
     n = len(sky.load_catalog().stars)
+    nt = len(data["steps"])
     assert len(_decode(data["stars"]["ra"], "<u2")) == n
     assert len(_decode(data["stars"]["tint"], "u1")) == n
-    assert len(data["steps"]) == len(guide["times"]) == len(data["zen"])
-    assert len(data["moon"]["ra"]) == len(data["steps"])
+    assert nt == len(guide["times"]) == len(_decode(data["moonK"], "<f4"))
+    assert len(_decode(data["twK"], "<f4")) == len(data["sun"]["ra"]) == nt
+    assert len(data["moon"]["ra"]) == nt
     assert {p["name"] for p in data["planets"]} == set(sky.PLANETS)
-    # a table for every step with the Moon up, none when it's down
-    up = guide["moon"]["alt"] > 0
-    assert [t is not None for t in data["tables"]] == list(up)
-    shape = (len(sky.LIMIT_ALTS), len(sky.LIMIT_SEPS))
-    for t in data["tables"]:
-        if t is not None:
-            assert len(_decode(t, "<i2")) == shape[0] * shape[1]
+    na, nz = len(sky.LIMIT_ALTS), len(sky.GLOW_AZ)
+    assert len(_decode(data["vis"]["glow"], "<f4")) == na * nz
+    assert len(_decode(data["vis"]["moonSep"], "<f4")) == len(sky.LIMIT_SEPS)
     assert data["t0"] <= data["start"] <= data["t1"]
     assert len(json.dumps(data)) < 400_000  # whole night, sent once
+
+
+def _tables(data) -> dict:
+    t = {k: _decode(v, "<f4").astype(float) for k, v in data["vis"].items()}
+    t["glow"] = t["glow"].reshape(len(sky.LIMIT_ALTS), len(sky.GLOW_AZ))
+    return t | {"k": data["k"], "kRef": data["kRef"]}
+
+
+def test_the_shipped_numbers_reproduce_the_guides_visibility(live_payload):
+    """With the numbers sent to the browser (float32) and its arithmetic, the faintest visible
+    magnitude matches the exact model at the real Moon and Sun positions of the night."""
+    guide, data = live_payload
+    t = _tables(data)
+    moon_k, tw_k = _decode(data["moonK"], "<f4"), _decode(data["twK"], "<f4")
+    obs = sky.Observer(LA)
+    times = pd.DatetimeIndex(guide["times"])
+    sun = obs.body("sun", times)
+    rng = np.random.default_rng(1)
+    alt, az = rng.uniform(1, 90, 2000), rng.uniform(0, 360, 2000)
+    for i in range(0, len(times), 5):
+        moon = sky.moon_at(guide["moon"], i, alt, az)
+        ssep = sky.separation_deg(az, alt, sun["az"][i], sun["alt"][i])
+        exact = sky.faintest_visible(alt, 17.8, moon, sun_alt=float(sun["alt"][i]), az=az,
+                                     sun_sep=ssep)  # fmt: skip
+        mk = float(moon_k[i]) if moon["alt"] > 0 else 0.0
+        got = sky.limit_from_tables(t, alt, az, moon["sep"], mk, ssep, float(tw_k[i]))
+        err = np.abs(got - exact)[exact > -1.5]
+        assert np.percentile(err, 99) < 0.05 and err.max() < 0.2
 
 
 def test_star_tints_match_the_python_chart():
@@ -163,12 +189,11 @@ def test_star_tints_match_the_python_chart():
 
 
 def test_live_chart_covers_twilight():
-    """From civil dusk the chart shows the sky brightening-to-dark: steps in twilight get a
-    visibility table even with the Moon down, and the fully dark part is marked."""
+    """From civil dusk the chart shows the sky darkening: twilight is on at civil dusk (Sun 6°
+    down), gone by the middle of the night, and the fully dark part is marked."""
     civil_dusk, civil_dawn = DUSK - pd.Timedelta(minutes=55), DAWN + pd.Timedelta(minutes=55)
     guide = sky.tonight(LA, civil_dusk, civil_dawn, 17.8)
     data = skylive.payload(LA, guide, 17.8, DUSK, dark=(DUSK, DAWN))
     assert data["t0"] < data["dark0"] < data["dark1"] < data["t1"]
-    first = 0  # civil dusk: twilight, so a table and a twilight curve for the dark sky
-    assert data["tables"][first] is not None and data["darkTwilight"][first] is not None
-    assert data["zenDark"][first] < 20 < data["zenDark"][len(data["steps"]) // 2]
+    tw = _decode(data["twK"], "<f4")
+    assert tw[0] > 0 and tw[len(tw) // 2] == 0 and tw[-1] > 0
