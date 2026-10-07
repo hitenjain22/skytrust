@@ -15,7 +15,7 @@ dependencies = [
     "requests==2.34.2",
     "scikit-learn==1.9.1",
     "skyfield==1.55",
-    "streamlit==1.64.0",
+    "streamlit==1.65.0",
 ]
 
 [dependency-groups]
