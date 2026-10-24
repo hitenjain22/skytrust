@@ -1,9 +1,9 @@
 {
- "generated_utc": "2026-10-24T00:15:36Z",
+ "generated_utc": "2026-10-24T23:59:36Z",
  "forward_start": "2026-09-30",
- "n_logged": 840,
+ "n_logged": 875,
  "first_issue": "2026-09-30",
- "last_issue": "2026-10-23",
+ "last_issue": "2026-10-24",
  "verify_after_days": 9,
  "n_verified": 449,
  "last_verified_night": "2026-10-15",
